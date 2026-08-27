@@ -1,0 +1,8 @@
+{
+  "_comment_1": "Copy to settings.local.json for personal overrides. That file is gitignored.",
+  "_comment_2": "To disable the build gate that blocks turn end on a dirty build (spec D9),",
+  "_comment_3": "set the Stop hook array to empty as shown below.",
+  "hooks": {
+    "Stop": []
+  }
+}
