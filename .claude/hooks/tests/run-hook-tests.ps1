@@ -12,14 +12,22 @@ $script:Failed = 0
 function Invoke-Hook {
     param(
         [Parameter(Mandatory)][string]$Script,
-        [Parameter(Mandatory)][string]$Fixture
+        # Name of a fixture under tests/fixtures/. Used by every caller except
+        # the format-and-lint real-file assertions below, which need a fixture
+        # that lives outside the repo and pass -FixturePath instead.
+        [string]$Fixture,
+        [string]$FixturePath
     )
-    $hookPath    = Join-Path $HookDir $Script
-    $fixturePath = Join-Path $Fixtures $Fixture
-    if (-not (Test-Path -LiteralPath $hookPath))    { return -100 }
-    if (-not (Test-Path -LiteralPath $fixturePath)) { return -101 }
+    $hookPath = Join-Path $HookDir $Script
+    if (-not [string]::IsNullOrWhiteSpace($FixturePath)) {
+        $resolvedFixturePath = $FixturePath
+    } else {
+        $resolvedFixturePath = Join-Path $Fixtures $Fixture
+    }
+    if (-not (Test-Path -LiteralPath $hookPath))            { return -100 }
+    if (-not (Test-Path -LiteralPath $resolvedFixturePath)) { return -101 }
 
-    $json = Get-Content -LiteralPath $fixturePath -Raw
+    $json = Get-Content -LiteralPath $resolvedFixturePath -Raw
     $json | & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $hookPath | Out-Null
     return $LASTEXITCODE
 }
@@ -28,10 +36,11 @@ function Assert-Exit {
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$Script,
-        [Parameter(Mandatory)][string]$Fixture,
+        [string]$Fixture,
+        [string]$FixturePath,
         [Parameter(Mandatory)][int]$Expected
     )
-    $actual = Invoke-Hook -Script $Script -Fixture $Fixture
+    $actual = Invoke-Hook -Script $Script -Fixture $Fixture -FixturePath $FixturePath
     if ($actual -eq $Expected) {
         Write-Host "  PASS  $Name"
         $script:Passed++
@@ -98,6 +107,65 @@ Assert-Exit -Name 'Editing an existing migration is blocked' -Script 'protect-mi
 Assert-Exit -Name 'Creating a new migration is allowed'      -Script 'protect-migrations.ps1' -Fixture 'migration-write-new.json' -Expected 0
 Assert-Exit -Name 'Ordinary .cs edits are untouched'         -Script 'protect-migrations.ps1' -Fixture 'ordinary-cs-edit.json'    -Expected 0
 Assert-Exit -Name 'Malformed payload fails open'             -Script 'protect-migrations.ps1' -Fixture 'malformed.json'           -Expected 0
+
+Write-Host ''
+Write-Host 'format-and-lint.ps1  (toolchain absent on this machine - these pin the fail-open path)'
+
+# format-cs.json / format-ts.json must point at files that genuinely exist on
+# disk. format-and-lint.ps1 guards on Test-Path -LiteralPath and returns
+# before ever reaching the toolchain check otherwise, so a fixture pointing
+# at a nonexistent path would pass while testing nothing. Real files are
+# created in a temp directory outside the repo, and fixture JSON referencing
+# them is generated here at test time and handed to Invoke-Hook via
+# -FixturePath, so the -Fixture contract (a name resolved under the fixtures
+# dir) is untouched for every other caller.
+$TempRoot = Join-Path $env:TEMP ("claude-hook-tests-{0}" -f $PID)
+New-Item -ItemType Directory -Path $TempRoot -Force | Out-Null
+try {
+    $TempCsFile = Join-Path $TempRoot 'Order.cs'
+    $TempTsFile = Join-Path $TempRoot 'orders.component.ts'
+    Set-Content -LiteralPath $TempCsFile -Value 'public sealed class Order { }' -NoNewline
+    Set-Content -LiteralPath $TempTsFile -Value 'export class OrdersComponent {}' -NoNewline
+
+    $RepoRootFs   = ConvertTo-ForwardSlash -Path (Split-Path -Parent (Split-Path -Parent $HookDir))
+    $TempCsFileFs = ConvertTo-ForwardSlash -Path $TempCsFile
+    $TempTsFileFs = ConvertTo-ForwardSlash -Path $TempTsFile
+
+    $CsFixturePath = Join-Path $TempRoot 'format-cs.json'
+    $TsFixturePath = Join-Path $TempRoot 'format-ts.json'
+
+    @"
+{
+  "tool_name": "Write",
+  "cwd": "$RepoRootFs",
+  "tool_input": {
+    "file_path": "$TempCsFileFs",
+    "content": "public sealed class Order { }"
+  }
+}
+"@ | Set-Content -LiteralPath $CsFixturePath
+
+    @"
+{
+  "tool_name": "Write",
+  "cwd": "$RepoRootFs",
+  "tool_input": {
+    "file_path": "$TempTsFileFs",
+    "content": "export class OrdersComponent {}"
+  }
+}
+"@ | Set-Content -LiteralPath $TsFixturePath
+
+    Assert-Exit -Name '.cs with a real file exits 0 when no .NET SDK'   -Script 'format-and-lint.ps1' -FixturePath $CsFixturePath -Expected 0
+    Assert-Exit -Name '.ts with a real file exits 0 when eslint absent' -Script 'format-and-lint.ps1' -FixturePath $TsFixturePath -Expected 0
+    Assert-Exit -Name 'Unhandled extension exits 0'                     -Script 'format-and-lint.ps1' -Fixture 'format-unknown-ext.json' -Expected 0
+    Assert-Exit -Name 'Malformed payload fails open'                    -Script 'format-and-lint.ps1' -Fixture 'malformed.json'          -Expected 0
+}
+finally {
+    if (Test-Path -LiteralPath $TempRoot) {
+        Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 Write-Host ''
 Write-Host ("Passed: {0}   Failed: {1}" -f $script:Passed, $script:Failed)
