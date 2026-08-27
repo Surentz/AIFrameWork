@@ -1,0 +1,8 @@
+{
+  "tool_name": "Write",
+  "cwd": "C:/repo",
+  "tool_input": {
+    "file_path": "C:/repo/src/Api/Controllers/OrdersController.cs",
+    "content": "using AiFramework.Domain.Orders;\nusing AiFramework.Application.Orders;\nusing AiFramework.Infrastructure.Persistence;\nusing Microsoft.AspNetCore.Mvc;\n\nnamespace AiFramework.Api.Controllers;\n\npublic sealed class OrdersController : ControllerBase { }\n"
+  }
+}

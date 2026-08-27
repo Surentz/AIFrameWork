@@ -1,0 +1,9 @@
+{
+  "tool_name": "Edit",
+  "cwd": "C:/repo",
+  "tool_input": {
+    "file_path": "C:/repo/src/Application/Orders/CreateOrderHandler.cs",
+    "old_string": "using System;",
+    "new_string": "using System;\nusing AiFramework.Infrastructure.Persistence;"
+  }
+}

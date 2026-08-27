@@ -73,6 +73,15 @@ $multi = '{"tool_name":"MultiEdit","tool_input":{"file_path":"a.cs","edits":[{"n
 Assert-True -Name 'Get-WrittenText joins MultiEdit edits'    -Condition ((Get-WrittenText -Payload $multi) -match 'one' -and (Get-WrittenText -Payload $multi) -match 'two')
 
 Write-Host ''
+Write-Host 'dependency-rule.ps1'
+Assert-Exit -Name 'Domain + EF Core is blocked'            -Script 'dependency-rule.ps1' -Fixture 'domain-ef-violation.json'                 -Expected 2
+Assert-Exit -Name 'Domain + DataAnnotations is blocked'    -Script 'dependency-rule.ps1' -Fixture 'domain-annotations-violation.json'        -Expected 2
+Assert-Exit -Name 'Domain with only System is allowed'     -Script 'dependency-rule.ps1' -Fixture 'domain-clean.json'                        -Expected 0
+Assert-Exit -Name 'Application + Infrastructure blocked'   -Script 'dependency-rule.ps1' -Fixture 'application-infrastructure-violation.json' -Expected 2
+Assert-Exit -Name 'Api may reference every layer'          -Script 'dependency-rule.ps1' -Fixture 'api-all-layers.json'                      -Expected 0
+Assert-Exit -Name 'Malformed payload fails open'           -Script 'dependency-rule.ps1' -Fixture 'malformed.json'                           -Expected 0
+
+Write-Host ''
 Write-Host ("Passed: {0}   Failed: {1}" -f $script:Passed, $script:Failed)
 if ($script:Failed -gt 0) { exit 1 }
 exit 0

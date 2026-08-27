@@ -1,0 +1,8 @@
+{
+  "tool_name": "Write",
+  "cwd": "C:/repo",
+  "tool_input": {
+    "file_path": "C:/repo/src/Domain/Orders/Order.cs",
+    "content": "using System;\nusing System.Collections.Generic;\n\nnamespace AiFramework.Domain.Orders;\n\npublic sealed class Order\n{\n    public required Guid Id { get; init; }\n}\n"
+  }
+}
