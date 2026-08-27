@@ -170,7 +170,7 @@ finally {
 Write-Host ''
 Write-Host 'verify-build.ps1'
 Assert-Exit -Name 'stop_hook_active short-circuits (loop guard)' -Script 'verify-build.ps1' -Fixture 'stop-hook-active.json' -Expected 0
-Assert-Exit -Name 'No solution present exits 0'                  -Script 'verify-build.ps1' -Fixture 'stop-normal.json'      -Expected 0
+Assert-Exit -Name 'Repo root with no .sln exits 0 (walks, finds none)' -Script 'verify-build.ps1' -Fixture 'stop-normal.json' -Expected 0
 Assert-Exit -Name 'Malformed payload fails open'                 -Script 'verify-build.ps1' -Fixture 'malformed.json'        -Expected 0
 
 Write-Host ''
