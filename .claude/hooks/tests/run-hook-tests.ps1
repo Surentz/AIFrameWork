@@ -82,6 +82,15 @@ Assert-Exit -Name 'Api may reference every layer'          -Script 'dependency-r
 Assert-Exit -Name 'Malformed payload fails open'           -Script 'dependency-rule.ps1' -Fixture 'malformed.json'                           -Expected 0
 
 Write-Host ''
+Write-Host 'no-secrets.ps1'
+Assert-Exit -Name 'Populated Password= is blocked'      -Script 'no-secrets.ps1' -Fixture 'appsettings-password-secret.json'      -Expected 2
+Assert-Exit -Name 'Password=${VAR} is allowed'          -Script 'no-secrets.ps1' -Fixture 'appsettings-password-placeholder.json' -Expected 0
+Assert-Exit -Name 'Populated ApiKey is blocked'         -Script 'no-secrets.ps1' -Fixture 'appsettings-apikey-secret.json'        -Expected 2
+Assert-Exit -Name 'Empty and REPLACE_ME are allowed'    -Script 'no-secrets.ps1' -Fixture 'appsettings-apikey-empty.json'         -Expected 0
+Assert-Exit -Name 'Non-appsettings files are ignored'   -Script 'no-secrets.ps1' -Fixture 'other-json-with-password.json'         -Expected 0
+Assert-Exit -Name 'Malformed payload fails open'        -Script 'no-secrets.ps1' -Fixture 'malformed.json'                        -Expected 0
+
+Write-Host ''
 Write-Host ("Passed: {0}   Failed: {1}" -f $script:Passed, $script:Failed)
 if ($script:Failed -gt 0) { exit 1 }
 exit 0
