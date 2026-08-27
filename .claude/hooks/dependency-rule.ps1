@@ -23,6 +23,11 @@ try {
             $root = Get-Prop -Object $config -Name 'rootNamespace'
             if ([string]::IsNullOrWhiteSpace($root)) { $root = 'AiFramework' }
 
+            # Known gap (R9, accepted): enforcement here is using-directive based, per
+            # spec 6.1. A fully-qualified reference with no using at all (e.g. writing
+            # "Microsoft.EntityFrameworkCore.DbSet<T>" inline in Domain, never adding a
+            # "using" line) is not detected by this hook. Whole-file review is left to
+            # the dotnet-reviewer step, not this fast pre-write guard.
             $banned = @{
                 'Domain' = @(
                     "$root.Application", "$root.Infrastructure", "$root.Api",
@@ -45,6 +50,10 @@ try {
                 foreach ($namespaceName in $banned[$layer]) {
                     $escaped = [regex]::Escape($namespaceName)
                     # matches "using X;", "global using X;", "using static X.Y;"
+                    # Known limit (R8, accepted): this is a line-start regex, not a C#
+                    # parser, so a "using X;" line inside a /* */ block comment is still
+                    # flagged even though it is dead code. Distinguishing that needs real
+                    # parsing; over-blocking a rare, harmless case is the safe direction.
                     if ($text -match "(?m)^\s*(global\s+)?using\s+(static\s+)?$escaped\b") {
                         [void]$violations.Add($namespaceName)
                     }

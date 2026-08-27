@@ -11,6 +11,9 @@ function Test-IsPlaceholder {
     if ($trimmed -match '^\$\{.*\}$') { return $true }   # ${DB_PASSWORD}
     if ($trimmed -match '^#\{.*\}$')  { return $true }   # #{OctopusVariable}
     if ($trimmed -match '^%.*%$')     { return $true }   # %ENV_VAR%
+    # Bracket-wrapping is the standard placeholder convention (e.g. <your-key-here>),
+    # so it is treated as a placeholder unconditionally. Trade-off (R10, accepted):
+    # a real secret hand-wrapped in angle brackets, e.g. "<sk-live-...>", also passes.
     if ($trimmed -match '^<.*>$')     { return $true }   # <your-key-here>
     if ($trimmed -match '^(?i)(REPLACE_ME|REPLACEME|CHANGEME|CHANGE_ME|TODO|PLACEHOLDER|SECRET|X{3,}|\*{3,}|\.{3})$') { return $true }
     return $false
@@ -43,7 +46,13 @@ try {
                 }
 
                 # JSON key style: "ApiKey": "...."
-                $jsonKeys = 'ApiKey|ClientSecret|Secret|Token|SigningKey|PrivateKey'
+                # Password|Pwd|AccountKey|ConnectionString added under ruling R7: the
+                # connection-string detector above only matches "Key=value;" syntax, which
+                # never appears in a bare JSON key/value pair such as "Password": "hunter2".
+                # Without these here, that shape - the most common one in appsettings.json -
+                # had zero coverage. Purpose (stop real secrets reaching committed config)
+                # beats the brief's original enumeration.
+                $jsonKeys = 'ApiKey|ClientSecret|Secret|Token|SigningKey|PrivateKey|Password|Pwd|AccountKey|ConnectionString'
                 foreach ($match in [regex]::Matches($text, "(?i)""($jsonKeys)""\s*:\s*""([^""]*)""")) {
                     $value = $match.Groups[2].Value
                     if (-not (Test-IsPlaceholder -Value $value)) {

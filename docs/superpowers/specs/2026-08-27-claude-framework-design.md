@@ -241,7 +241,10 @@ Conventions, documented in `angular-conventions`:
 
 `no-secrets.ps1` blocks writes to `appsettings*.json` containing a populated `Password=`, `Pwd=`,
 `AccountKey=`, `SharedAccessSignature`, or a JSON key matching
-`ApiKey|ClientSecret|Secret|Token|SigningKey|PrivateKey` with a non-placeholder value.
+`ApiKey|ClientSecret|Secret|Token|SigningKey|PrivateKey|Password|Pwd|AccountKey|ConnectionString`
+with a non-placeholder value. The JSON-key list includes `Password`, `Pwd`, `AccountKey` and
+`ConnectionString` because the `Key=value;` connection-string detector only matches that syntax
+and never fires on a bare JSON key/value pair such as `"Password": "hunter2"`.
 
 Allowed as placeholders: empty string, `${...}`, `#{...}`, `<...>`, `REPLACE_ME`, `CHANGEME`, `TODO`.
 Real values belong in user-secrets or environment variables.

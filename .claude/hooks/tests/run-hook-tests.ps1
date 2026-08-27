@@ -89,6 +89,8 @@ Assert-Exit -Name 'Populated ApiKey is blocked'         -Script 'no-secrets.ps1'
 Assert-Exit -Name 'Empty and REPLACE_ME are allowed'    -Script 'no-secrets.ps1' -Fixture 'appsettings-apikey-empty.json'         -Expected 0
 Assert-Exit -Name 'Non-appsettings files are ignored'   -Script 'no-secrets.ps1' -Fixture 'other-json-with-password.json'         -Expected 0
 Assert-Exit -Name 'Malformed payload fails open'        -Script 'no-secrets.ps1' -Fixture 'malformed.json'                        -Expected 0
+Assert-Exit -Name 'Bare "Password" JSON key is blocked'    -Script 'no-secrets.ps1' -Fixture 'appsettings-bare-password-key.json'         -Expected 2
+Assert-Exit -Name 'Bare "Password" with ${VAR} is allowed' -Script 'no-secrets.ps1' -Fixture 'appsettings-bare-password-placeholder.json' -Expected 0
 
 Write-Host ''
 Write-Host 'protect-migrations.ps1'
