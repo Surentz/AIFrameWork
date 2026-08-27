@@ -1,0 +1,18 @@
+* text=auto eol=lf
+
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+*.sln   text eol=crlf
+
+*.cs    text eol=lf diff=csharp
+*.ts    text eol=lf
+*.html  text eol=lf
+*.scss  text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.pfx   binary
