@@ -1276,7 +1276,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 27   Failed: 0`. Note these fixtures point at paths that do not exist, so the `Test-Path` guard returns early — which is itself a fail-open path worth having covered.
+Expected: `Passed: 29   Failed: 0`. The two toolchain fixtures point at REAL temp files created by the harness (ruling R4), so the hook genuinely reaches its toolchain check instead of returning at the `Test-Path` guard. Baseline is 29 rather than the originally-written 27 because an approved fix round on Task 5 added two no-secrets assertions.
 
 - [ ] **Step 6: Commit**
 
@@ -1418,7 +1418,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 30   Failed: 0`, exit code 0. All five hooks are now covered.
+Expected: `Passed: 32   Failed: 0`, exit code 0. All five hooks are now covered.
 
 - [ ] **Step 6: Commit**
 
@@ -2894,7 +2894,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 30   Failed: 0`, exit code 0.
+Expected: `Passed: 32   Failed: 0`, exit code 0.
 
 - [ ] **Step 4: Verify every file the plan promised exists**
 
