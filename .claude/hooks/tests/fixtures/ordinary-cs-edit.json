@@ -1,0 +1,9 @@
+{
+  "tool_name": "Edit",
+  "cwd": "C:/repo",
+  "tool_input": {
+    "file_path": "C:/repo/src/Infrastructure/Persistence/OrderRepository.cs",
+    "old_string": "return null;",
+    "new_string": "return order;"
+  }
+}

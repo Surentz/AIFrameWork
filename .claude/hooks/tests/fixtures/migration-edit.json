@@ -1,0 +1,9 @@
+{
+  "tool_name": "Edit",
+  "cwd": "C:/repo",
+  "tool_input": {
+    "file_path": "C:/repo/src/Infrastructure/Migrations/20260101120000_InitialCreate.cs",
+    "old_string": "table.Column<string>(name: \"Name\", nullable: true)",
+    "new_string": "table.Column<string>(name: \"Name\", nullable: false)"
+  }
+}

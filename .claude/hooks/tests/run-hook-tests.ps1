@@ -91,6 +91,13 @@ Assert-Exit -Name 'Non-appsettings files are ignored'   -Script 'no-secrets.ps1'
 Assert-Exit -Name 'Malformed payload fails open'        -Script 'no-secrets.ps1' -Fixture 'malformed.json'                        -Expected 0
 
 Write-Host ''
+Write-Host 'protect-migrations.ps1'
+Assert-Exit -Name 'Editing an existing migration is blocked' -Script 'protect-migrations.ps1' -Fixture 'migration-edit.json'      -Expected 2
+Assert-Exit -Name 'Creating a new migration is allowed'      -Script 'protect-migrations.ps1' -Fixture 'migration-write-new.json' -Expected 0
+Assert-Exit -Name 'Ordinary .cs edits are untouched'         -Script 'protect-migrations.ps1' -Fixture 'ordinary-cs-edit.json'    -Expected 0
+Assert-Exit -Name 'Malformed payload fails open'             -Script 'protect-migrations.ps1' -Fixture 'malformed.json'           -Expected 0
+
+Write-Host ''
 Write-Host ("Passed: {0}   Failed: {1}" -f $script:Passed, $script:Failed)
 if ($script:Failed -gt 0) { exit 1 }
 exit 0
