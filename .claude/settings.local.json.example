@@ -1,8 +1,15 @@
 {
   "_comment_1": "Copy to settings.local.json for personal overrides. That file is gitignored.",
-  "_comment_2": "To disable the build gate that blocks turn end on a dirty build (spec D9),",
-  "_comment_3": "set the Stop hook array to empty as shown below.",
-  "hooks": {
-    "Stop": []
-  }
+  "_comment_2": "WARNING: list-typed keys like hooks.Stop MERGE with .claude/settings.json -",
+  "_comment_3": "they do not override or replace it. Setting \"hooks\": { \"Stop\": [] } here",
+  "_comment_4": "does NOT disable the build gate; the Stop entry from the committed",
+  "_comment_5": "settings.json still runs alongside whatever you add locally.",
+  "_comment_6": "To disable the build gate specifically: delete the \"Stop\" block from the",
+  "_comment_7": "shared, committed .claude/settings.json (spec D9). That file is checked in,",
+  "_comment_8": "so this is a team decision, not a personal override.",
+  "_comment_9": "The only local-only escape hatch is \"disableAllHooks\": true below. It is",
+  "_comment_10": "all-or-nothing: it disables ALL FIVE hooks, not just the Stop/verify-build",
+  "_comment_11": "gate - including dependency-rule.ps1 and no-secrets.ps1. Set it to true only",
+  "_comment_12": "if you accept losing the dependency-rule and secrets guards too.",
+  "disableAllHooks": false
 }

@@ -59,7 +59,7 @@ day, taking the useful guardrails with it.
 | D6 | Add `.gitignore`, `.editorconfig`, `Directory.Build.props` | User approved. Compile-time enforcement beats runtime hooks. |
 | D7 | EF Core for persistence, engine left open | User confirmed EF. Nothing here depends on the engine. |
 | D8 | `AnalysisMode=Recommended` + Sonar/Meziantou/AsyncFixer + curated elevations | User choice. `All` produces friction (CA1848, CA2007) that leads to suppression churn. |
-| D9 | Stop hook enabled by default, one-line toggle | User asked twice for zero warnings; a gate is the only thing that delivers it. Costs nothing today — no-ops without the SDK. Reverses D4's "no strict gates"; flagged to the user and accepted. |
+| D9 | Stop hook enabled by default; disabled by deleting the `Stop` block from the shared `settings.json`, or all-or-nothing via local `disableAllHooks` | User asked twice for zero warnings; a gate is the only thing that delivers it. Costs nothing today — no-ops without the SDK. Reverses D4's "no strict gates"; flagged to the user and accepted. |
 | D10 | Versions are placeholders, pinned at scaffold time | `dotnet --list-sdks` and `ng version` are unrunnable here. A written version would be a guess. |
 
 ### Assumptions
@@ -312,7 +312,11 @@ Ask: `git push`.
 than replacing them.
 
 `settings.local.json` is gitignored for personal overrides; a committed
-`settings.local.json.example` documents the shape, including how to disable `verify-build` (D9).
+`settings.local.json.example` documents the shape. List-typed keys such as `hooks.Stop` **merge**
+across `settings.json` and `settings.local.json` rather than one overriding the other, so an empty
+`Stop` array locally does not disable `verify-build` (D9). Turning the Stop gate off means deleting
+the `Stop` block from the shared, committed `settings.json` — a team decision — or setting
+`disableAllHooks: true` locally, which disables all five hooks, not just the Stop gate.
 
 ---
 
@@ -405,7 +409,7 @@ and the solution scaffolded.** The plan must not claim otherwise.
 | Risk | Mitigation |
 |---|---|
 | Hooks are unrunnable against real builds today | Fixture tests cover hook logic; toolchain-absent paths explicitly tested |
-| `verify-build` friction once the SDK lands | One-line toggle, documented in `settings.local.json.example` (D9) |
+| `verify-build` friction once the SDK lands | Disable by deleting the `Stop` block from shared `settings.json`, or all-or-nothing via local `disableAllHooks`; documented in `settings.local.json.example` (D9) |
 | Per-layer `CLAUDE.md` files are speculative until code sits beside them | Kept to 10–25 lines; revisit after the first real feature |
 | Version placeholders could go stale or be forgotten | Marked explicitly in root `CLAUDE.md` as fill-at-scaffold |
 | `ng new` overwriting pre-written frontend config | Only `eslint.config.js` and `.prettierrc` are pre-written; `tsconfig` changes are documented as a post-`ng new` step |

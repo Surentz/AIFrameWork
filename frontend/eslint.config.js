@@ -1,4 +1,8 @@
 // @ts-check
+// NOTE: this file uses CommonJS (require/module.exports), which only works as a bare
+// .js file if frontend/package.json does NOT set "type": "module". No package.json
+// exists yet - if `ng new` generates one with "type": "module", rename this file to
+// eslint.config.cjs, or convert it to ESM (import/export default) instead.
 const eslint = require('@eslint/js');
 const tseslint = require('typescript-eslint');
 const angular = require('angular-eslint');
