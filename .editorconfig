@@ -1,0 +1,47 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,csx}]
+indent_size = 4
+csharp_style_namespace_declarations = file_scoped:error
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_prefer_braces = true:error
+dotnet_style_require_accessibility_modifiers = always:error
+csharp_style_prefer_null_check_over_type_check = true:error
+
+# --- Exception discipline (spec 6.4) ---
+dotnet_diagnostic.CA1031.severity = error   # do not catch general exception types
+dotnet_diagnostic.CA2200.severity = error   # rethrow to preserve stack details
+
+# --- Argument and null validation (spec 6.2) ---
+dotnet_diagnostic.CA1062.severity = error   # validate arguments of public methods
+
+# --- Disposal ---
+dotnet_diagnostic.CA2000.severity = error
+dotnet_diagnostic.CA1063.severity = error
+
+# --- Deliberately off: no synchronization context in ASP.NET Core ---
+dotnet_diagnostic.CA2007.severity = none
+
+[*.{ts,js,mjs,cjs}]
+indent_size = 2
+quote_type = single
+
+[*.{html,scss,css,json,yml,yaml}]
+indent_size = 2
+
+[*.{xml,csproj,props,targets}]
+indent_size = 2
+
+[*.ps1]
+indent_size = 4
+end_of_line = crlf
+
+[*.md]
+trim_trailing_whitespace = false
