@@ -1,0 +1,5 @@
+{
+  "rootNamespace": "AiFramework",
+  "layers": ["Domain", "Application", "Infrastructure", "Api"],
+  "frontendDir": "frontend"
+}
