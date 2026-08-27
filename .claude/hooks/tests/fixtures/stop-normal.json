@@ -1,0 +1,5 @@
+{
+  "hook_event_name": "Stop",
+  "cwd": "C:/repo",
+  "stop_hook_active": false
+}
