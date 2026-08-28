@@ -3,4 +3,8 @@
   <Folder Name="/src/Domain/">
     <Project Path="src/Domain/AiFramework.Domain.csproj" />
   </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/Domain.Tests/">
+    <Project Path="tests/Domain.Tests/AiFramework.Domain.Tests.csproj" />
+  </Folder>
 </Solution>
