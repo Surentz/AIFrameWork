@@ -1,16 +1,21 @@
-# Domain Events via Transactional Outbox and Channel Dispatch — Design
+# In-Process Messaging — Command Dispatch and Domain Events — Design
 
 **Date:** 2026-08-28
 **Status:** Approved, not yet implemented
 
 ## 1. Context
 
-The backend needs a way for one use case to trigger side effects in another without the
-caller knowing about them: an order is placed, and a confirmation email, a read-model update
-and an audit row follow. The reflex reach is MediatR.
+The backend needs two things a mediator library normally supplies. First, a way for a
+controller to reach a use-case handler without naming it. Second, a way for one use case to
+trigger side effects in another without the caller knowing about them: an order is placed, and
+a confirmation email, a read-model update and an audit row follow. The reflex reach is MediatR.
 
 This design does not use MediatR. It uses `System.Threading.Channels` for the part a channel
 actually fits, and a direct call for the part it does not.
+
+The two seams are deliberately separate. **§6** is the request path: a controller awaits a
+command handler in-process. **§7–§9** are the event path: an aggregate raises an event, it is
+persisted with the aggregate, and a channel drains it to its handlers afterwards.
 
 `src/` contains no `.cs` files at the time of writing — only the per-layer `CLAUDE.md`
 scaffolding from the framework design. There is nothing to migrate; this is a choice made
@@ -31,6 +36,9 @@ So the request path keeps a direct call, and only domain events ride the channel
 
 ## 2. Goals
 
+- A controller reaches its handler through one line, without naming the handler type, and
+  without reflection.
+- Validation and transaction boundaries live in one place, not repeated in every handler.
 - Domain events raised by aggregates reach their handlers **at least once**, surviving a
   process crash.
 - Events are written atomically with the aggregate that raised them. There is no state in
@@ -43,12 +51,13 @@ So the request path keeps a direct call, and only domain events ride the channel
 
 ## 3. Non-goals
 
-- **No request/response through a channel.** Controllers call Application handlers directly.
+- **No request/response through a channel.** The request path is a direct in-process call
+  through a thin dispatcher (§6).
 - **No deferred-job queue.** Domain events only. A job queue is a different shape — single
   consumer, caller observes completion — and is not built here.
 - **No cross-process transport.** No RabbitMQ, no Service Bus, no Kafka. In-process only.
 - **No ordering guarantee.** See D6.
-- **No alerting on dead messages.** Deferred; see §12.
+- **No alerting on dead messages.** Deferred; see §13.
 
 ## 4. Decisions
 
@@ -61,22 +70,32 @@ So the request path keeps a direct call, and only domain events ride the channel
 | D5 | Parallel workers, exponential backoff, dead-letter after `MaxAttempts` | User choice. A poison message cannot block the pipeline; dead rows stay in the table as the signal. |
 | D6 | No ordering guarantee | Follows from D5. Per-row retry already breaks ordering: a row that fails and retries in 30s is overtaken by the rows behind it. "Ordered" and "retryable" are compatible only if a failure blocks its partition. |
 | D7 | Ports in `Application`, all machinery in `Infrastructure` | Every arrow is already legal: `Application → Domain` for event types, `Infrastructure → Application` to resolve handlers, `Api → Infrastructure` for DI. No new exception to the matrix. |
-| D8 | PostgreSQL, `FOR UPDATE SKIP LOCKED` | User choice. The standard queue-claim idiom, and Testcontainers has a first-class module for the tests in §10. |
+| D8 | PostgreSQL, `FOR UPDATE SKIP LOCKED` | User choice. The standard queue-claim idiom, and Testcontainers has a first-class module for the tests in §11. |
 | D9 | Retry granularity is the message, not the handler | The interceptor cannot know the handler count at save time — handlers are resolved at dispatch. One row per (event × handler) would fix this at a cost not worth paying. Consequence: a partially-failed fan-out re-runs its successful handlers. |
 | D10 | `attempts` increments at claim time, not on failure | Otherwise a message that hard-crashes the worker loops forever without ever exhausting its budget. |
 | D11 | Events carry no timestamp | `Domain` has no clock; `IClock` is an `Application` port and that arrow does not run backwards. The interceptor stamps `OccurredAt` on the outbox row. Keeps events pure data and trivially testable. |
 | D12 | One file-scoped CA1031 exemption, for the worker | User choice over a `#pragma` at the call site. A worker loop must catch everything or the pump dies one worker at a time. Visible and greppable in `.editorconfig`; root `CLAUDE.md` is amended because "no exemption" stops being true. |
 | D13 | The handler signature carries a `DomainEventContext` | At-least-once makes idempotency mandatory, so handlers need a stable dedupe key. `MessageId` is constant across redeliveries; `Attempt` lets a handler degrade on retry. |
 | D14 | Processed rows are pruned by the poller | An outbox that only grows is a slow outage. |
+| D15 | Registration-based command dispatcher: `AddCommand<TCommand, TResponse, THandler>()` | User choice over direct handler injection, explicit type arguments, and cached reflection. Keeps D4's no-reflection stance on the request path and reuses its exact registration idiom. Costs one cast, one boxed result, and a runtime — not compile-time — failure for a missing registration, which §11 covers with a test. |
+| D16 | Separate `ICommandDispatcher` and `IQueryDispatcher` | Only commands carry the unit-of-work behavior. The split makes a query that writes visible at the call site rather than buried in a handler. |
+| D17 | Two behaviors, commands only: validation then unit of work | User choice over validation-only and pure pass-through. Handlers never call `SaveChangesAsync`, so one command is exactly one transaction — which is what makes the outbox interceptor fire once with the complete event set. |
 
 ## 5. Layer placement
 
 | Layer | Owns |
 |---|---|
 | `Domain` | `IDomainEvent`, `Entity.Raise()`, the pending-event list on the aggregate |
-| `Application` | `IDomainEventHandler<TEvent>`, `DomainEventContext`, and the handlers themselves |
-| `Infrastructure` | Outbox entity and EF configuration, `SaveChanges` interceptor, registry, channel, poller, worker pool, retry, pruning |
-| `Api` | `AddDomainEvent<T>("name")` registration lines in the composition root, nothing else |
+| `Application` | `ICommand<T>` / `IQuery<T>`, the handler and dispatcher interfaces, `IDomainEventHandler<TEvent>`, `DomainEventContext`, and every handler |
+| `Infrastructure` | Dispatcher implementations, command registry and behaviors; outbox entity and EF configuration, `SaveChanges` interceptor, event registry, channel, poller, worker pool, retry, pruning |
+| `Api` | `AddCommand<...>()` and `AddDomainEvent<T>("name")` registration lines in the composition root, nothing else |
+
+The dispatcher *implementations* sit in `Infrastructure` alongside the event machinery, even
+though nothing in them touches EF. They resolve handlers from the container and the
+unit-of-work behavior calls `IUnitOfWork` — both composition concerns, and `Application`
+declaring its own dispatcher implementation would have it reach for
+`Microsoft.Extensions.DependencyInjection`, which `Domain` bans and `Application` has no
+business with either.
 
 Rejected placements:
 
@@ -90,7 +109,128 @@ database concern. The transport would be split across two layers for no gain.
 was reaffirmed immediately before this design. Revisit only if `Infrastructure` becomes
 unwieldy.
 
-## 6. Domain
+## 6. The request path
+
+Commands and queries never touch the channel (D1). A controller awaits its handler on the
+same stack; a queue in between would add a hop to a call already in flight.
+
+### 6.1 Contracts
+
+```csharp
+namespace AiFramework.Application.Abstractions;
+
+public interface ICommand<TResponse>;
+public interface IQuery<TResponse>;
+
+public interface ICommandHandler<in TCommand, TResponse> where TCommand : ICommand<TResponse>
+{
+    Task<Result<TResponse>> HandleAsync(TCommand command, CancellationToken cancellationToken);
+}
+
+public interface IQueryHandler<in TQuery, TResponse> where TQuery : IQuery<TResponse>
+{
+    Task<Result<TResponse>> HandleAsync(TQuery query, CancellationToken cancellationToken);
+}
+
+public interface ICommandDispatcher
+{
+    Task<Result<TResponse>> SendAsync<TResponse>(ICommand<TResponse> command, CancellationToken ct);
+}
+
+public interface IQueryDispatcher
+{
+    Task<Result<TResponse>> SendAsync<TResponse>(IQuery<TResponse> query, CancellationToken ct);
+}
+```
+
+Split rather than a single `IDispatcher`, because only commands carry the unit-of-work
+behavior (§6.3) — and the split makes a query that writes visible at the call site.
+
+### 6.2 Registration, and the type-inference problem
+
+Given an `ICommand<TResponse>`, the dispatcher needs `ICommandHandler<TCommand, TResponse>`
+with the **concrete** command type. Recovering it from the interface is precisely what
+`MakeGenericType` is for, and D4 ruled reflection out. So the command side uses the same trick
+as the event side: capture the closed generic at registration time.
+
+```csharp
+public static IServiceCollection AddCommand<TCommand, TResponse, THandler>(
+    this IServiceCollection services)
+    where TCommand : ICommand<TResponse>
+    where THandler : class, ICommandHandler<TCommand, TResponse>
+{
+    static async Task<object?> InvokeAsync(IServiceProvider sp, object command, CancellationToken ct)
+    {
+        var handler = sp.GetRequiredService<ICommandHandler<TCommand, TResponse>>();
+        return await handler.HandleAsync((TCommand)command, ct).ConfigureAwait(false);
+    }
+
+    services.AddScoped<ICommandHandler<TCommand, TResponse>, THandler>();
+    return services.AddSingleton(new CommandDescriptor(typeof(TCommand), InvokeAsync));
+}
+```
+
+The dispatcher keys a `Dictionary<Type, CommandDescriptor>` on `command.GetType()`, invokes
+the delegate, and casts the result back:
+
+```csharp
+public async Task<Result<TResponse>> SendAsync<TResponse>(
+    ICommand<TResponse> command, CancellationToken ct)
+{
+    if (!_descriptors.TryGetValue(command.GetType(), out var descriptor))
+        throw new InvalidOperationException(
+            $"No handler registered for '{command.GetType().Name}'.");
+
+    return (Result<TResponse>)(await descriptor
+        .Invoke(_serviceProvider, command, ct).ConfigureAwait(false))!;
+}
+```
+
+One cast and one boxed `Result<TResponse>` per command, both contained in this method. In
+exchange there is no reflection anywhere on the request path, and the registration idiom is
+identical to `AddDomainEvent<T>` — one pattern for the whole codebase rather than two.
+
+`TResponse` is inferred from the argument, so call sites stay clean. The constraint this
+carries: a command may implement `ICommand<T>` **exactly once**. Implementing it twice makes
+inference ambiguous and breaks every call site. `src/Application/CLAUDE.md` must say so.
+
+A missing `AddCommand` registration is a runtime throw rather than a compile error — the one
+place this is weaker than injecting the handler directly. §11 closes it with a test that
+asserts every `ICommand<>` in the assembly has a descriptor.
+
+### 6.3 Behaviors
+
+Two, both command-only, applied inside the registered delegate in this order:
+
+1. **Validation.** Resolves `IValidator<TCommand>` from FluentValidation if one is registered
+   and short-circuits to a failed `Result` before the handler runs. No validator registered
+   means no validation — absence is not an error.
+2. **Unit of work.** On a successful `Result`, calls `IUnitOfWork.SaveChangesAsync` exactly
+   once. Handlers never call it themselves.
+
+The unit-of-work behavior is what makes the outbox guarantee concrete: one command is one
+transaction, so the interceptor (§9.2) fires once with the complete set of events that command
+raised. A handler calling `SaveChangesAsync` twice would split its events across two
+transactions — each atomic on its own, but the command as a whole no longer is.
+
+Queries get neither behavior. A query that needs a transaction is a command.
+
+### 6.4 The controller
+
+```csharp
+[HttpPost]
+public async Task<IActionResult> Place(PlaceOrderRequest request, CancellationToken ct)
+{
+    var result = await _commands.SendAsync(new PlaceOrder(request.Sku, request.Quantity), ct);
+    return result.ToActionResult();
+}
+```
+
+Bind, dispatch, map — the shape `src/Api/CLAUDE.md` already requires. The controller never
+names a handler type, never opens a transaction, and never publishes an event: events come
+from the aggregate, through the interceptor.
+
+## 7. Domain
 
 ```csharp
 namespace AiFramework.Domain.Common;
@@ -121,7 +261,7 @@ The alternative — `internal` plus `InternalsVisibleTo` — buys encapsulation 
 compile-time coupling between `Domain` and `Infrastructure` that the dependency rule exists
 to prevent.
 
-## 7. Application
+## 8. Application
 
 ```csharp
 namespace AiFramework.Application.Abstractions;
@@ -141,9 +281,9 @@ They depend on ports, never on `DbContext`.
 redelivery normal, and D9 means a partially-failed fan-out re-runs its successful handlers.
 `context.MessageId` is the dedupe key: stable across every redelivery of the same event.
 
-## 8. Infrastructure
+## 9. Infrastructure
 
-### 8.1 The outbox
+### 9.1 The outbox
 
 ```csharp
 internal sealed class OutboxMessage
@@ -163,11 +303,11 @@ internal sealed class OutboxMessage
 Mapped in an `IEntityTypeConfiguration<OutboxMessage>` like every other entity. A filtered
 index on `(Status, NextAttemptAt)` over `Pending` rows serves the claim query.
 
-`Status` is persisted **as a string**, via `HasConversion<string>()`. The claim query in §8.5
+`Status` is persisted **as a string**, via `HasConversion<string>()`. The claim query in §9.5
 is raw SQL comparing against `'Pending'` and `'InFlight'`, so storing the enum as an ordinal
 would silently mismatch. A string column also survives someone reordering the enum members.
 
-### 8.2 The interceptor
+### 9.2 The interceptor
 
 A `SaveChangesInterceptor.SavingChangesAsync` walks `ChangeTracker.Entries<Entity>()`,
 converts each pending event into an `OutboxMessage` **added to the same `DbContext`**, then
@@ -183,7 +323,7 @@ An event type with no `AddDomainEvent<T>` registration throws at save time, nami
 This cannot be caught at startup — nothing enumerates which events a handler might raise — so
 failing loudly at the write is the earliest honest point.
 
-### 8.3 The registry
+### 9.3 The registry
 
 ```csharp
 public sealed record DomainEventDescriptor(
@@ -218,7 +358,7 @@ that defeats trimming.
 
 Handlers for one event run **sequentially**, in DI registration order.
 
-### 8.4 The channel
+### 9.4 The channel
 
 ```csharp
 Channel.CreateBounded<OutboxWorkItem>(new BoundedChannelOptions(options.ChannelCapacity)
@@ -238,7 +378,7 @@ scope that loaded it, and handing one to another scope's worker is a defect wait
 poller's `WriteAsync` blocks, so it stops claiming rows, and **the database stays the buffer
 instead of memory**. Hand-rolling that needs a `BlockingCollection` or a semaphore.
 
-### 8.5 The poller
+### 9.5 The poller
 
 A `BackgroundService` that claims a batch atomically, writes it to the channel, and delays
 only when a batch comes back empty.
@@ -263,7 +403,7 @@ crash guarantee real rather than nominal.
 The poller also prunes: on a longer interval, delete `Processed` rows older than
 `RetentionPeriod` (D14). `Dead` rows are never pruned.
 
-### 8.6 The workers
+### 9.6 The workers
 
 `WorkerCount` loops, each `await foreach (var item in reader.ReadAllAsync(ct))`. The channel
 handles distribution. Per item:
@@ -280,7 +420,7 @@ Backoff is exponential with jitter, capped: `min(2^attempt seconds, MaxBackoff)`
 On shutdown the writer completes and the workers drain. Anything still `InFlight` is recovered
 by lease expiry on the next start.
 
-### 8.7 Options
+### 9.7 Options
 
 `OutboxOptions`: `PollInterval`, `BatchSize`, `ChannelCapacity`, `WorkerCount`, `MaxAttempts`,
 `LeaseDuration`, `MaxBackoff`, `RetentionPeriod`, `PruneInterval`.
@@ -288,7 +428,7 @@ by lease expiry on the next start.
 Validated at startup with `ValidateOnStart`. `LeaseDuration` must comfortably exceed the
 slowest expected handler, or a healthy message is reclaimed and processed twice.
 
-## 9. The CA1031 exemption
+## 10. The CA1031 exemption
 
 A worker loop must catch every exception. If it does not, one throwing handler kills that
 worker, and the pool dies one worker at a time until nothing drains — with no record against
@@ -302,7 +442,7 @@ It is taken as a **file-scoped `.editorconfig` entry** covering the worker file 
 comment naming this spec. Root `CLAUDE.md` is amended in the same change, because the sentence
 promising no exemptions stops being true.
 
-## 10. Testing
+## 11. Testing
 
 The structural move that makes this testable: split the **pump** from the **processing**.
 `OutboxWorkItemProcessor.ProcessAsync(item, ct) → OutboxOutcome` holds all the decision logic;
@@ -313,9 +453,21 @@ the `BackgroundService` loop stays thin enough to need no test of its own.
 | `Domain.Tests` | `Raise()` appends; `DomainEvents` is read-only; `ClearDomainEvents()` empties. Pure. |
 | `Application.Tests` | Handler behaviour with NSubstitute ports, plus **an idempotency test per handler**: called twice with the same `DomainEventContext`, one side effect. |
 | `Infrastructure.Tests` | The real weight, on Testcontainers PostgreSQL |
-| `Api.IntegrationTests` | `POST /orders` leaves an outbox row with the expected `EventName` |
+| `Api.IntegrationTests` | `POST /orders` returns the mapped status code **and** leaves an outbox row with the expected `EventName` |
 
-`Infrastructure.Tests` must cover:
+The request path needs three tests of its own, in `Infrastructure.Tests` (where the dispatcher
+implementations live):
+
+- **Registration completeness.** Scan the `Application` assembly for every `ICommand<>` and
+  `IQuery<>` implementation and assert each has a descriptor. This is the compile-time safety
+  D15 gives up, bought back as a test — and it is the reason the trade in D15 is acceptable.
+  Reflection is fine here; it runs in a test, not on the request path.
+- **Validation short-circuits.** A command failing its validator returns a failed `Result`
+  and the handler is never invoked.
+- **Unit of work.** A successful `Result` calls `SaveChangesAsync` exactly once; a failed
+  `Result` does not call it at all.
+
+`Infrastructure.Tests` must also cover, for the event path:
 
 - **Atomicity.** Force `SaveChangesAsync` to fail; assert no outbox row exists. This single
   test proves the design's premise. Without it, a passing suite only shows that both writes
@@ -332,31 +484,34 @@ the `BackgroundService` loop stays thin enough to need no test of its own.
 goes through a fake `IClock`, and the channel is driven directly rather than waited on. There
 is no "sleep 200ms and hope the worker ran" anywhere in this suite.
 
-## 11. Documentation changes
+## 12. Documentation changes
 
 | File | Change |
 |---|---|
-| `CLAUDE.md` (root) | Amend the CA1031 sentence: "no exemption" becomes one named, listed exemption. Add domain events and the idempotency rule to Non-negotiables. |
+| `CLAUDE.md` (root) | Amend the CA1031 sentence: "no exemption" becomes one named, listed exemption. Add the two messaging seams and the idempotency rule to Non-negotiables. |
 | `src/Domain/CLAUDE.md` | Events are pure data records here; no clock, no timestamp; raise via `Raise()`. |
-| `src/Application/CLAUDE.md` | `IDomainEventHandler<TEvent>`; handlers under `<Feature>/EventHandlers/`; idempotency is mandatory; never inject a `DbContext`. |
-| `src/Infrastructure/CLAUDE.md` | Outbox entity and configuration, interceptor, poller and workers, where the CA1031 exemption lives and why. |
-| `src/Api/CLAUDE.md` | `AddDomainEvent<T>("name")` belongs in the composition root; controllers never publish events directly. |
-| `tests/CLAUDE.md` | Outbox test placement; fake `IClock` and direct channel driving instead of sleeps. |
-| `.claude/commands/feature.md` | `/feature` scaffolds the event record, its registration line, a handler, and the idempotency test. |
+| `src/Application/CLAUDE.md` | `ICommand<T>` / `IQuery<T>` and their handlers; **a command implements `ICommand<T>` exactly once**; handlers never call `SaveChangesAsync` (the behavior does); `IDomainEventHandler<TEvent>` with handlers under `<Feature>/EventHandlers/`; idempotency is mandatory; never inject a `DbContext`. |
+| `src/Infrastructure/CLAUDE.md` | Dispatcher implementations and behaviors; outbox entity and configuration, interceptor, poller and workers; where the CA1031 exemption lives and why. |
+| `src/Api/CLAUDE.md` | Controllers bind → `SendAsync` → map `Result`; `AddCommand<...>()` and `AddDomainEvent<T>("name")` belong in the composition root; controllers never publish events directly. |
+| `tests/CLAUDE.md` | Dispatcher and outbox test placement; the registration-completeness test; fake `IClock` and direct channel driving instead of sleeps. |
+| `.claude/commands/feature.md` | `/feature` scaffolds the command, handler, `AddCommand` line, event record, `AddDomainEvent` line, event handler, and the idempotency test. |
 | `.editorconfig` | The file-scoped CA1031 exemption. |
-| `docs/adr/0003-domain-events-via-transactional-outbox.md` | New ADR recording this decision and the rejected alternatives. |
+| `docs/adr/0003-in-process-messaging-without-mediatr.md` | New ADR recording both seams and the rejected alternatives. |
 
 `.claude/hooks/dependency-rule.ps1` needs **no** change. Every arrow this design uses is
 already legal under the matrix.
 
-## 12. Risks and open items
+## 13. Risks and open items
 
+- **A forgotten `AddCommand` fails at runtime, not at compile time** (D15). The
+  registration-completeness test in §11 is the only thing standing between that and a 500 in
+  production. If that test is ever deleted or scoped too narrowly, D15's trade stops paying.
 - **`LeaseDuration` is a tuning hazard.** Set below the slowest handler's runtime, a healthy
   message is reclaimed and processed concurrently by a second worker. Idempotency contains the
   damage; it does not prevent the duplicate work.
 - **D9's re-run of successful handlers** is the design's sharpest edge and the most likely
   source of a production surprise. It is documented in three places for that reason.
-- **Postgres-specific SQL** in the claim. Moving engines means rewriting §8.5. Accepted under
+- **Postgres-specific SQL** in the claim. Moving engines means rewriting §9.5. Accepted under
   D8 rather than paying for an `IOutboxStore` abstraction now.
 - **The outbox is a high row-churn table.** At volume it will need autovacuum tuning or
   partitioning. Not addressed here.
