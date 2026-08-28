@@ -4,14 +4,14 @@
 
 ## Versions
 
-<!-- PLACEHOLDER: no .NET SDK and no Node were installed when this repo was set up.
-     Pin real versions here the moment the toolchain is installed. Do not guess. -->
-
 | | Version |
 |---|---|
-| .NET SDK | _unpinned_ |
-| Angular | _unpinned_ |
-| Node | _unpinned_ |
+| .NET SDK | 10.0.400 |
+| Node | 24.20.0 |
+| Angular | _unpinned — set at `ng new`_ |
+
+Verified 2026-08-28 from `dotnet --list-sdks` and `node --version`. Angular stays unpinned
+until the workspace is created; pin it from the generated `package.json`, not from memory.
 
 ## Layout
 
