@@ -18,10 +18,10 @@ try {
         $root = Get-Prop -Object $config -Name 'rootNamespace'
         if ([string]::IsNullOrWhiteSpace($root)) { $root = 'AiFramework' }
 
-        # Layer folder names come from hooks.config.json so renaming a layer is a
-        # one-line change. Falls back to the canonical four when the config is
-        # missing or unreadable - an unreadable config must never silently disarm
-        # the rule.
+        # Layer folder names are read from hooks.config.json, but the $banned
+        # table below is keyed to the canonical four layer names. Renaming a layer
+        # in the config WITHOUT adding a matching $banned entry below makes the path
+        # match with an empty banned list — silently disarming that layer. Change both.
         $layerNames = Get-Prop -Object $config -Name 'layers'
         if ($null -eq $layerNames -or @($layerNames).Count -eq 0) {
             $layerNames = @('Domain', 'Application', 'Infrastructure', 'Api')
