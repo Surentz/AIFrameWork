@@ -2,12 +2,6 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <!-- CA1707 ("remove underscores from member names") conflicts with the
-         MethodName_Scenario_ExpectedOutcome test-naming convention mandated by
-         tests/CLAUDE.md. Suppressed for this test project only; no production
-         code is affected. Same conflict will recur in Application.Tests,
-         Infrastructure.Tests and Api.IntegrationTests. -->
-    <NoWarn>$(NoWarn);CA1707</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
