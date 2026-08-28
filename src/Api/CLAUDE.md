@@ -31,7 +31,9 @@ One `IExceptionHandler` maps the domain hierarchy to RFC 9457 `ProblemDetails`:
 | `ConflictException` | 409 |
 | anything else | 500, logged, message not leaked |
 
-This is the **only** place `catch (Exception)` is permitted. CA1031 is an error everywhere else.
+`IExceptionHandler.TryHandleAsync` receives the exception as a parameter, so this handler needs
+no `catch (Exception)` of its own — and could not have one without a suppression. CA1031 is
+`error` globally in `.editorconfig`, with no exemption for this file.
 
 ## Tests
 

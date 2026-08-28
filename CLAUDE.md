@@ -46,7 +46,8 @@ or `System.ComponentModel.DataAnnotations`.
   `Directory.Build.props`. Fix diagnostics; do not suppress them without a justification comment.
 - **Nullable is enabled.** A missing null check does not compile.
 - **`required` keyword in `Domain`, never `[Required]`.** DataAnnotations belong on `Api` DTOs.
-- **`catch (Exception)` only in the global handler.** `throw;`, never `throw ex;`.
+- **Never `catch (Exception)`.** The global `IExceptionHandler` receives it as a parameter.
+  CA1031 is a global error with no exemption. `throw;`, never `throw ex;`.
 - **Never hand-edit an applied EF migration.** Add a new one.
 - **No secrets in `appsettings*.json`.** Use `dotnet user-secrets` or environment variables.
 

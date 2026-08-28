@@ -1641,7 +1641,8 @@ or `System.ComponentModel.DataAnnotations`.
   `Directory.Build.props`. Fix diagnostics; do not suppress them without a justification comment.
 - **Nullable is enabled.** A missing null check does not compile.
 - **`required` keyword in `Domain`, never `[Required]`.** DataAnnotations belong on `Api` DTOs.
-- **`catch (Exception)` only in the global handler.** `throw;`, never `throw ex;`.
+- **Never `catch (Exception)`.** The global `IExceptionHandler` receives it as a parameter.
+  CA1031 is a global error with no exemption. `throw;`, never `throw ex;`.
 - **Never hand-edit an applied EF migration.** Add a new one.
 - **No secrets in `appsettings*.json`.** Use `dotnet user-secrets` or environment variables.
 
@@ -1810,7 +1811,9 @@ One `IExceptionHandler` maps the domain hierarchy to RFC 9457 `ProblemDetails`:
 | `ConflictException` | 409 |
 | anything else | 500, logged, message not leaked |
 
-This is the **only** place `catch (Exception)` is permitted. CA1031 is an error everywhere else.
+`IExceptionHandler.TryHandleAsync` receives the exception as a parameter, so this handler needs
+no `catch (Exception)` of its own — and could not have one without a suppression. CA1031 is
+`error` globally in `.editorconfig`, with no exemption for this file.
 
 ## Tests
 
@@ -2103,7 +2106,7 @@ Read `CLAUDE.md` and the `CLAUDE.md` of each layer you are reviewing before you 
    `IEntityTypeConfiguration<T>`.
 3. **Nullability.** `!` used without a justifying comment. Nullable reference types
    assumed non-null. Collections left null instead of empty.
-4. **Exception handling.** `catch (Exception)` outside the global `IExceptionHandler`.
+4. **Exception handling.** Any `catch (Exception)` without an explicit, justified `#pragma warning disable CA1031`.
    `throw ex;` instead of `throw;`. Empty catch blocks. Catch-log-continue that hides a
    failure from the caller. Expected failures thrown as exceptions where `Result<T>` fits.
 5. **EF pitfalls.** Missing `AsNoTracking()` on reads. N+1 from lazy access in a loop.
@@ -2537,11 +2540,20 @@ public sealed class ConflictException(string message)   : DomainException(messag
 public sealed class ValidationException(string message) : DomainException(message);
 ```
 
-Rules, all analyzer-enforced as errors:
+Analyzer-enforced as errors — CA1031 and CA2200, globally, with no per-file exemption:
 
-- `catch (Exception)` **only** in the global `IExceptionHandler`. CA1031 is an error elsewhere.
-- `throw;` never `throw ex;` — the second one erases the stack trace. CA2200.
+- **Do not write `catch (Exception)` anywhere.** `IExceptionHandler.TryHandleAsync` receives the
+  exception as a parameter, so the global handler needs no catch block of its own. If some other
+  code genuinely requires one — a long-running background loop, say — it needs an explicit
+  `#pragma warning disable CA1031` with a comment justifying it. CA1031 is `error` in
+  `.editorconfig` with no scoping, so an unsuppressed one fails the build wherever it appears.
+- `throw;` never `throw ex;` — the second erases the stack trace. CA2200.
+
+Enforced by review, not by any analyzer:
+
 - No empty catch blocks. No catch-log-continue that leaves the caller believing it succeeded.
+  (SonarAnalyzer's S108 would cover this, but that package is commented out in
+  `Directory.Build.props` until versions are pinned.)
 - Expected failures return `Result<T>`; exceptions are for the genuinely exceptional. "Order
   not found" during a lookup is expected. A database being unreachable is not.
 

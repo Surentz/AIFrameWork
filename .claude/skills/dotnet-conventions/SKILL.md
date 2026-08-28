@@ -60,11 +60,20 @@ public sealed class ConflictException(string message)   : DomainException(messag
 public sealed class ValidationException(string message) : DomainException(message);
 ```
 
-Rules, all analyzer-enforced as errors:
+Analyzer-enforced as errors — CA1031 and CA2200, globally, with no per-file exemption:
 
-- `catch (Exception)` **only** in the global `IExceptionHandler`. CA1031 is an error elsewhere.
-- `throw;` never `throw ex;` — the second one erases the stack trace. CA2200.
+- **Do not write `catch (Exception)` anywhere.** `IExceptionHandler.TryHandleAsync` receives the
+  exception as a parameter, so the global handler needs no catch block of its own. If some other
+  code genuinely requires one — a long-running background loop, say — it needs an explicit
+  `#pragma warning disable CA1031` with a comment justifying it. CA1031 is `error` in
+  `.editorconfig` with no scoping, so an unsuppressed one fails the build wherever it appears.
+- `throw;` never `throw ex;` — the second erases the stack trace. CA2200.
+
+Enforced by review, not by any analyzer:
+
 - No empty catch blocks. No catch-log-continue that leaves the caller believing it succeeded.
+  (SonarAnalyzer's S108 would cover this, but that package is commented out in
+  `Directory.Build.props` until versions are pinned.)
 - Expected failures return `Result<T>`; exceptions are for the genuinely exceptional. "Order
   not found" during a lookup is expected. A database being unreachable is not.
 

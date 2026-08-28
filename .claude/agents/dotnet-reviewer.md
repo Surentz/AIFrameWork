@@ -19,7 +19,7 @@ Read `CLAUDE.md` and the `CLAUDE.md` of each layer you are reviewing before you 
    `IEntityTypeConfiguration<T>`.
 3. **Nullability.** `!` used without a justifying comment. Nullable reference types
    assumed non-null. Collections left null instead of empty.
-4. **Exception handling.** `catch (Exception)` outside the global `IExceptionHandler`.
+4. **Exception handling.** Any `catch (Exception)` without an explicit, justified `#pragma warning disable CA1031`.
    `throw ex;` instead of `throw;`. Empty catch blocks. Catch-log-continue that hides a
    failure from the caller. Expected failures thrown as exceptions where `Result<T>` fits.
 5. **EF pitfalls.** Missing `AsNoTracking()` on reads. N+1 from lazy access in a loop.

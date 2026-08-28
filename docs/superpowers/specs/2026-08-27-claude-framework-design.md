@@ -211,7 +211,8 @@ both. The `Domain` half is enforced by the banned-namespace list in §6.1.
 - A typed hierarchy: `DomainException` → `NotFoundException`, `ConflictException`, `ValidationException`.
 - `IExceptionHandler` at the API boundary producing RFC 9457 `ProblemDetails`.
 - `throw;` never `throw ex;` — CA2200, error.
-- `catch (Exception)` banned everywhere except the single global handler — CA1031, error.
+- `catch (Exception)` banned outright — CA1031 is `error` globally with no per-file exemption.
+  `IExceptionHandler` receives the exception as a parameter and needs no catch of its own.
 - `Result<T>` for expected failures; exceptions for genuinely exceptional conditions.
 - No empty catch blocks. No catch-log-continue that hides a failure from the caller.
 
