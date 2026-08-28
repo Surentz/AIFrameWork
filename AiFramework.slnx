@@ -1,9 +1,15 @@
 <Solution>
   <Folder Name="/src/" />
+  <Folder Name="/src/Application/">
+    <Project Path="src/Application/AiFramework.Application.csproj" />
+  </Folder>
   <Folder Name="/src/Domain/">
     <Project Path="src/Domain/AiFramework.Domain.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+  <Folder Name="/tests/Application.Tests/">
+    <Project Path="tests/Application.Tests/AiFramework.Application.Tests.csproj" />
+  </Folder>
   <Folder Name="/tests/Domain.Tests/">
     <Project Path="tests/Domain.Tests/AiFramework.Domain.Tests.csproj" />
   </Folder>
