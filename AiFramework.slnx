@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Domain/">
+    <Project Path="src/Domain/AiFramework.Domain.csproj" />
+  </Folder>
+</Solution>

@@ -1,8 +1,10 @@
 <Project>
 
   <PropertyGroup>
-    <!-- TargetFramework and LangVersion are intentionally NOT set here.
-         Pin them when the solution is scaffolded and the installed SDK is known. -->
+    <!-- Pinned 2026-08-28 against SDK 10.0.400, read from
+         `dotnet msbuild -getProperty:LangVersion`. Bump deliberately. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
