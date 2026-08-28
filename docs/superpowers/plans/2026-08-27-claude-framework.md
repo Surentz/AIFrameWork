@@ -732,7 +732,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 13   Failed: 0`, exit code 0.
+Expected: `Passed: 17   Failed: 0`, exit code 0.
 
 - [ ] **Step 6: Commit**
 
@@ -951,7 +951,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 19   Failed: 0`.
+Expected: `Passed: 29   Failed: 0`.
 
 - [ ] **Step 6: Commit**
 
@@ -1103,7 +1103,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 23   Failed: 0`.
+Expected: `Passed: 37   Failed: 0`.
 
 - [ ] **Step 6: Commit**
 
@@ -1276,7 +1276,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 29   Failed: 0`. The two toolchain fixtures point at REAL temp files created by the harness (ruling R4), so the hook genuinely reaches its toolchain check instead of returning at the `Test-Path` guard. Baseline is 29 rather than the originally-written 27 because an approved fix round on Task 5 added two no-secrets assertions.
+Expected: `Passed: 41   Failed: 0`. The two toolchain fixtures point at REAL temp files created by the harness (ruling R4), so the hook genuinely reaches its toolchain check instead of returning at the `Test-Path` guard. The running total is higher than the figures originally written into this plan because two later fix rounds added assertions to Tasks 4, 5 and 6 — see the running-count note in the self-review section.
 
 - [ ] **Step 6: Commit**
 
@@ -1418,7 +1418,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 32   Failed: 0`, exit code 0. All five hooks are now covered.
+Expected: `Passed: 47   Failed: 0`, exit code 0. All five hooks are now covered.
 
 - [ ] **Step 6: Commit**
 
@@ -1452,13 +1452,16 @@ git commit -m "feat(hooks): gate turn end on a warning-clean build"
       "Bash(dotnet restore:*)",
       "Bash(dotnet format:*)",
       "Bash(dotnet ef:*)",
-      "Bash(dotnet new:*)",
       "Bash(dotnet sln:*)",
       "Bash(dotnet user-secrets:*)",
+      "Bash(dotnet --list-sdks)",
       "Bash(npm ci)",
+      "Bash(npm ci:*)",
+      "Bash(npm test:*)",
       "Bash(npm run:*)",
-      "Bash(npm install:*)",
       "Bash(npx ng:*)",
+      "Bash(node --version)",
+      "Bash(powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tests/run-hook-tests.ps1)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -1495,7 +1498,7 @@ git commit -m "feat(hooks): gate turn end on a warning-clean build"
         ]
       },
       {
-        "matcher": "Edit|MultiEdit",
+        "matcher": "Edit|MultiEdit|Write",
         "hooks": [
           {
             "type": "command",
@@ -2880,15 +2883,24 @@ antipatterns fail the build rather than accumulating.
 
 ## Consequences
 
-The rule cannot rot: a violating edit is rejected with an explanation rather than reviewed
-later. Warnings cannot accumulate, because there is no warning state to accumulate in.
+Within what the hook can see, the rule does not rot: a violating `using` is rejected with an
+explanation at edit time rather than reviewed later. Warnings cannot accumulate, because there
+is no warning state to accumulate in.
 
-The costs are real. Four projects per feature is more ceremony than a layered app needs at
-small scale. Warnings-as-errors means an SDK or analyzer upgrade can break the build on code
-nobody touched. And one row of the matrix — `Api` → `Infrastructure`, legal for DI
-registration only — cannot be checked by a hook, because nothing distinguishes a
-`services.AddScoped<>()` call from a controller reaching into a repository. That row is
-carried by review.
+The costs are real, and so are the hook's blind spots.
+
+Four projects per feature is more ceremony than a layered app needs at small scale.
+Warnings-as-errors means an SDK or analyzer upgrade can break the build on code nobody touched.
+
+Two things the hook does **not** catch, both carried by review and `dotnet-reviewer`:
+
+- One row of the matrix — `Api` → `Infrastructure`, legal for DI registration only — cannot be
+  checked by a hook, because nothing distinguishes a `services.AddScoped<>()` call from a
+  controller reaching into a repository.
+- The hook gates on `.cs` files, so **`.csproj` files are invisible to it**. A
+  `<ProjectReference>` from `Domain.csproj` to `Infrastructure.csproj` — the coarsest possible
+  violation of the rule, and the one that legitimises every `using` beneath it — passes
+  unchallenged. Project-level references are a review responsibility.
 
 ## Alternatives considered
 
@@ -2911,7 +2923,7 @@ Run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\tests\run-hook-tests.ps1
 ```
 
-Expected: `Passed: 32   Failed: 0`, exit code 0.
+Expected: `Passed: 47   Failed: 0`, exit code 0.
 
 - [ ] **Step 4: Verify every file the plan promised exists**
 
@@ -2969,10 +2981,10 @@ What this plan can and cannot prove, stated plainly so no task overclaims:
 
 | Component | Verification | Real? |
 |---|---|---|
-| Five hook scripts | 30 fixture assertions, exit codes | **Yes — executes on this machine** |
+| Five hook scripts | 40 fixture assertions, exit codes | **Yes — executes on this machine** |
 | `payload.ps1` | 7 direct assertions | **Yes** |
-| `settings.json` | JSON parses; every referenced hook exists | Yes, structural |
-| `Directory.Build.props` | XML parses | Structural only — **no SDK to build with** |
+| `settings.json` | JSON parses, and Task 9 Step 3 checks each of the five hook scripts it names exists | Yes, structural |
+| `Directory.Build.props` | XML parses | Structural only — **no SDK to build with**, and the analyzer `ItemGroup` is commented out so Sonar/Meziantou/AsyncFixer are inactive |
 | `.editorconfig` | CA1031 elevation present | Structural only |
 | `eslint.config.js` | file present | **Unvalidated — no Node** |
 | `CLAUDE.md`, agents, commands, skills | frontmatter parses, files present | Structural only |
@@ -2992,7 +3004,12 @@ Checked after writing:
   identical signatures in Tasks 4–8. `Assert-Exit` and `Invoke-Hook` keep the same parameter
   names throughout. Fixture filenames match between the create step and the assertion step in
   every hook task.
-- **Running assertion counts** are cumulative and consistent: 7 → 13 → 19 → 23 → 27 → 30.
+- **Running assertion counts** are cumulative and consistent: 7 (Task 3, `payload.ps1`)
+  → 17 (Task 4) → 29 (Task 5) → 37 (Task 6) → 41 (Task 7) → **47** (Task 8), i.e. 7 library
+  assertions plus 40 fixture assertions. The final review pass raised this from 32 by adding
+  coverage for the `Write` bypass on migrations, prefixed layer folders, Windows backslash paths,
+  affixed secret key names, connection strings without a password, and the build gate's skip
+  reporting.
 - **Gap found and closed while reviewing:** `.gitignore` was originally scheduled after the
   hook tasks, which would have left `.idea/` dirtying `git status` through every intermediate
   commit. It moved to Task 1.

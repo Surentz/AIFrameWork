@@ -23,7 +23,12 @@
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
-  <!-- Analyzer package versions must be pinned when the solution is scaffolded.
+  <!-- INACTIVE. This ItemGroup is commented out, so SonarAnalyzer (S####),
+       Meziantou (MA####) and AsyncFixer (AsyncFixer##) rules do NOT run today -
+       not merely "unpinned". Only the built-in .NET analyzers (CA####, via
+       EnableNETAnalyzers above) and the .editorconfig elevations are live.
+       Pin versions and uncomment this block once the SDK is installed and the
+       solution is scaffolded; see spec section 6.2 and decision D8.
   <ItemGroup>
     <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" />
     <PackageReference Include="Meziantou.Analyzer" PrivateAssets="all" />

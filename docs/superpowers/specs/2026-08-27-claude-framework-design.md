@@ -58,7 +58,7 @@ day, taking the useful guardrails with it.
 | D5 | Create layer directories containing only `CLAUDE.md` | User approved. Structure, not scaffold: no `.csproj`, no code. |
 | D6 | Add `.gitignore`, `.editorconfig`, `Directory.Build.props` | User approved. Compile-time enforcement beats runtime hooks. |
 | D7 | EF Core for persistence, engine left open | User confirmed EF. Nothing here depends on the engine. |
-| D8 | `AnalysisMode=Recommended` + Sonar/Meziantou/AsyncFixer + curated elevations | User choice. `All` produces friction (CA1848, CA2007) that leads to suppression churn. |
+| D8 | `AnalysisMode=Recommended` + Sonar/Meziantou/AsyncFixer + curated elevations | User choice. `All` produces friction (CA1848, CA2007) that leads to suppression churn. The three analyzer packages are **commented out** in `Directory.Build.props` pending pinned versions, so only `CA####` and the `.editorconfig` elevations are live today — see §6.2. |
 | D9 | Stop hook enabled by default; disabled by deleting the `Stop` block from the shared `settings.json`, or all-or-nothing via local `disableAllHooks` | User asked twice for zero warnings; a gate is the only thing that delivers it. Costs nothing today — no-ops without the SDK. Reverses D4's "no strict gates"; flagged to the user and accepted. |
 | D10 | Versions are placeholders, pinned at scaffold time | `dotnet --list-sdks` and `ng version` are unrunnable here. A written version would be a guess. |
 
@@ -145,11 +145,26 @@ Banned `using` prefixes per layer, enforced by `dependency-rule.ps1`:
 `System.ComponentModel.DataAnnotations` is banned in `Domain` specifically to prevent the annotation
 trap in §6.3.
 
-One row of the matrix is **documented but not enforced**: `Api` → `Infrastructure` is legitimate for
-DI registration in composition root only, but a hook cannot distinguish a `services.AddScoped<...>()`
-registration from a controller reaching into a repository directly. `Api` therefore has no banned
-list, and this constraint is carried by `src/Api/CLAUDE.md` and `dotnet-reviewer` instead. Stating it
-here so the plan does not attempt an unreliable check.
+The hook identifies a layer from the file path. It matches both the bare `src/Domain/` layout and the
+root-namespace-prefixed `src/AiFramework.Domain/` layout that `dotnet new classlib -o src/<Root>.<Layer>`
+produces, requiring the layer name to be a complete path segment so `src/DomainServices/` is not
+mistaken for `Domain`. The layer names themselves come from the `layers` array in
+`.claude/hooks/hooks.config.json`, falling back to the canonical four if that file is missing or
+unreadable. Renaming a layer folder to something the config does not list disables the rule for it,
+which is why `src/Domain/CLAUDE.md` says the folder name is load-bearing.
+
+Two things are **documented but not enforced**, both carried by `src/Api/CLAUDE.md`,
+`docs/adr/0002-*.md` and `dotnet-reviewer`. Stated here so the plan does not attempt unreliable
+checks:
+
+1. `Api` → `Infrastructure` is legitimate for DI registration in the composition root only, but a
+   hook cannot distinguish a `services.AddScoped<...>()` registration from a controller reaching
+   into a repository directly. `Api` therefore has no banned list.
+2. **`.csproj` files.** The hook gates on `\.cs$`, so project files never reach it. A
+   `<ProjectReference>` from `Domain.csproj` to `Infrastructure.csproj` — the coarsest possible
+   violation, and the one that makes every `using` beneath it legal — is entirely invisible. This
+   is a real gap, not a rounding error, and it is why the rule is described as hard to rot rather
+   than impossible to rot.
 
 ### 6.2 Null safety and required-ness
 
@@ -175,8 +190,14 @@ only the common one leaves the other two able to emit ignorable warnings.
 (missing XML docs) is suppressed — it fires on every public member and with warnings-as-errors would
 stall development constantly. The documentation file stays enabled because Swagger consumes it.
 
-Analyzer packages, declared once with `PrivateAssets="all"` so every future `.csproj` inherits them:
-`SonarAnalyzer.CSharp`, `Meziantou.Analyzer`, `AsyncFixer`.
+Analyzer packages, to be declared once with `PrivateAssets="all"` so every future `.csproj` inherits
+them: `SonarAnalyzer.CSharp`, `Meziantou.Analyzer`, `AsyncFixer`.
+
+**Not active today.** That `ItemGroup` is present in `Directory.Build.props` but **commented out**,
+because package versions cannot be pinned before the SDK is installed and the solution scaffolded.
+Until the block is uncommented and versions pinned, no Sonar (`S####`), Meziantou (`MA####`) or
+AsyncFixer (`AsyncFixer##`) rule runs at all. Only the built-in .NET analyzers (`CA####`, via
+`EnableNETAnalyzers`) and the `.editorconfig` elevations below are live. See D8.
 
 Curated elevations live in `.editorconfig` as explicit `dotnet_diagnostic.<ID>.severity = error`
 entries. They are needed because `AnalysisMode=Recommended` leaves several of these rules disabled
@@ -216,8 +237,11 @@ both. The `Domain` half is enforced by the banned-namespace list in §6.1.
 - `Result<T>` for expected failures; exceptions for genuinely exceptional conditions.
 - No empty catch blocks. No catch-log-continue that hides a failure from the caller.
 
-Frontend mirror: a global `ErrorHandler`, a typed HTTP error interceptor, and a lint rule against
-swallowing errors in `catchError`.
+Frontend mirror: a global `ErrorHandler` and a typed HTTP error interceptor, both documented in
+`frontend/CLAUDE.md` and `angular-conventions`. Swallowing an error in `catchError` is **caught by
+review, not by lint** — it is a rule in `angular-reviewer`. No ESLint rule can see it: `no-empty`
+fires on an empty block, and `catchError(() => of(null))` has no empty block. Do not describe it as
+lint-enforced.
 
 ### 6.5 Frontend standards
 
@@ -227,8 +251,14 @@ Compile-time and lint-time:
   `noFallthroughCasesInSwitch`, and `angularCompilerOptions.strictTemplates`.
   **Documented, not pre-written** — `ng new` generates this file and would overwrite anything placed first.
 - `frontend/eslint.config.js`, flat config: `angular-eslint` recommended plus template a11y rules,
-  `typescript-eslint` strict-type-checked, no `any`, component selector prefix, RxJS lifecycle rules.
+  `typescript-eslint` strict-type-checked, no `any`, component selector prefix, and the Angular
+  lifecycle rules (`use-lifecycle-interface`, `no-empty-lifecycle-method`).
 - `ng lint --max-warnings 0`, so one lint warning is a non-zero exit.
+
+**RxJS lifecycle rules are review-enforced, not lint-enforced.** There is no RxJS ESLint plugin in
+`frontend/eslint.config.js`, so `takeUntilDestroyed` usage and subscription leaks are checked by
+`angular-reviewer` and by the conventions below. Adding `eslint-plugin-rxjs-x` would make them
+mechanical; that is a deliberate deferral, not an oversight.
 
 Conventions, documented in `angular-conventions`:
 
@@ -241,20 +271,40 @@ Conventions, documented in `angular-conventions`:
 ### 6.6 Secrets
 
 `no-secrets.ps1` blocks writes to `appsettings*.json` containing a populated `Password=`, `Pwd=`,
-`AccountKey=`, `SharedAccessSignature`, or a JSON key matching
-`ApiKey|ClientSecret|Secret|Token|SigningKey|PrivateKey|Password|Pwd|AccountKey|ConnectionString`
-with a non-placeholder value. The JSON-key list includes `Password`, `Pwd`, `AccountKey` and
-`ConnectionString` because the `Key=value;` connection-string detector only matches that syntax
-and never fires on a bare JSON key/value pair such as `"Password": "hunter2"`.
+`AccountKey=`, `SharedAccessSignature`, or a JSON key with a non-placeholder value matching
+`"[A-Za-z]*(Secret|ApiKey|SigningKey|PrivateKey|Token|Password|Pwd|AccountKey|AccessKey)[A-Za-z]*"`,
+plus a literal `"Key"`. The JSON-key list includes `Password`, `Pwd` and `AccountKey` because the
+`Key=value;` connection-string detector only matches that syntax and never fires on a bare JSON
+key/value pair such as `"Password": "hunter2"`.
+
+Two details are deliberate:
+
+- **Affixes are tolerated** (`[A-Za-z]*` either side). An exact-word alternation missed the key
+  names real config actually uses — `AccessKeyId`, `SecretAccessKey`, `StorageAccountKey` — which
+  is a complete AWS credential pair walking straight through the guard. The literal `"Key"` is
+  listed because the ASP.NET convention for a JWT signing secret is `"Jwt": { "Key": "..." }`.
+  The cost is some over-blocking (`"TokenEndpoint"` now trips the guard); over-blocking a URL is
+  cheaper than committing a signing key, and the placeholder allowlist absorbs the common cases.
+- **`ConnectionString` keys are judged on their value, not their name.** Flagging every
+  `ConnectionString` was a false positive:
+  `"Server=.;Database=App;Trusted_Connection=True;"` contains no secret at all. A connection-string
+  key is a finding only when its **value** carries a populated `Password=`, `Pwd=` or `AccountKey=`.
 
 Allowed as placeholders: empty string, `${...}`, `#{...}`, `<...>`, `REPLACE_ME`, `CHANGEME`, `TODO`.
 Real values belong in user-secrets or environment variables.
 
 ### 6.7 Migrations
 
-`protect-migrations.ps1` blocks `Edit` / `MultiEdit` on `**/Migrations/*.cs`, including
-`*.Designer.cs` and `*ModelSnapshot.cs`. Creating new migration files stays permitted. The block
-message directs the user to generate a new migration rather than mutate an applied one.
+`protect-migrations.ps1` blocks `Edit` / `MultiEdit` / **`Write`** on `**/Migrations/*.cs`, including
+`*.Designer.cs` and `*ModelSnapshot.cs`, **when the target file already exists**. Creating new
+migration files stays permitted. The block message directs the user to generate a new migration
+rather than mutate an applied one.
+
+`Write` is in the matcher deliberately. It overwrites an existing file just as readily as it creates
+a new one, so restricting the guard to `Edit`/`MultiEdit` left a one-word bypass: an agent blocked on
+`Edit` could reissue the same change as `Write`. What separates a legitimate `dotnet ef migrations
+add` from a mutation is not the tool but whether the target exists, so existence — `Test-Path
+-LiteralPath` — is what the hook tests.
 
 ---
 
@@ -276,7 +326,7 @@ Claude Code JSON payload from stdin via the shared `lib/payload.ps1` helper.
 |---|---|---|---|
 | `dependency-rule` | PreToolUse | `Edit`, `MultiEdit`, `Write` | layer violations per §6.1 |
 | `no-secrets` | PreToolUse | `Edit`, `MultiEdit`, `Write` | secrets in `appsettings*.json` per §6.6 |
-| `protect-migrations` | PreToolUse | `Edit`, `MultiEdit` | edits to existing migrations per §6.7 |
+| `protect-migrations` | PreToolUse | `Edit`, `MultiEdit`, `Write` | changes to **existing** migrations per §6.7 |
 | `format-and-lint` | PostToolUse | `Edit`, `MultiEdit`, `Write` | nothing on `.cs`; lint errors on `.ts`/`.html` |
 | `verify-build` | Stop | — | turn-end while the build is not warning-clean |
 
@@ -285,7 +335,12 @@ Claude Code JSON payload from stdin via the shared `lib/payload.ps1` helper.
 The two stacks cannot get the same loop, and the design does not pretend otherwise.
 
 - **Frontend:** `eslint --fix` then `prettier --write` per file, roughly a second. Surviving lint
-  errors `exit 2`, so they return to Claude and get fixed in the same turn.
+  errors `exit 2`, so they return to Claude and get fixed in the same turn. Both tools run with the
+  working directory pushed to `frontend/`, because ESLint 9 resolves its flat config from the cwd
+  and `eslint.config.js` lives there, not at the repo root the hook inherits. Only **exit code 1**
+  is treated as lint errors; ESLint's `>= 2` means a fatal or config error, which is a toolchain
+  problem and therefore exits 0 silently per the contract above — reporting it as lint errors told
+  Claude about problems the file did not have.
 - **Backend:** there is no fast per-file C# analyzer check — analyzers require a build. `.cs` files
   get `dotnet format whitespace` on write; warnings surface at build time through warnings-as-errors,
   the `verify-build` Stop hook, and `/verify`.
@@ -296,15 +351,34 @@ Net effect: TypeScript self-corrects immediately, C# at the next build.
 
 `verify-build.ps1` must read `stop_hook_active` from its payload and `exit 0` immediately when it is
 true. Without that check, a build that cannot be made to pass would loop the session indefinitely.
-It also exits 0 when no `.sln` or `.csproj` exists, which is the state today.
+That guard is first, unconditional, and silent — it fires on every legitimate second pass.
+
+It also exits 0 when there is nothing to build, which is the state today. Finding what to build is
+deliberately broader than a single root-level `*.sln`: it accepts `.sln` **and `.slnx`** (the .NET 9+
+format), searches subdirectories (skipping `node_modules`, `bin`, `obj`, `.git`), and falls back to
+building the repo root when any `.csproj` exists without a solution. Each of those layouts previously
+turned the Stop gate into a permanent no-op.
+
+Every skip **except the loop guard and an unparseable payload** writes one line to stderr saying why.
+A gate that skips silently is indistinguishable from a gate that passed, which is exactly how the
+root-only `*.sln` search went unnoticed.
 
 ---
 
 ## 8. `settings.json`
 
 **Permissions.** Allow the loop actually used, so the same approvals stop recurring:
-`dotnet build|test|restore|format|ef|new|sln`, `npm ci`, `npm run *`, `npx ng *`, and read-only git
-(`status`, `diff`, `log`, `branch`).
+`dotnet build|test|restore|format|ef|sln|user-secrets`, `dotnet --list-sdks`, `npm ci`, `npm test *`,
+`npm run *`, `npx ng *`, `node --version`, the hook suite
+(`powershell.exe ... -File .claude/hooks/tests/run-hook-tests.ps1`), and read-only git (`status`,
+`diff`, `log`, `branch`, `show`).
+
+`dotnet new` is **not** allowed: scaffolding creates project structure, which is a decision to make
+deliberately rather than one to pre-approve. `dotnet user-secrets` **is** allowed — it is the
+sanctioned alternative to putting a secret in `appsettings.json` (§6.6), so making it prompt would
+push work toward the thing the framework is trying to prevent. `npm install` is likewise absent in
+favour of `npm ci`, which respects the lockfile. Together these cover every step of `/verify`, which
+otherwise stopped for approval five times.
 
 Deny outright: reads of `**/.env`, `**/secrets.json`, `**/*.pfx`; and `dotnet ef database drop`.
 Ask: `git push`.
@@ -393,12 +467,20 @@ sends, from fixtures, and asserts exit codes:
 | `Domain` file with `using System;` | exit 0 |
 | `Application` file referencing `{Root}.Infrastructure` | exit 2 |
 | `Api` file referencing all layers | exit 0 |
+| `Domain` file under a prefixed folder `src/AiFramework.Domain/` with a banned `using` | exit 2 |
+| `src/DomainServices/` file with the same content (not a layer) | exit 0 |
+| A Windows **backslash** `file_path` in `Domain` with a banned `using` | exit 2 |
 | `appsettings.json` with `Password=hunter2` | exit 2 |
 | `appsettings.json` with `Password=${DB_PASSWORD}` | exit 0 |
-| Edit to an existing `Migrations/*.cs` | exit 2 |
+| `appsettings.json` with `"SecretAccessKey": "wJalrX..."` | exit 2 |
+| `appsettings.json` with `"Jwt": { "Key": "..." }` | exit 2 |
+| `appsettings.json` with a `Trusted_Connection=True;` connection string | exit 0 |
+| `Edit` **or `Write`** over an existing `Migrations/*.cs` | exit 2 |
+| `Write` to a `Migrations/*.cs` path that does not exist | exit 0 |
 | `format-and-lint` with `dotnet`/`npx` absent | exit 0, silent |
-| `verify-build` with `stop_hook_active: true` | exit 0 |
-| Malformed payload | exit 0 |
+| `verify-build` with `stop_hook_active: true` | exit 0, silent |
+| `verify-build` with nothing to build | exit 0, one stderr line saying why |
+| Malformed payload | exit 0, silent |
 
 Everything else in the framework is text and will be **unexecuted until the toolchain is installed
 and the solution scaffolded.** The plan must not claim otherwise.

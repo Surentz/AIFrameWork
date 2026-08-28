@@ -18,6 +18,11 @@ Entities, value objects, enums, domain events, domain exceptions
   `[Required]` drags validation and persistence concerns into this layer.
 - Any `AiFramework.Application`, `.Infrastructure`, or `.Api` namespace
 
+The folder name is load-bearing: the hook recognises this layer from the path, matching
+`src/Domain/` and a root-namespace-prefixed `src/AiFramework.Domain/`, with the layer names
+read from `.claude/hooks/hooks.config.json`. Move or rename this directory to something the
+config does not list and the rule stops applying to it — silently.
+
 **Not hook-enforced — upheld by review and by the `dotnet-reviewer` agent:**
 
 - `async` / `Task` — there is nothing to await in pure business logic. The hook

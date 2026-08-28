@@ -36,6 +36,10 @@ which blocks the edit rather than warning about it.
 | **Infrastructure** | ✓ | ✓ | — | ✗ |
 | **Api** | ✓ | ✓ | ✓ DI only | — |
 
+> The `Api → Infrastructure` cell is the one row the hook does **not** enforce: nothing
+> distinguishes a `services.AddScoped<>()` registration from a controller reaching into a
+> repository, so "DI only" is carried by review and `dotnet-reviewer`. Every other cell blocks.
+
 `Domain` additionally may not reference `Microsoft.EntityFrameworkCore`,
 `Microsoft.AspNetCore`, `Microsoft.Extensions.DependencyInjection`, `System.Data`,
 or `System.ComponentModel.DataAnnotations`.

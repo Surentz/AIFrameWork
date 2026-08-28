@@ -22,15 +22,24 @@ antipatterns fail the build rather than accumulating.
 
 ## Consequences
 
-The rule cannot rot: a violating edit is rejected with an explanation rather than reviewed
-later. Warnings cannot accumulate, because there is no warning state to accumulate in.
+Within what the hook can see, the rule does not rot: a violating `using` is rejected with an
+explanation at edit time rather than reviewed later. Warnings cannot accumulate, because there
+is no warning state to accumulate in.
 
-The costs are real. Four projects per feature is more ceremony than a layered app needs at
-small scale. Warnings-as-errors means an SDK or analyzer upgrade can break the build on code
-nobody touched. And one row of the matrix — `Api` → `Infrastructure`, legal for DI
-registration only — cannot be checked by a hook, because nothing distinguishes a
-`services.AddScoped<>()` call from a controller reaching into a repository. That row is
-carried by review.
+The costs are real, and so are the hook's blind spots.
+
+Four projects per feature is more ceremony than a layered app needs at small scale.
+Warnings-as-errors means an SDK or analyzer upgrade can break the build on code nobody touched.
+
+Two things the hook does **not** catch, both carried by review and `dotnet-reviewer`:
+
+- One row of the matrix — `Api` → `Infrastructure`, legal for DI registration only — cannot be
+  checked by a hook, because nothing distinguishes a `services.AddScoped<>()` call from a
+  controller reaching into a repository.
+- The hook gates on `.cs` files, so **`.csproj` files are invisible to it**. A
+  `<ProjectReference>` from `Domain.csproj` to `Infrastructure.csproj` — the coarsest possible
+  violation of the rule, and the one that legitimises every `using` beneath it — passes
+  unchallenged. Project-level references are a review responsibility.
 
 ## Alternatives considered
 
