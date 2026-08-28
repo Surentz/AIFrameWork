@@ -9,15 +9,20 @@ Entities, value objects, enums, domain events, domain exceptions
 
 ## Never appears here
 
+**Blocked by the dependency-rule hook at edit time:**
+
 - `Microsoft.EntityFrameworkCore` — persistence is Infrastructure's problem
 - `Microsoft.AspNetCore` — HTTP is Api's problem
 - `Microsoft.Extensions.DependencyInjection`, `System.Data`
 - `System.ComponentModel.DataAnnotations` — use the C# `required` keyword instead.
   `[Required]` drags validation and persistence concerns into this layer.
 - Any `AiFramework.Application`, `.Infrastructure`, or `.Api` namespace
-- `async` / `Task` — there is nothing to await in pure business logic
 
-The dependency-rule hook blocks all of these at edit time.
+**Not hook-enforced — upheld by review and by the `dotnet-reviewer` agent:**
+
+- `async` / `Task` — there is nothing to await in pure business logic. The hook
+  matches `using` directives against a namespace list and has no keyword check,
+  so nothing mechanical stops you writing `async Task` here.
 
 ## Shape
 
