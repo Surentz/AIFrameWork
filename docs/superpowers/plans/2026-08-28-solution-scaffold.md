@@ -320,13 +320,20 @@ public sealed class ArchitectureTests
     [Fact]
     public void Application_references_Domain_only()
     {
-        var referenced = AssemblyMarker.Assembly
+        // Assert on the DISALLOWED subset, not with OnlyContain. FluentAssertions 7.2.2
+        // throws on an empty collection ("but the collection is empty") rather than
+        // treating OnlyContain as vacuously true - and this collection IS empty today,
+        // because Application uses no Domain type yet so the compiler omits the
+        // reference. BeEmpty on the disallowed subset is correct in both cases.
+        var disallowed = AssemblyMarker.Assembly
             .GetReferencedAssemblies()
             .Select(a => a.Name)
-            .Where(n => n is not null && n.StartsWith("AiFramework.", StringComparison.Ordinal))
+            .Where(n => n is not null
+                && n.StartsWith("AiFramework.", StringComparison.Ordinal)
+                && !n.Equals("AiFramework.Domain", StringComparison.Ordinal))
             .ToArray();
 
-        referenced.Should().OnlyContain(n => n == "AiFramework.Domain",
+        disallowed.Should().BeEmpty(
             "Application may depend on Domain and nothing else inward-facing");
     }
 }
@@ -340,7 +347,9 @@ dotnet test tests/Application.Tests --nologo --verbosity quiet
 
 Expected: PASS.
 
-Note: `Application` currently uses no Domain type, so the compiler may omit the reference entirely and the array may be empty — `OnlyContain` is vacuously true on an empty sequence. This is the documented limit of the technique, not a broken test. It becomes a real assertion once Plan 2 adds code that touches Domain.
+Note: `Application` currently uses no Domain type, so the compiler omits the reference entirely and the `AiFramework.*` set is empty. The assertion above is written against the *disallowed* subset precisely because of that — asserting `OnlyContain(n => n == "AiFramework.Domain")` on the allowed set does **not** pass vacuously in FluentAssertions 7.2.2; it fails with "but the collection is empty" (verified empirically 2026-08-28 against the pinned 7.2.2, by both the Task 3 implementer and the controller). Task 4 is unaffected: `NotContain` is safe on an empty sequence.
+
+The residual limit of the technique still stands — an empty set cannot prove Application *does* reach Domain, only that it reaches nothing forbidden. That half becomes a real assertion once Plan 2 adds code touching Domain.
 
 - [ ] **Step 6: Prove the Domain test from Task 2 can actually fail**
 
