@@ -89,6 +89,16 @@ Assert-Exit -Name 'Domain with only System is allowed'     -Script 'dependency-r
 Assert-Exit -Name 'Application + Infrastructure blocked'   -Script 'dependency-rule.ps1' -Fixture 'application-infrastructure-violation.json' -Expected 2
 Assert-Exit -Name 'Api may reference every layer'          -Script 'dependency-rule.ps1' -Fixture 'api-all-layers.json'                      -Expected 0
 Assert-Exit -Name 'Malformed payload fails open'           -Script 'dependency-rule.ps1' -Fixture 'malformed.json'                           -Expected 0
+# The conventional "dotnet new classlib -o src/AiFramework.Domain" layout produces a
+# dotted, root-namespace-prefixed folder. Matching bare folder names only meant the
+# rule silently switched itself off for the layout most repos actually use.
+Assert-Exit -Name 'Prefixed layer folder src/AiFramework.Domain is enforced' -Script 'dependency-rule.ps1' -Fixture 'domain-prefixed-layer-violation.json' -Expected 2
+# ...and the prefix tolerance must not turn into prefix over-matching.
+Assert-Exit -Name 'src/DomainServices is NOT the Domain layer'               -Script 'dependency-rule.ps1' -Fixture 'domain-services-not-a-layer.json'    -Expected 0
+# Claude Code on Windows sends backslash file_path values; every other path fixture
+# uses forward slashes, so this pins ConvertTo-ForwardSlash actually doing its job.
+Assert-Exit -Name 'Backslash Windows path + EF Core is blocked'              -Script 'dependency-rule.ps1' -Fixture 'domain-ef-violation-backslash.json'   -Expected 2
+Assert-Exit -Name 'Backslash Windows path, clean Domain, is allowed'         -Script 'dependency-rule.ps1' -Fixture 'domain-clean-backslash.json'         -Expected 0
 
 Write-Host ''
 Write-Host 'no-secrets.ps1'
@@ -100,13 +110,100 @@ Assert-Exit -Name 'Non-appsettings files are ignored'   -Script 'no-secrets.ps1'
 Assert-Exit -Name 'Malformed payload fails open'        -Script 'no-secrets.ps1' -Fixture 'malformed.json'                        -Expected 0
 Assert-Exit -Name 'Bare "Password" JSON key is blocked'    -Script 'no-secrets.ps1' -Fixture 'appsettings-bare-password-key.json'         -Expected 2
 Assert-Exit -Name 'Bare "Password" with ${VAR} is allowed' -Script 'no-secrets.ps1' -Fixture 'appsettings-bare-password-placeholder.json' -Expected 0
+# Real key names carry affixes. An exact-word alternation let "AccessKeyId" and
+# "SecretAccessKey" - a complete AWS credential pair - through untouched.
+Assert-Exit -Name 'AWS AccessKeyId / SecretAccessKey are blocked' -Script 'no-secrets.ps1' -Fixture 'appsettings-aws-secret-access-key.json'   -Expected 2
+# The ASP.NET convention for a JWT signing secret is "Jwt": { "Key": "..." }.
+Assert-Exit -Name 'Bare "Key" (Jwt signing key) is blocked'       -Script 'no-secrets.ps1' -Fixture 'appsettings-jwt-key.json'                 -Expected 2
+# ...and the key name alone must not be the trigger: a Trusted_Connection string
+# holds no secret and blocking it was a pure false positive.
+Assert-Exit -Name 'ConnectionString with no password is allowed'  -Script 'no-secrets.ps1' -Fixture 'appsettings-connectionstring-trusted.json'  -Expected 0
+Assert-Exit -Name 'ConnectionString containing Password= blocked' -Script 'no-secrets.ps1' -Fixture 'appsettings-connectionstring-password.json' -Expected 2
 
 Write-Host ''
 Write-Host 'protect-migrations.ps1'
-Assert-Exit -Name 'Editing an existing migration is blocked' -Script 'protect-migrations.ps1' -Fixture 'migration-edit.json'      -Expected 2
-Assert-Exit -Name 'Creating a new migration is allowed'      -Script 'protect-migrations.ps1' -Fixture 'migration-write-new.json' -Expected 0
-Assert-Exit -Name 'Ordinary .cs edits are untouched'         -Script 'protect-migrations.ps1' -Fixture 'ordinary-cs-edit.json'    -Expected 0
-Assert-Exit -Name 'Malformed payload fails open'             -Script 'protect-migrations.ps1' -Fixture 'malformed.json'           -Expected 0
+
+# The guard now keys on whether the target ALREADY EXISTS rather than on the tool
+# name, because Write overwrites an existing file just as readily as Edit mutates
+# one - restricting the hook to Edit/MultiEdit left a one-word bypass. Testing that
+# needs migration files that genuinely exist on disk, so they are created in a temp
+# directory outside the repo and the payload JSON is generated around them, the same
+# technique the format-and-lint block below uses.
+$MigRoot = Join-Path $env:TEMP ("claude-hook-migrations-{0}" -f $PID)
+$MigDir  = Join-Path $MigRoot 'Migrations'
+New-Item -ItemType Directory -Path $MigDir -Force | Out-Null
+try {
+    $ExistingMigration = Join-Path $MigDir '20260101120000_InitialCreate.cs'
+    Set-Content -LiteralPath $ExistingMigration -Value 'public partial class InitialCreate { }' -NoNewline
+
+    $ExistingFs = ConvertTo-ForwardSlash -Path $ExistingMigration
+    $NewMigrationFs = ConvertTo-ForwardSlash -Path (Join-Path $MigDir '20260201090000_AddOrderTotal.cs')
+    # Same existing file, addressed the way Claude Code on Windows actually sends it.
+    $ExistingBackslash = $ExistingMigration -replace '\\', '\\'
+
+    $EditExistingPath  = Join-Path $MigRoot 'edit-existing.json'
+    $WriteExistingPath = Join-Path $MigRoot 'write-existing.json'
+    $WriteNewPath      = Join-Path $MigRoot 'write-new.json'
+    $EditBackslashPath = Join-Path $MigRoot 'edit-existing-backslash.json'
+
+    @"
+{
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "$ExistingFs",
+    "old_string": "nullable: true",
+    "new_string": "nullable: false"
+  }
+}
+"@ | Set-Content -LiteralPath $EditExistingPath
+
+    @"
+{
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "$ExistingFs",
+    "content": "public partial class InitialCreate { /* rewritten */ }"
+  }
+}
+"@ | Set-Content -LiteralPath $WriteExistingPath
+
+    @"
+{
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "$NewMigrationFs",
+    "content": "// generated by dotnet ef migrations add AddOrderTotal\n"
+  }
+}
+"@ | Set-Content -LiteralPath $WriteNewPath
+
+    @"
+{
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "$ExistingBackslash",
+    "old_string": "nullable: true",
+    "new_string": "nullable: false"
+  }
+}
+"@ | Set-Content -LiteralPath $EditBackslashPath
+
+    Assert-Exit -Name 'Edit over an EXISTING migration is blocked'       -Script 'protect-migrations.ps1' -FixturePath $EditExistingPath  -Expected 2
+    Assert-Exit -Name 'Write over an EXISTING migration is blocked'      -Script 'protect-migrations.ps1' -FixturePath $WriteExistingPath -Expected 2
+    Assert-Exit -Name 'Write to a NEW migration path is allowed'         -Script 'protect-migrations.ps1' -FixturePath $WriteNewPath      -Expected 0
+    Assert-Exit -Name 'Backslash path over an EXISTING migration blocked'-Script 'protect-migrations.ps1' -FixturePath $EditBackslashPath -Expected 2
+}
+finally {
+    if (Test-Path -LiteralPath $MigRoot) {
+        Remove-Item -LiteralPath $MigRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Assert-Exit -Name 'Write to a NEW migration path is allowed (fixture)'  -Script 'protect-migrations.ps1' -Fixture 'migration-write-new.json' -Expected 0
+# A migration path that does not exist is not a migration to protect - fail open.
+Assert-Exit -Name 'Edit to a nonexistent migration path fails open'     -Script 'protect-migrations.ps1' -Fixture 'migration-edit.json'      -Expected 0
+Assert-Exit -Name 'Ordinary .cs edits are untouched'                    -Script 'protect-migrations.ps1' -Fixture 'ordinary-cs-edit.json'    -Expected 0
+Assert-Exit -Name 'Malformed payload fails open'                        -Script 'protect-migrations.ps1' -Fixture 'malformed.json'           -Expected 0
 
 Write-Host ''
 Write-Host 'format-and-lint.ps1  (toolchain absent on this machine - these pin the fail-open path)'
@@ -170,8 +267,43 @@ finally {
 Write-Host ''
 Write-Host 'verify-build.ps1'
 Assert-Exit -Name 'stop_hook_active short-circuits (loop guard)' -Script 'verify-build.ps1' -Fixture 'stop-hook-active.json' -Expected 0
-Assert-Exit -Name 'Repo root with no .sln exits 0 (walks, finds none)' -Script 'verify-build.ps1' -Fixture 'stop-normal.json' -Expected 0
+Assert-Exit -Name 'Repo root with no solution exits 0'           -Script 'verify-build.ps1' -Fixture 'stop-normal.json'      -Expected 0
 Assert-Exit -Name 'Malformed payload fails open'                 -Script 'verify-build.ps1' -Fixture 'malformed.json'        -Expected 0
+
+# A gate that skips silently is indistinguishable from a gate that passed, which is
+# how a single non-recursive root *.sln search stayed unnoticed. Every skip except
+# the loop guard must say so on stderr.
+function Get-HookStderr {
+    # Native-command stderr becomes a terminating error record under
+    # $ErrorActionPreference = 'Stop', so it is relaxed for the duration of the
+    # capture and restored immediately afterwards.
+    param(
+        [Parameter(Mandatory)][string]$Script,
+        [Parameter(Mandatory)][string]$Fixture
+    )
+    $errFile = Join-Path $env:TEMP ("claude-hook-stderr-{0}.txt" -f $PID)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $payload = Get-Content -LiteralPath (Join-Path $Fixtures $Fixture) -Raw
+        $payload | & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $HookDir $Script) 2> $errFile | Out-Null
+        if (Test-Path -LiteralPath $errFile) { return (Get-Content -LiteralPath $errFile -Raw) }
+        return ''
+    }
+    finally {
+        $ErrorActionPreference = $previous
+        if (Test-Path -LiteralPath $errFile) { Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+$vbSkipErr = Get-HookStderr -Script 'verify-build.ps1' -Fixture 'stop-normal.json'
+Assert-True -Name 'A skipped build gate announces why on stderr' -Condition ($vbSkipErr -match 'build gate skipped')
+
+$vbLoopErr = Get-HookStderr -Script 'verify-build.ps1' -Fixture 'stop-hook-active.json'
+Assert-True -Name 'The loop guard stays silent'                  -Condition ([string]::IsNullOrWhiteSpace($vbLoopErr))
+
+$vbBadErr = Get-HookStderr -Script 'verify-build.ps1' -Fixture 'malformed.json'
+Assert-True -Name 'An unparseable payload stays silent'          -Condition ([string]::IsNullOrWhiteSpace($vbBadErr))
 
 Write-Host ''
 Write-Host ("Passed: {0}   Failed: {1}" -f $script:Passed, $script:Failed)

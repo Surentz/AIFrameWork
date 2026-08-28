@@ -45,18 +45,40 @@ try {
                     }
                 }
 
-                # JSON key style: "ApiKey": "...."
-                # Password|Pwd|AccountKey|ConnectionString added under ruling R7: the
-                # connection-string detector above only matches "Key=value;" syntax, which
-                # never appears in a bare JSON key/value pair such as "Password": "hunter2".
-                # Without these here, that shape - the most common one in appsettings.json -
-                # had zero coverage. Purpose (stop real secrets reaching committed config)
-                # beats the brief's original enumeration.
-                $jsonKeys = 'ApiKey|ClientSecret|Secret|Token|SigningKey|PrivateKey|Password|Pwd|AccountKey|ConnectionString'
-                foreach ($match in [regex]::Matches($text, "(?i)""($jsonKeys)""\s*:\s*""([^""]*)""")) {
+                # JSON key style: "ApiKey": "....", "SecretAccessKey": "...."
+                #
+                # The affix-tolerant "[A-Za-z]*(...)[A-Za-z]*" wrapper matters: the
+                # earlier quote-anchored alternation required the key to be EXACTLY
+                # one of the listed words, so real-world names built around them -
+                # "AccessKeyId", "SecretAccessKey", "StorageAccountKey" - all sailed
+                # through. A bare "Key" is listed too, because the ASP.NET convention
+                # for a JWT signing secret is "Jwt": { "Key": "..." }.
+                #
+                # Password|Pwd|AccountKey are here as well as in the connection-string
+                # scan above (ruling R7): that scan only matches "Key=value;" syntax,
+                # which never appears in a bare JSON pair such as "Password": "hunter2".
+                $jsonKeys = 'Secret|ApiKey|SigningKey|PrivateKey|Token|Password|Pwd|AccountKey|AccessKey'
+                $jsonKeyPattern = "(?i)""([A-Za-z]*(?:$jsonKeys)[A-Za-z]*|Key)""\s*:\s*""([^""]*)"""
+                foreach ($match in [regex]::Matches($text, $jsonKeyPattern)) {
                     $value = $match.Groups[2].Value
                     if (-not (Test-IsPlaceholder -Value $value)) {
                         [void]$findings.Add(('"{0}"' -f $match.Groups[1].Value))
+                    }
+                }
+
+                # ConnectionString is handled separately and deliberately narrowly.
+                # The key name alone says nothing: a Trusted_Connection / integrated
+                # -security string carries no secret at all, and flagging every
+                # "ConnectionString" blocked entirely legitimate config. Only the
+                # VALUE having a populated Password= / Pwd= / AccountKey= is a finding.
+                foreach ($match in [regex]::Matches($text, '(?i)"([A-Za-z]*ConnectionString[A-Za-z]*)"\s*:\s*"([^"]*)"')) {
+                    $value = $match.Groups[2].Value
+                    foreach ($keyword in @('Password', 'Pwd', 'AccountKey')) {
+                        foreach ($inner in [regex]::Matches($value, "(?i)\b$keyword\s*=\s*([^;]*)")) {
+                            if (-not (Test-IsPlaceholder -Value $inner.Groups[1].Value)) {
+                                [void]$findings.Add(('"{0}" (contains {1}=)' -f $match.Groups[1].Value, $keyword))
+                            }
+                        }
                     }
                 }
 

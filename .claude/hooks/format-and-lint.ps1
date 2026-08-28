@@ -33,19 +33,37 @@ try {
             # No SDK: nothing to do. Warnings are caught at build time instead.
         }
         elseif (@('.ts', '.html', '.scss', '.css', '.js', '.mjs') -contains $extension) {
-            $binDir = Join-Path $repoRoot 'frontend\node_modules\.bin'
+            $frontendDir = Join-Path $repoRoot 'frontend'
+            $binDir = Join-Path $frontendDir 'node_modules\.bin'
             $eslint = Join-Path $binDir 'eslint.cmd'
             $prettier = Join-Path $binDir 'prettier.cmd'
 
-            if (Test-Path -LiteralPath $eslint) {
-                $lintOutput = & $eslint --fix $path
-                $lintExit = $LASTEXITCODE
+            if ((Test-Path -LiteralPath $frontendDir) -and (Test-Path -LiteralPath $eslint)) {
+                # ESLint 9 flat config is resolved from the CURRENT WORKING DIRECTORY,
+                # and eslint.config.js lives in frontend/, not at the repo root the
+                # hook inherits. Running from anywhere else finds no config at all.
+                # try/finally so an eslint failure can never strand the location.
+                $lintOutput = $null
+                $lintExit = 0
+                Push-Location -LiteralPath $frontendDir
+                try {
+                    $lintOutput = & $eslint --fix $path
+                    $lintExit = $LASTEXITCODE
 
-                if (Test-Path -LiteralPath $prettier) {
-                    & $prettier --write $path | Out-Null
+                    if (Test-Path -LiteralPath $prettier) {
+                        & $prettier --write $path | Out-Null
+                    }
+                }
+                finally {
+                    Pop-Location
                 }
 
-                if ($lintExit -ne 0) {
+                # ESLint exit codes: 0 clean, 1 lint errors remain, >=2 fatal -
+                # a bad config, an unresolvable parser, a crash. Only 1 is a
+                # statement about this file. Treating >=2 as lint errors reported
+                # phantom problems in the file to Claude, and blocking on it would
+                # break the spec 7 contract: never block on a toolchain problem.
+                if ($lintExit -eq 1) {
                     $detail = ($lintOutput | Out-String).Trim()
                     $denyMessage = @"
 Lint errors remain in $path after eslint --fix.

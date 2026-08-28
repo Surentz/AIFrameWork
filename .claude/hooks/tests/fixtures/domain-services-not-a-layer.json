@@ -1,0 +1,8 @@
+{
+  "tool_name": "Write",
+  "cwd": "C:/repo",
+  "tool_input": {
+    "file_path": "C:/repo/src/DomainServices/Thing.cs",
+    "content": "using System;\nusing Microsoft.EntityFrameworkCore;\n\nnamespace AiFramework.DomainServices;\n\npublic sealed class Thing { }\n"
+  }
+}

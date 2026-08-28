@@ -1,0 +1,8 @@
+{
+  "tool_name": "Write",
+  "cwd": "C:/repo",
+  "tool_input": {
+    "file_path": "C:/repo/src/AiFramework.Domain/Order.cs",
+    "content": "using System;\nusing Microsoft.EntityFrameworkCore;\n\nnamespace AiFramework.Domain;\n\npublic sealed class Order { }\n"
+  }
+}

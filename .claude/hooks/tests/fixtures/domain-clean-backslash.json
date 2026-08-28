@@ -1,0 +1,8 @@
+{
+  "tool_name": "Write",
+  "cwd": "C:\\repo",
+  "tool_input": {
+    "file_path": "C:\\repo\\src\\Domain\\Orders\\Order.cs",
+    "content": "using System;\r\n\r\nnamespace AiFramework.Domain.Orders;\r\n\r\npublic sealed class Order { }\r\n"
+  }
+}

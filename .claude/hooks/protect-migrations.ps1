@@ -10,18 +10,23 @@ try {
     $payload = Read-HookPayload
     $toolName = Get-Prop -Object $payload -Name 'tool_name'
 
-    # Only mutation of an existing file is blocked. Write creates new migrations,
-    # which is exactly what "dotnet ef migrations add" produces.
-    if ($toolName -eq 'Edit' -or $toolName -eq 'MultiEdit') {
+    # Write is included deliberately: it overwrites an existing file just as
+    # readily as it creates a new one, so restricting this guard to Edit/MultiEdit
+    # left a trivial bypass - reissue the blocked edit as a Write. What separates
+    # a legitimate "dotnet ef migrations add" from a mutation is not the tool but
+    # whether the target already exists, so that is what is tested below.
+    if ($toolName -eq 'Edit' -or $toolName -eq 'MultiEdit' -or $toolName -eq 'Write') {
         $path = Get-TargetPath -Payload $payload
 
         if ($null -ne $path) {
             $normalized = ConvertTo-ForwardSlash -Path $path
 
-            if ($normalized -match '/Migrations/[^/]+\.cs$') {
+            # Only an ALREADY EXISTING migration is protected. Creating a brand new
+            # migration file - what "dotnet ef migrations add" produces - stays allowed.
+            if ($normalized -match '/Migrations/[^/]+\.cs$' -and (Test-Path -LiteralPath $path)) {
                 $leaf = Split-Path -Leaf $normalized
                 $denyMessage = @"
-BLOCKED: refusing to edit an existing EF Core migration.
+BLOCKED: refusing to modify an existing EF Core migration.
 
 File: $path
 
