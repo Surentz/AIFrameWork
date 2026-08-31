@@ -69,6 +69,19 @@ public sealed class BehaviorTests
     }
 
     [Fact]
+    public async Task SendAsync_WhenValidationFails_DoesNotInvokeTheHandler()
+    {
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        await using var provider = Build<SaveHandler>(unitOfWork, withValidator: true);
+        var dispatcher = provider.GetRequiredService<ICommandDispatcher>();
+        var handler = (SaveHandler)provider.GetRequiredService<ICommandHandler<Save, string>>();
+
+        await dispatcher.SendAsync(new Save(""), CancellationToken.None);
+
+        handler.WasCalled.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task SendAsync_WhenValidationFails_DoesNotSaveChanges()
     {
         var unitOfWork = Substitute.For<IUnitOfWork>();
@@ -110,9 +123,11 @@ public sealed class BehaviorTests
         var unitOfWork = Substitute.For<IUnitOfWork>();
         await using var provider = Build<SaveHandler>(unitOfWork, withValidator: false);
         var dispatcher = provider.GetRequiredService<ICommandDispatcher>();
+        var handler = (SaveHandler)provider.GetRequiredService<ICommandHandler<Save, string>>();
 
         var result = await dispatcher.SendAsync(new Save(""), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        handler.WasCalled.Should().BeTrue();
     }
 }
