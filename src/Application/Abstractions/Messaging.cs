@@ -4,12 +4,12 @@ namespace AiFramework.Application.Abstractions;
 /// A request that changes state. A type may implement this EXACTLY ONCE — the dispatcher
 /// infers TResponse from the argument, and two implementations make that ambiguous.
 /// </summary>
-#pragma warning disable S2326 // TResponse is intentionally unused; this is a marker interface for CQRS dispatch
+#pragma warning disable S2326 // TResponse is a phantom type parameter for call-site inference; load-bearing despite not appearing in method signatures
 public interface ICommand<TResponse>;
 #pragma warning restore S2326
 
 /// <summary>A request that reads state. Same single-implementation rule as ICommand.</summary>
-#pragma warning disable S2326 // TResponse is intentionally unused; this is a marker interface for CQRS dispatch
+#pragma warning disable S2326 // TResponse is a phantom type parameter for call-site inference; load-bearing despite not appearing in method signatures
 public interface IQuery<TResponse>;
 #pragma warning restore S2326
 
