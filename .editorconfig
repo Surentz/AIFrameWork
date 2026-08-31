@@ -26,8 +26,11 @@ dotnet_diagnostic.CA1062.severity = error   # validate arguments of public metho
 dotnet_diagnostic.CA2000.severity = error
 dotnet_diagnostic.CA1063.severity = error
 
-# --- Deliberately off: no synchronization context in ASP.NET Core ---
+# --- Deliberately off: no synchronization context in ASP.NET Core, so
+# ConfigureAwait(false) is noise. Covers both CA2007 (Roslyn) and MA0004
+# (Meziantou.Analyzer), which enforce the same rule. ---
 dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.MA0004.severity = none
 
 [*.{ts,js,mjs,cjs}]
 indent_size = 2

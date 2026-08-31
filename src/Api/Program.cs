@@ -7,7 +7,7 @@ var app = builder.Build();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-await app.RunAsync().ConfigureAwait(false);
+await app.RunAsync();
 
 /// <summary>Exposed so <c>WebApplicationFactory</c> can find the entry point.</summary>
 public partial class Program
