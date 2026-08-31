@@ -45,4 +45,18 @@ public sealed class QueryDispatcherTests
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Echo*");
     }
+
+    [Fact]
+    public void Construction_WithAQueryRegisteredTwice_ThrowsNamingTheQuery()
+    {
+        var services = new ServiceCollection();
+        services.AddQuery<Echo, int, EchoHandler>();
+        services.AddQuery<Echo, int, EchoHandler>();
+        services.AddScoped<IQueryDispatcher, QueryDispatcher>();
+        using var provider = services.BuildServiceProvider();
+
+        var act = () => provider.GetRequiredService<IQueryDispatcher>();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Echo*");
+    }
 }

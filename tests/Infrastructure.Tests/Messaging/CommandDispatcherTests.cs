@@ -2,6 +2,7 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Messaging;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace AiFramework.Infrastructure.Tests.Messaging;
 
@@ -24,6 +25,7 @@ public sealed class CommandDispatcherTests
         var services = new ServiceCollection();
         services.AddCommand<Ping, string, PingHandler>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
+        services.AddSingleton(Substitute.For<IUnitOfWork>());
         return services.BuildServiceProvider();
     }
 
@@ -49,5 +51,20 @@ public sealed class CommandDispatcherTests
         var act = async () => await dispatcher.SendAsync(new Ping("hello"), CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Ping*");
+    }
+
+    [Fact]
+    public void Construction_WithACommandRegisteredTwice_ThrowsNamingTheCommand()
+    {
+        var services = new ServiceCollection();
+        services.AddCommand<Ping, string, PingHandler>();
+        services.AddCommand<Ping, string, PingHandler>();
+        services.AddScoped<ICommandDispatcher, CommandDispatcher>();
+        services.AddSingleton(Substitute.For<IUnitOfWork>());
+        using var provider = services.BuildServiceProvider();
+
+        var act = () => provider.GetRequiredService<ICommandDispatcher>();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Ping*");
     }
 }
