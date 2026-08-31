@@ -51,9 +51,18 @@ function Assert-Exit {
 }
 
 function Assert-True {
+    # $Condition is deliberately untyped rather than [bool]: a strictly-typed
+    # [bool] parameter throws a terminating type-conversion error (instead of
+    # failing the assertion) when a caller's expression evaluates to $null or
+    # an array under Set-StrictMode - e.g. ($x -match 'pattern') when $x is
+    # $null returns an empty System.Object[], not $false. Using PowerShell's
+    # own truthiness in the `if` below turns that crash into an honest FAIL.
+    # This is a defensive backstop, not a fix for any specific caller - see
+    # the stop-normal.json fixture rework below for the actual bug this
+    # papered over the first time.
     param(
         [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][bool]$Condition
+        $Condition
     )
     if ($Condition) {
         Write-Host "  PASS  $Name"
@@ -266,44 +275,76 @@ finally {
 
 Write-Host ''
 Write-Host 'verify-build.ps1'
-Assert-Exit -Name 'stop_hook_active short-circuits (loop guard)' -Script 'verify-build.ps1' -Fixture 'stop-hook-active.json' -Expected 0
-Assert-Exit -Name 'Repo root with no solution exits 0'           -Script 'verify-build.ps1' -Fixture 'stop-normal.json'      -Expected 0
-Assert-Exit -Name 'Malformed payload fails open'                 -Script 'verify-build.ps1' -Fixture 'malformed.json'        -Expected 0
 
-# A gate that skips silently is indistinguishable from a gate that passed, which is
-# how a single non-recursive root *.sln search stayed unnoticed. Every skip except
-# the loop guard must say so on stderr.
-function Get-HookStderr {
-    # Native-command stderr becomes a terminating error record under
-    # $ErrorActionPreference = 'Stop', so it is relaxed for the duration of the
-    # capture and restored immediately afterwards.
-    param(
-        [Parameter(Mandatory)][string]$Script,
-        [Parameter(Mandatory)][string]$Fixture
-    )
-    $errFile = Join-Path $env:TEMP ("claude-hook-stderr-{0}.txt" -f $PID)
-    $previous = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try {
-        $payload = Get-Content -LiteralPath (Join-Path $Fixtures $Fixture) -Raw
-        $payload | & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $HookDir $Script) 2> $errFile | Out-Null
-        if (Test-Path -LiteralPath $errFile) { return (Get-Content -LiteralPath $errFile -Raw) }
-        return ''
+# stop-normal.json used to be a static fixture with cwd hardcoded to this
+# repo's own root. That worked only as long as the repo had no solution file
+# at its root; Task 1 added AiFramework.slnx there, so Find-BuildFile now
+# finds a real build target and the hook runs an actual `dotnet build`
+# instead of taking the "no solution" skip path this fixture is named for -
+# same exit code (0), for an entirely different reason, and with empty
+# stderr where a skip reason was expected. A directory freshly created under
+# $env:TEMP is guaranteed to hold no .sln/.slnx/.csproj, so the fixture is
+# generated here against one, the same isolation technique protect-migrations
+# and format-and-lint use above, rather than pointing at the live repo.
+$NoSolutionRoot = Join-Path $env:TEMP ("claude-hook-no-solution-{0}" -f $PID)
+New-Item -ItemType Directory -Path $NoSolutionRoot -Force | Out-Null
+try {
+    $NoSolutionRootFs = ConvertTo-ForwardSlash -Path $NoSolutionRoot
+    $StopNormalFixturePath = Join-Path $NoSolutionRoot 'stop-normal.json'
+    @"
+{
+  "hook_event_name": "Stop",
+  "cwd": "$NoSolutionRootFs",
+  "stop_hook_active": false
+}
+"@ | Set-Content -LiteralPath $StopNormalFixturePath
+
+    Assert-Exit -Name 'stop_hook_active short-circuits (loop guard)' -Script 'verify-build.ps1' -Fixture 'stop-hook-active.json' -Expected 0
+    Assert-Exit -Name 'Repo root with no solution exits 0'           -Script 'verify-build.ps1' -FixturePath $StopNormalFixturePath -Expected 0
+    Assert-Exit -Name 'Malformed payload fails open'                 -Script 'verify-build.ps1' -Fixture 'malformed.json'        -Expected 0
+
+    # A gate that skips silently is indistinguishable from a gate that passed, which is
+    # how a single non-recursive root *.sln search stayed unnoticed. Every skip except
+    # the loop guard must say so on stderr.
+    function Get-HookStderr {
+        # Native-command stderr becomes a terminating error record under
+        # $ErrorActionPreference = 'Stop', so it is relaxed for the duration of the
+        # capture and restored immediately afterwards.
+        param(
+            [Parameter(Mandatory)][string]$Script,
+            [string]$Fixture,
+            [string]$FixturePath
+        )
+        $resolvedFixturePath = if (-not [string]::IsNullOrWhiteSpace($FixturePath)) { $FixturePath } else { Join-Path $Fixtures $Fixture }
+        $errFile = Join-Path $env:TEMP ("claude-hook-stderr-{0}.txt" -f $PID)
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $payload = Get-Content -LiteralPath $resolvedFixturePath -Raw
+            $payload | & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $HookDir $Script) 2> $errFile | Out-Null
+            if (Test-Path -LiteralPath $errFile) { return (Get-Content -LiteralPath $errFile -Raw) }
+            return ''
+        }
+        finally {
+            $ErrorActionPreference = $previous
+            if (Test-Path -LiteralPath $errFile) { Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue }
+        }
     }
-    finally {
-        $ErrorActionPreference = $previous
-        if (Test-Path -LiteralPath $errFile) { Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue }
+
+    $vbSkipErr = Get-HookStderr -Script 'verify-build.ps1' -FixturePath $StopNormalFixturePath
+    Assert-True -Name 'A skipped build gate announces why on stderr' -Condition ($vbSkipErr -match 'build gate skipped')
+
+    $vbLoopErr = Get-HookStderr -Script 'verify-build.ps1' -Fixture 'stop-hook-active.json'
+    Assert-True -Name 'The loop guard stays silent'                  -Condition ([string]::IsNullOrWhiteSpace($vbLoopErr))
+
+    $vbBadErr = Get-HookStderr -Script 'verify-build.ps1' -Fixture 'malformed.json'
+    Assert-True -Name 'An unparseable payload stays silent'          -Condition ([string]::IsNullOrWhiteSpace($vbBadErr))
+}
+finally {
+    if (Test-Path -LiteralPath $NoSolutionRoot) {
+        Remove-Item -LiteralPath $NoSolutionRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
-
-$vbSkipErr = Get-HookStderr -Script 'verify-build.ps1' -Fixture 'stop-normal.json'
-Assert-True -Name 'A skipped build gate announces why on stderr' -Condition ($vbSkipErr -match 'build gate skipped')
-
-$vbLoopErr = Get-HookStderr -Script 'verify-build.ps1' -Fixture 'stop-hook-active.json'
-Assert-True -Name 'The loop guard stays silent'                  -Condition ([string]::IsNullOrWhiteSpace($vbLoopErr))
-
-$vbBadErr = Get-HookStderr -Script 'verify-build.ps1' -Fixture 'malformed.json'
-Assert-True -Name 'An unparseable payload stays silent'          -Condition ([string]::IsNullOrWhiteSpace($vbBadErr))
 
 Write-Host ''
 Write-Host ("Passed: {0}   Failed: {1}" -f $script:Passed, $script:Failed)
