@@ -22,8 +22,21 @@ public static class MessagingRegistration
         static async Task<object?> InvokeAsync(
             IServiceProvider sp, object command, CancellationToken ct)
         {
+            var typed = (TCommand)command;
+
+            var failed = await Behaviors.ValidateAsync<TCommand, TResponse>(sp, typed, ct)
+                .ConfigureAwait(false);
+            if (failed is not null)
+            {
+                return failed;
+            }
+
             var handler = sp.GetRequiredService<ICommandHandler<TCommand, TResponse>>();
-            return await handler.HandleAsync((TCommand)command, ct).ConfigureAwait(false);
+            var result = await handler.HandleAsync(typed, ct).ConfigureAwait(false);
+
+            await Behaviors.CommitAsync(sp, result, ct).ConfigureAwait(false);
+
+            return result;
         }
 
         services.AddScoped<ICommandHandler<TCommand, TResponse>, THandler>();
