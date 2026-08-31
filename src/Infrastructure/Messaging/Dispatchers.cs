@@ -24,6 +24,9 @@ public sealed class CommandDispatcher(
         var result = await descriptor.Invoke(serviceProvider, command, cancellationToken)
             .ConfigureAwait(false);
 
+        // Null-forgiving is safe here: the descriptor's Invoke always resolves to
+        // ICommandHandler<TCommand, TResponse>.HandleAsync, which always returns a non-null
+        // Result<TResponse> boxed as object? — result is never actually null at runtime.
         return (Result<TResponse>)result!;
     }
 }
@@ -50,6 +53,9 @@ public sealed class QueryDispatcher(
         var result = await descriptor.Invoke(serviceProvider, query, cancellationToken)
             .ConfigureAwait(false);
 
+        // Null-forgiving is safe here: the descriptor's Invoke always resolves to
+        // IQueryHandler<TQuery, TResponse>.HandleAsync, which always returns a non-null
+        // Result<TResponse> boxed as object? — result is never actually null at runtime.
         return (Result<TResponse>)result!;
     }
 }

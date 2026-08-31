@@ -7,8 +7,10 @@ public static class MessagingRegistration
 {
     /// <summary>
     /// Registers a command, its handler, and a dispatch delegate that closes over TCommand and
-    /// TResponse at compile time. The static local function captures nothing, so there is no
-    /// closure allocation — but TEvent-style generics still come from the enclosing method.
+    /// TResponse at compile time. The local function is <c>static</c> so it captures nothing —
+    /// no closure allocation — while TCommand and TResponse still come from the enclosing
+    /// generic method's type parameters, letting <see cref="CommandDispatcher"/> invoke the
+    /// right handler with no reflection.
     /// </summary>
     public static IServiceCollection AddCommand<TCommand, TResponse, THandler>(
         this IServiceCollection services)
@@ -28,6 +30,11 @@ public static class MessagingRegistration
         return services.AddSingleton(new CommandDescriptor(typeof(TCommand), InvokeAsync));
     }
 
+    /// <summary>
+    /// Registers a query, its handler, and a dispatch delegate that closes over TQuery and
+    /// TResponse at compile time. Same reflection-free mechanism as <see cref="AddCommand"/>,
+    /// via <see cref="QueryDispatcher"/>.
+    /// </summary>
     public static IServiceCollection AddQuery<TQuery, TResponse, THandler>(
         this IServiceCollection services)
         where TQuery : IQuery<TResponse>
