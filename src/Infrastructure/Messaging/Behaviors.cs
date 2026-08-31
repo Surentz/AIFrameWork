@@ -34,6 +34,8 @@ internal static class Behaviors
     /// <summary>
     /// Commits exactly once, and only when the command succeeded. Handlers never call
     /// SaveChangesAsync themselves — that is what makes one command one transaction.
+    /// Unlike the validator, IUnitOfWork is not absence-tolerant: a missing registration
+    /// would otherwise mean the handler reports success while nothing is written, silently.
     /// </summary>
     internal static async Task CommitAsync<TResponse>(
         IServiceProvider sp, Result<TResponse> result, CancellationToken ct)
@@ -43,10 +45,7 @@ internal static class Behaviors
             return;
         }
 
-        var unitOfWork = sp.GetService<IUnitOfWork>();
-        if (unitOfWork is not null)
-        {
-            await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
-        }
+        var unitOfWork = sp.GetRequiredService<IUnitOfWork>();
+        await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 }
