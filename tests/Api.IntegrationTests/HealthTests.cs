@@ -11,7 +11,7 @@ public sealed class HealthTests : IClassFixture<WebApplicationFactory<Program>>
     public HealthTests(WebApplicationFactory<Program> factory) => _factory = factory;
 
     [Fact]
-    public async Task Health_returns_200()
+    public async Task GetHealth_WhenApplicationIsRunning_Returns200Ok()
     {
         using var client = _factory.CreateClient();
 
