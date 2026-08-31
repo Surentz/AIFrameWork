@@ -32,6 +32,14 @@ dotnet_diagnostic.CA1063.severity = error
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.MA0004.severity = none
 
+# --- Deliberately off: cohesive types share a file (a command with its handler and
+#     validator), which is this repo's chosen structure. See the request-path plan. ---
+dotnet_diagnostic.MA0048.severity = none
+
+# --- Deliberately off: C#-only codebase, so cross-language keyword collisions
+#     (CA1716) are not a risk worth renaming public types for. ---
+dotnet_diagnostic.CA1716.severity = none
+
 [*.{ts,js,mjs,cjs}]
 indent_size = 2
 quote_type = single

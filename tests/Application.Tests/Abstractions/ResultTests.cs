@@ -8,7 +8,7 @@ public sealed class ResultTests
     [Fact]
     public void Success_WithValue_ExposesTheValue()
     {
-        var result = Result<int>.Success(42);
+        var result = Result.Success(42);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be(42);
@@ -19,7 +19,7 @@ public sealed class ResultTests
     {
         var error = new Error(ErrorKind.NotFound, "order.not_found", "No such order.");
 
-        var result = Result<int>.Failure(error);
+        var result = Result.Failure<int>(error);
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be(error);
@@ -28,7 +28,7 @@ public sealed class ResultTests
     [Fact]
     public void Value_OnFailure_Throws()
     {
-        var result = Result<int>.Failure(new Error(ErrorKind.Conflict, "c", "m"));
+        var result = Result.Failure<int>(new Error(ErrorKind.Conflict, "c", "m"));
 
         var act = () => _ = result.Value;
 
@@ -38,7 +38,7 @@ public sealed class ResultTests
     [Fact]
     public void Error_OnSuccess_Throws()
     {
-        var result = Result<int>.Success(1);
+        var result = Result.Success(1);
 
         var act = () => _ = result.Error;
 
