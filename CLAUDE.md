@@ -7,11 +7,13 @@
 | | Version |
 |---|---|
 | .NET SDK | 10.0.400 |
+| Target framework | net10.0 |
 | Node | 24.20.0 |
 | Angular | _unpinned — set at `ng new`_ |
 
-Verified 2026-08-28 from `dotnet --list-sdks` and `node --version`. Angular stays unpinned
-until the workspace is created; pin it from the generated `package.json`, not from memory.
+Verified 2026-08-28 from `dotnet --list-sdks` and `node --version`. The target framework was
+pinned when the solution was scaffolded. Angular stays unpinned until the workspace is
+created; pin it from the generated `package.json`, not from memory.
 
 ## Layout
 

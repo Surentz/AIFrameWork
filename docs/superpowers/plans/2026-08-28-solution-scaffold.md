@@ -661,7 +661,7 @@ git commit -m "docs: record the pinned target framework now that the solution ex
 ## Definition of done
 
 - `dotnet build` is clean with zero warnings across eight projects.
-- `dotnet test` passes, with at least one architecture test per layer plus the health test.
+- `dotnet test` passes, with an architecture test for Domain, Application and Infrastructure, plus the Api health test. Api has no architecture test: it may legally reference every other layer, and the one Api-specific rule (Infrastructure for DI registration only) needs controllers to exist — deferred to the next plan.
 - A deliberate unused variable fails the build (Task 1, Step 6).
 - A banned `using` in `Domain` is blocked at edit time (Task 6, Step 1).
 - `Directory.Build.props` pins `TargetFramework` and `LangVersion` to values read from the SDK.
