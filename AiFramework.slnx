@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/src/" />
+  <Folder Name="/src/Api/">
+    <Project Path="src/Api/AiFramework.Api.csproj" />
+  </Folder>
   <Folder Name="/src/Application/">
     <Project Path="src/Application/AiFramework.Application.csproj" />
   </Folder>
@@ -10,6 +13,9 @@
     <Project Path="src/Infrastructure/AiFramework.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/" />
+  <Folder Name="/tests/Api.IntegrationTests/">
+    <Project Path="tests/Api.IntegrationTests/AiFramework.Api.IntegrationTests.csproj" />
+  </Folder>
   <Folder Name="/tests/Application.Tests/">
     <Project Path="tests/Application.Tests/AiFramework.Application.Tests.csproj" />
   </Folder>

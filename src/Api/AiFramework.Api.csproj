@@ -1,0 +1,8 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Application\AiFramework.Application.csproj" />
+    <ProjectReference Include="..\Infrastructure\AiFramework.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
