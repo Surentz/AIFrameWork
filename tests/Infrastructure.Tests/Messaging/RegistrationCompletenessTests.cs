@@ -1,6 +1,7 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Messaging;
 using FluentAssertions;
+using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using ApplicationMarker = AiFramework.Application.AssemblyMarker;
 
@@ -22,6 +23,15 @@ public sealed class RegistrationCompletenessTests
             .Where(t => t is { IsAbstract: false, IsInterface: false }
                 && t.GetInterfaces().Any(i =>
                     i.IsGenericType && i.GetGenericTypeDefinition() == openGeneric))
+            .ToArray();
+
+    /// <summary>The T in every non-abstract AbstractValidator&lt;T&gt; subclass in Application.</summary>
+    private static Type[] Validated() =>
+        ApplicationMarker.Assembly.GetTypes()
+            .Where(t => t is { IsAbstract: false, IsInterface: false }
+                && t.BaseType is { IsGenericType: true }
+                && t.BaseType.GetGenericTypeDefinition() == typeof(AbstractValidator<>))
+            .Select(t => t.BaseType!.GetGenericArguments()[0])
             .ToArray();
 
     [Fact]
@@ -59,6 +69,25 @@ public sealed class RegistrationCompletenessTests
     }
 
     [Fact]
+    public void AddMessaging_RegistersAValidatorForEveryAbstractValidatorInTheApplicationAssembly()
+    {
+        var services = new ServiceCollection();
+        services.AddMessaging();
+        var registered = services
+            .Where(d => d.ServiceType.IsGenericType
+                && d.ServiceType.GetGenericTypeDefinition() == typeof(IValidator<>))
+            .Select(d => d.ServiceType.GetGenericArguments()[0])
+            .ToHashSet();
+
+        var unregistered = Validated().Where(t => !registered.Contains(t));
+
+        unregistered.Should().BeEmpty(
+            "every AbstractValidator<T> needs an AddScoped<IValidator<T>, ...>() call " +
+            "or validation for T silently never runs - absence is tolerated at dispatch " +
+            "time, but not at registration time");
+    }
+
+    [Fact]
     public void EveryCommand_ImplementsICommandExactlyOnce()
     {
         var multiple = Implementing(typeof(ICommand<>))
@@ -67,5 +96,16 @@ public sealed class RegistrationCompletenessTests
 
         multiple.Should().BeEmpty(
             "TResponse is inferred from the argument; two ICommand<> interfaces make it ambiguous");
+    }
+
+    [Fact]
+    public void EveryQuery_ImplementsIQueryExactlyOnce()
+    {
+        var multiple = Implementing(typeof(IQuery<>))
+            .Where(t => t.GetInterfaces().Count(i =>
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IQuery<>)) > 1);
+
+        multiple.Should().BeEmpty(
+            "TResponse is inferred from the argument; two IQuery<> interfaces make it ambiguous");
     }
 }
