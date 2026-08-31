@@ -4,10 +4,11 @@ namespace AiFramework.Domain.Tests;
 
 public sealed class ArchitectureTests
 {
-    // The "AiFramework.*" set below is empty by construction today: no layer yet
-    // uses a type from the layer below it, so the compiler emits no such reference
-    // at all. That emptiness is not itself proof the rule holds - see
-    // Scan_returns_real_assembly_references for the guard against a broken scan.
+    // The "AiFramework.*" set below is empty by construction: Domain is the innermost
+    // layer, so no other AiFramework assembly can ever appear in its references - this
+    // isn't a "not yet" fact that later commits could falsify by adding a type. That
+    // emptiness is not itself proof the rule holds - see Scan_returns_real_assembly_references
+    // for the guard against a broken scan.
     [Fact]
     public void Domain_references_no_other_layer()
     {

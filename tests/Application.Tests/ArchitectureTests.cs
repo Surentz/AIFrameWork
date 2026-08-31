@@ -4,11 +4,11 @@ namespace AiFramework.Application.Tests;
 
 public sealed class ArchitectureTests
 {
-    // The "AiFramework.*" set below is empty by construction today: Application
-    // uses no Domain type yet, so the compiler emits no such reference at all. See
-    // tests/CLAUDE.md for why this asserts on the disallowed subset rather than on
-    // "contains only Domain" (FluentAssertions 7.2.2's OnlyContain on empty), and
-    // Scan_returns_real_assembly_references for the guard against a broken scan.
+    // Application references AiFramework.Domain (e.g. PlaceOrder uses Domain.Orders.Order),
+    // so the "AiFramework.*" set below is genuinely non-empty and this assertion is
+    // load-bearing, not vacuous. See tests/CLAUDE.md for why this asserts on the disallowed
+    // subset rather than on "contains only Domain" (FluentAssertions 7.2.2's OnlyContain on
+    // empty), and Scan_returns_real_assembly_references for the guard against a broken scan.
     [Fact]
     public void Application_references_Domain_only()
     {

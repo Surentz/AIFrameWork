@@ -4,10 +4,11 @@ namespace AiFramework.Infrastructure.Tests;
 
 public sealed class ArchitectureTests
 {
-    // The "AiFramework.*" set below is empty by construction today: no layer yet
-    // uses a type from the layer below it, so the compiler emits no such reference
-    // at all. That emptiness is not itself proof the rule holds - see
-    // Scan_returns_real_assembly_references for the guard against a broken scan.
+    // Infrastructure references both AiFramework.Application (e.g. ICommand<>,
+    // AbstractValidator<PlaceOrder>) and AiFramework.Domain (e.g. Order in
+    // PlaceOrderHandler), so the "AiFramework.*" set below is genuinely non-empty and this
+    // assertion is load-bearing, not vacuous. See Scan_returns_real_assembly_references for
+    // the guard against a broken scan.
     [Fact]
     public void Infrastructure_references_Application_and_Domain_only()
     {
