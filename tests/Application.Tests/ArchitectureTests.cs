@@ -1,19 +1,17 @@
 using FluentAssertions;
-using Xunit;
 
 namespace AiFramework.Application.Tests;
 
 public sealed class ArchitectureTests
 {
+    // The "AiFramework.*" set below is empty by construction today: Application
+    // uses no Domain type yet, so the compiler emits no such reference at all. See
+    // tests/CLAUDE.md for why this asserts on the disallowed subset rather than on
+    // "contains only Domain" (FluentAssertions 7.2.2's OnlyContain on empty), and
+    // Scan_returns_real_assembly_references for the guard against a broken scan.
     [Fact]
     public void Application_references_Domain_only()
     {
-        // FluentAssertions 7.2.2's OnlyContain(predicate) throws on an empty collection
-        // rather than treating it as vacuously true (verified empirically: Application
-        // currently uses no Domain type, so the compiler omits the reference and
-        // GetReferencedAssemblies() returns none of "AiFramework.*" here). Asserting on
-        // the disallowed subset instead keeps the check correct in both the empty case
-        // and the populated case, without relying on that vacuous-truth behaviour.
         var disallowed = AssemblyMarker.Assembly
             .GetReferencedAssemblies()
             .Select(a => a.Name)
@@ -24,5 +22,18 @@ public sealed class ArchitectureTests
 
         disallowed.Should().BeEmpty(
             "Application may depend on Domain and nothing else inward-facing");
+    }
+
+    [Fact]
+    public void Scan_returns_real_assembly_references()
+    {
+        var referenced = AssemblyMarker.Assembly
+            .GetReferencedAssemblies()
+            .Select(a => a.Name)
+            .ToArray();
+
+        referenced.Should().Contain("System.Runtime",
+            "an empty or garbage scan would make Application_references_Domain_only " +
+            "pass for the wrong reason");
     }
 }
