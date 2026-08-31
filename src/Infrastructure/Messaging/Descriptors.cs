@@ -6,9 +6,9 @@ namespace AiFramework.Infrastructure.Messaging;
 /// </summary>
 public sealed record CommandDescriptor(
     Type CommandType,
-    Func<IServiceProvider, object, CancellationToken, Task<object?>> Invoke);
+    Func<IServiceProvider, object, CancellationToken, Task<object?>> Dispatch);
 
 /// <summary>The query-side equivalent. See CommandDescriptor.</summary>
 public sealed record QueryDescriptor(
     Type QueryType,
-    Func<IServiceProvider, object, CancellationToken, Task<object?>> Invoke);
+    Func<IServiceProvider, object, CancellationToken, Task<object?>> Dispatch);
