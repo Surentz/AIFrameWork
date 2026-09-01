@@ -12,6 +12,24 @@ this layer exposes to Api.
 
 Any `AiFramework.Api` namespace. Blocked by the dependency-rule hook.
 
+## Messaging
+
+Dispatchers, descriptors, registration and behaviors live in `Messaging/`. `AddMessaging()`
+in `InfrastructureRegistration.cs` is the entry point.
+
+- Dispatch is **reflection-free**. `AddCommand<TCommand, TResponse, THandler>()` (and its
+  query equivalent) captures the closed generic in a `static` local function at registration
+  time, so dispatch at request time is a dictionary lookup keyed on `command.GetType()` plus
+  a delegate call. Do not "simplify" this into `MakeGenericType`/`MethodInfo.Invoke` — the
+  reflection-free, trim-safe dispatch is the point.
+- Every command and query must be registered in `AddMessaging()`. A registration-completeness
+  test (`Infrastructure.Tests`) fails the build if one is missed — it is the only thing
+  standing in for the compile-time safety this trade gives up, and it must never be deleted.
+- Validators are registered explicitly (`services.AddScoped<IValidator<T>, ...>()`), not by
+  assembly scanning, to keep the same greppable posture as command/query registration.
+- Only commands get behaviors — validation, then unit-of-work commit. Queries get neither.
+  A query that needs a transaction is a command.
+
 ## EF rules
 
 - **All mapping lives in `IEntityTypeConfiguration<T>`.** Never annotate a Domain type.

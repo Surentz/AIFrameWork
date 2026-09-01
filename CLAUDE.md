@@ -50,6 +50,10 @@ or `System.ComponentModel.DataAnnotations`.
 
 - **Warnings are errors.** All three sources — compiler, analyzers, build — see
   `Directory.Build.props`. Fix diagnostics; do not suppress them without a justification comment.
+  A handful of exemptions exist and each is documented at its site: `.editorconfig` carries
+  four repo-wide `severity = none` rules, and `src/Application/Abstractions/Messaging.cs` has
+  two local `#pragma` suppressions on its marker interfaces. `.editorconfig` is the place to
+  look for what's off and why.
 - **Nullable is enabled.** A missing null check does not compile.
 - **`required` keyword in `Domain`, never `[Required]`.** DataAnnotations belong on `Api` DTOs.
 - **Never `catch (Exception)`.** The global `IExceptionHandler` receives it as a parameter.

@@ -13,6 +13,16 @@ One project per layer, mirroring `src/`.
 
 xUnit + FluentAssertions + NSubstitute.
 
+## Registration completeness
+
+`Infrastructure.Tests/Messaging/RegistrationCompletenessTests.cs` is what replaces
+compile-time safety for `AddCommand`/`AddQuery`/validator registration: `AddCommand` and
+`AddQuery` are reflection-free by design (see `src/Infrastructure/CLAUDE.md`), so a missing
+registration compiles fine and only fails at dispatch time. These tests reflect over the
+`Application` assembly instead, at test time, and fail the build if any `ICommand<>`,
+`IQuery<>`, or `AbstractValidator<T>` lacks its registration. Deleting them removes the only
+net catching that class of mistake.
+
 ## Rules
 
 - Name tests `MethodName_Scenario_ExpectedOutcome`. Architecture and convention tests
