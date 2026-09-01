@@ -15,5 +15,10 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.Sku).IsRequired().HasMaxLength(64);
         builder.Property(o => o.Quantity).IsRequired();
         builder.Property(o => o.PlacedAt).IsRequired();
+
+        // DomainEvents is transient state the interceptor drains before save; it is not
+        // persisted. Without this, EF tries to map IDomainEvent as an entity type and the
+        // model fails to build at first use.
+        builder.Ignore(o => o.DomainEvents);
     }
 }

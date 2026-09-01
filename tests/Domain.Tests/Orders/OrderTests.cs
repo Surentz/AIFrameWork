@@ -39,4 +39,15 @@ public sealed class OrderTests
 
         act.Should().Throw<DomainException>().WithMessage("*sku*");
     }
+
+    [Fact]
+    public void Place_RaisesOrderPlaced()
+    {
+        var id = Guid.NewGuid();
+
+        var order = Order.Place(id, "SKU-1", 3, PlacedAt);
+
+        order.DomainEvents.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new OrderPlaced(id, "SKU-1", 3));
+    }
 }
