@@ -56,7 +56,7 @@ public sealed class OutboxPollerTests(PostgresFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ClaimAsync_ClaimsAPendingRowAndIncrementsAttempts()
+    public async Task ClaimAsync_ClaimsADuePendingRow()
     {
         var id = await SeedAsync(OutboxStatus.Pending);
         var poller = CreatePoller(new TestClock(Now));
@@ -74,12 +74,18 @@ public sealed class OutboxPollerTests(PostgresFixture fixture) : IAsyncLifetime
     [Fact]
     public async Task ClaimAsync_SkipsARowWhoseBackoffHasNotElapsed()
     {
-        await SeedAsync(OutboxStatus.Pending, nextAttemptAt: Now.AddMinutes(5));
+        var id = await SeedAsync(OutboxStatus.Pending, nextAttemptAt: Now.AddMinutes(5));
         var poller = CreatePoller(new TestClock(Now));
 
         var claimed = await poller.ClaimAsync(CancellationToken.None);
 
-        claimed.Should().BeEmpty();
+        // Scoped to the seeded row, not claimed.Should().BeEmpty(): the shared container is
+        // never truncated between test classes, and OutboxAtomicityTests leaves Pending rows
+        // behind permanently. Asserting global emptiness only held because another test in
+        // this class (with a large BatchSize) happened to run first and sweep those stray
+        // rows away — reorder the methods and that assumption breaks. This assertion only
+        // cares whether THIS row was claimed, which is what the test is actually about.
+        claimed.Should().NotContain(i => i.Id == id);
     }
 
     [Fact]
@@ -96,12 +102,16 @@ public sealed class OutboxPollerTests(PostgresFixture fixture) : IAsyncLifetime
     [Fact]
     public async Task ClaimAsync_LeavesAProcessedRowAlone()
     {
-        await SeedAsync(OutboxStatus.Processed, processedAt: Now);
+        var id = await SeedAsync(OutboxStatus.Processed, processedAt: Now);
         var poller = CreatePoller(new TestClock(Now));
 
         var claimed = await poller.ClaimAsync(CancellationToken.None);
 
-        claimed.Should().BeEmpty();
+        // Scoped to the seeded row rather than claimed.Should().BeEmpty() — see the comment
+        // in ClaimAsync_SkipsARowWhoseBackoffHasNotElapsed. The shared, never-truncated
+        // container can hold stray Pending rows left by other test classes; this test only
+        // asserts that a Processed row is not among whatever gets claimed.
+        claimed.Should().NotContain(i => i.Id == id);
     }
 
     [Fact]
