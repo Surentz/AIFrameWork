@@ -10,6 +10,16 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!--
+      Explicit and public (no PrivateAssets) so the version request flows through the
+      ProjectReference into Api. Without it, Api's own restore graph only sees
+      Npgsql.EntityFrameworkCore.PostgreSQL's floor requirement ([10.0.4, 11.0.0)) for this
+      package - because Microsoft.EntityFrameworkCore.Design's matching higher requirement is
+      PrivateAssets="all" and does not flow - so NuGet resolves Relational to 10.0.4 for Api
+      while Infrastructure.dll is compiled against 10.0.11, producing an MSB3277 conflict at
+      Api's build. Pinning it here unifies both projects on 10.0.11.
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
