@@ -1,8 +1,10 @@
 <Project>
 
   <PropertyGroup>
-    <!-- TargetFramework and LangVersion are intentionally NOT set here.
-         Pin them when the solution is scaffolded and the installed SDK is known. -->
+    <!-- Pinned 2026-08-28 against SDK 10.0.400, read from
+         `dotnet msbuild -getProperty:LangVersion`. Bump deliberately. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
@@ -23,17 +25,16 @@
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
-  <!-- INACTIVE. This ItemGroup is commented out, so SonarAnalyzer (S####),
-       Meziantou (MA####) and AsyncFixer (AsyncFixer##) rules do NOT run today -
-       not merely "unpinned". Only the built-in .NET analyzers (CA####, via
-       EnableNETAnalyzers above) and the .editorconfig elevations are live.
-       Pin versions and uncomment this block once the SDK is installed and the
-       solution is scaffolded; see spec section 6.2 and decision D8.
+  <!-- ACTIVE as of 2026-08-28. SonarAnalyzer (S####), Meziantou (MA####) and
+       AsyncFixer (AsyncFixer##) rules run alongside the built-in .NET analyzers
+       (CA####, via EnableNETAnalyzers above) and the .editorconfig elevations.
+       Versions resolved from nuget.org against SDK 10.0.400 - bump deliberately,
+       since CodeAnalysisTreatWarningsAsErrors means a new rule in a new version
+       can break a build on code nobody touched. See spec section 6.2 and D8. -->
   <ItemGroup>
-    <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" />
-    <PackageReference Include="Meziantou.Analyzer" PrivateAssets="all" />
-    <PackageReference Include="AsyncFixer" PrivateAssets="all" />
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.33.0.1635" PrivateAssets="all" />
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.190" PrivateAssets="all" />
+    <PackageReference Include="AsyncFixer" Version="2.1.0" PrivateAssets="all" />
   </ItemGroup>
-  -->
 
 </Project>

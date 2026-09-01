@@ -39,7 +39,15 @@ Two things the hook does **not** catch, both carried by review and `dotnet-revie
 - The hook gates on `.cs` files, so **`.csproj` files are invisible to it**. A
   `<ProjectReference>` from `Domain.csproj` to `Infrastructure.csproj` — the coarsest possible
   violation of the rule, and the one that legitimises every `using` beneath it — passes
-  unchallenged. Project-level references are a review responsibility.
+  unchallenged at edit time.
+
+Updated 2026-08-31: that last gap is now partly mechanized. Each layer's `ArchitectureTests`
+scans `GetReferencedAssemblies()` on the built assembly, so an actual `<ProjectReference>` to a
+disallowed layer — or, for `Domain`, a `<PackageReference>` to a banned namespace such as
+`Microsoft.EntityFrameworkCore` — fails the test suite, not just the hook. What still isn't
+mechanized: an *unused* `<ProjectReference>` never produces an assembly reference at all, so a
+dangling one is still invisible to both the hook and the tests, and remains a review
+responsibility.
 
 ## Alternatives considered
 

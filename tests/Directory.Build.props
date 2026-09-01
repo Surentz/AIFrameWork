@@ -1,0 +1,14 @@
+<Project>
+
+  <!-- MSBuild stops at the FIRST Directory.Build.props found walking up, so this
+       file would shadow the root one. Import the parent explicitly to keep
+       warnings-as-errors, nullability and the analyzer packages in force here. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove($(MSBuildThisFile), $(MSBuildThisFileDirectory)..))" />
+
+  <PropertyGroup>
+    <!-- tests/CLAUDE.md mandates MethodName_Scenario_ExpectedOutcome. CA1707 forbids
+         underscores in identifiers; the naming convention wins inside tests/ only. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+</Project>

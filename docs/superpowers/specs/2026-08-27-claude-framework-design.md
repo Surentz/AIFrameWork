@@ -58,7 +58,7 @@ day, taking the useful guardrails with it.
 | D5 | Create layer directories containing only `CLAUDE.md` | User approved. Structure, not scaffold: no `.csproj`, no code. |
 | D6 | Add `.gitignore`, `.editorconfig`, `Directory.Build.props` | User approved. Compile-time enforcement beats runtime hooks. |
 | D7 | EF Core for persistence, engine left open | User confirmed EF. Nothing here depends on the engine. |
-| D8 | `AnalysisMode=Recommended` + Sonar/Meziantou/AsyncFixer + curated elevations | User choice. `All` produces friction (CA1848, CA2007) that leads to suppression churn. The three analyzer packages are **commented out** in `Directory.Build.props` pending pinned versions, so only `CA####` and the `.editorconfig` elevations are live today — see §6.2. |
+| D8 | `AnalysisMode=Recommended` + Sonar/Meziantou/AsyncFixer + curated elevations | User choice. `All` produces friction (CA1848, CA2007) that leads to suppression churn. The three analyzer packages went live 2026-08-28 with pinned versions — see §6.2. |
 | D9 | Stop hook enabled by default; disabled by deleting the `Stop` block from the shared `settings.json`, or all-or-nothing via local `disableAllHooks` | User asked twice for zero warnings; a gate is the only thing that delivers it. Costs nothing today — no-ops without the SDK. Reverses D4's "no strict gates"; flagged to the user and accepted. |
 | D10 | Versions are placeholders, pinned at scaffold time | `dotnet --list-sdks` and `ng version` are unrunnable here. A written version would be a guess. |
 
@@ -190,14 +190,14 @@ only the common one leaves the other two able to emit ignorable warnings.
 (missing XML docs) is suppressed — it fires on every public member and with warnings-as-errors would
 stall development constantly. The documentation file stays enabled because Swagger consumes it.
 
-Analyzer packages, to be declared once with `PrivateAssets="all"` so every future `.csproj` inherits
-them: `SonarAnalyzer.CSharp`, `Meziantou.Analyzer`, `AsyncFixer`.
+Analyzer packages, declared once with `PrivateAssets="all"` so every future `.csproj` inherits
+them: `SonarAnalyzer.CSharp` 10.33.0.1635, `Meziantou.Analyzer` 3.0.190, `AsyncFixer` 2.1.0.
 
-**Not active today.** That `ItemGroup` is present in `Directory.Build.props` but **commented out**,
-because package versions cannot be pinned before the SDK is installed and the solution scaffolded.
-Until the block is uncommented and versions pinned, no Sonar (`S####`), Meziantou (`MA####`) or
-AsyncFixer (`AsyncFixer##`) rule runs at all. Only the built-in .NET analyzers (`CA####`, via
-`EnableNETAnalyzers`) and the `.editorconfig` elevations below are live. See D8.
+**Active since 2026-08-28**, when .NET SDK 10.0.400 was installed and versions were pinned from
+nuget.org. Verified end to end against a throwaway project: clean code builds with 0 warnings and
+0 errors; a `return maybe;` on a `string?` fails with `CS8603`; a `catch (Exception) { }` fails
+with `CA1031`, `S2486` and `S108` — confirming both the `.editorconfig` elevations and the Sonar
+package are genuinely live, not merely configured. See D8.
 
 Curated elevations live in `.editorconfig` as explicit `dotnet_diagnostic.<ID>.severity = error`
 entries. They are needed because `AnalysisMode=Recommended` leaves several of these rules disabled

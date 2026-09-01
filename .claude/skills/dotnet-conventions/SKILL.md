@@ -69,13 +69,18 @@ Analyzer-enforced as errors — CA1031 and CA2200, globally, with no per-file ex
   `.editorconfig` with no scoping, so an unsuppressed one fails the build wherever it appears.
 - `throw;` never `throw ex;` — the second erases the stack trace. CA2200.
 
+Also analyzer-enforced, via SonarAnalyzer (active since 2026-08-28):
+
+- No empty catch blocks — `S108`, and `S2486` ("handle the exception or explain in a comment
+  why it can be ignored"). Both verified firing as errors.
+
 Enforced by review, not by any analyzer:
 
-- No empty catch blocks. No catch-log-continue that leaves the caller believing it succeeded.
-  (SonarAnalyzer's S108 would cover this, but that package is commented out in
-  `Directory.Build.props` until versions are pinned.)
+- No catch-log-continue that leaves the caller believing it succeeded. An analyzer cannot tell
+  a swallowed failure from a deliberately handled one.
 - Expected failures return `Result<T>`; exceptions are for the genuinely exceptional. "Order
-  not found" during a lookup is expected. A database being unreachable is not.
+  not found" during a lookup is expected. A database being unreachable is not. No Roslyn rule
+  can judge which is which.
 
 At the Api boundary, one `IExceptionHandler` maps the hierarchy to RFC 9457 `ProblemDetails`:
 `ValidationException` → 400, `NotFoundException` → 404, `ConflictException` → 409, everything

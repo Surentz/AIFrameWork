@@ -4,9 +4,21 @@ Use cases. Orchestrates Domain objects; owns no infrastructure.
 
 ## Belongs here
 
-Use-case handlers, **ports** (the interfaces Infrastructure implements —
-`IOrderRepository`, `IUnitOfWork`, `IClock`, `IEmailSender`), request and response
-models, FluentValidation validators, and `Result<T>`.
+Use-case handlers, `ICommand<T>` / `IQuery<T>` requests and their handlers, **ports**
+(the interfaces Infrastructure implements — `IOrderRepository`, `IUnitOfWork`, `IClock`,
+`IEmailSender`), request and response models, FluentValidation validators, and `Result<T>`.
+
+## Messaging rules
+
+- A type implements `ICommand<T>` / `IQuery<T>` **exactly once**. `TResponse` is inferred
+  from the argument at the call site; a second implementation makes that ambiguous and
+  breaks every caller. A test enforces this.
+- **Handlers never call `SaveChangesAsync`.** The unit-of-work behavior commits exactly
+  once after a successful command. A handler that commits turns one command into two
+  transactions.
+- Never inject a `DbContext`; depend on the port.
+- `Result.Success(value)` infers `T` from the argument. `Result.Failure<T>(error)` needs
+  the explicit type argument — an `Error` carries no type information to infer from.
 
 ## Never appears here
 

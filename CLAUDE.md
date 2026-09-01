@@ -4,14 +4,16 @@
 
 ## Versions
 
-<!-- PLACEHOLDER: no .NET SDK and no Node were installed when this repo was set up.
-     Pin real versions here the moment the toolchain is installed. Do not guess. -->
-
 | | Version |
 |---|---|
-| .NET SDK | _unpinned_ |
-| Angular | _unpinned_ |
-| Node | _unpinned_ |
+| .NET SDK | 10.0.400 |
+| Target framework | net10.0 |
+| Node | 24.20.0 |
+| Angular | _unpinned — set at `ng new`_ |
+
+Verified 2026-08-28 from `dotnet --list-sdks` and `node --version`. The target framework was
+pinned when the solution was scaffolded. Angular stays unpinned until the workspace is
+created; pin it from the generated `package.json`, not from memory.
 
 ## Layout
 
@@ -48,6 +50,10 @@ or `System.ComponentModel.DataAnnotations`.
 
 - **Warnings are errors.** All three sources — compiler, analyzers, build — see
   `Directory.Build.props`. Fix diagnostics; do not suppress them without a justification comment.
+  A handful of exemptions exist and each is documented at its site: `.editorconfig` carries
+  four repo-wide `severity = none` rules, and `src/Application/Abstractions/Messaging.cs` has
+  two local `#pragma` suppressions on its marker interfaces. `.editorconfig` is the place to
+  look for what's off and why.
 - **Nullable is enabled.** A missing null check does not compile.
 - **`required` keyword in `Domain`, never `[Required]`.** DataAnnotations belong on `Api` DTOs.
 - **Never `catch (Exception)`.** The global `IExceptionHandler` receives it as a parameter.
