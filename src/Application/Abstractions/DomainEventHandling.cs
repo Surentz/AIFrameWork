@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using AiFramework.Domain.Abstractions;
 
 namespace AiFramework.Application.Abstractions;
@@ -7,16 +8,18 @@ namespace AiFramework.Application.Abstractions;
 /// same event, so it is the dedupe key — "have I already processed message X?" is answerable
 /// without inventing a business key. Attempt lets a handler degrade on a retry.
 /// </summary>
-#pragma warning disable MA0008 // DomainEventContext is an immutable value type passed frequently; StructLayoutAttribute is unnecessary
+[StructLayout(LayoutKind.Auto)]
 public readonly record struct DomainEventContext(Guid MessageId, int Attempt);
-#pragma warning restore MA0008
 
 /// <summary>
 /// Handles one domain event. MUST be idempotent: delivery is at-least-once, and retry
 /// granularity is the message rather than the handler, so a partially-failed fan-out
 /// re-runs the handlers that already succeeded.
 /// </summary>
-#pragma warning disable CA1711 // IDomainEventHandler naming is intentional—the interface IS a domain event handler
+// CA1711: the name ends in "EventHandler", a suffix the rule reserves for delegate types.
+// This is a handler interface in a CQRS/DDD vocabulary where the name is the domain term,
+// not a delegate masquerading as something else, so the rule's intent does not apply here.
+#pragma warning disable CA1711
 public interface IDomainEventHandler<in TEvent>
     where TEvent : IDomainEvent
 {
