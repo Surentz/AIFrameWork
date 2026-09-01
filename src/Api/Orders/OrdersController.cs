@@ -10,8 +10,8 @@ public sealed class OrdersController(
     ICommandDispatcher commands, IQueryDispatcher queries) : ControllerBase
 {
     [HttpPost]
-    [ProducesResponseType(StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<Guid>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> Place(PlaceOrderRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -21,12 +21,12 @@ public sealed class OrdersController(
 
         return result.IsSuccess
             ? CreatedAtAction(nameof(Get), new { id = result.Value }, result.Value)
-            : result.Problem();
+            : result.Problem(HttpContext);
     }
 
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<OrderResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
         var result = await queries.SendAsync(new GetOrder(id), cancellationToken).ConfigureAwait(false);
@@ -39,6 +39,6 @@ public sealed class OrdersController(
                 Quantity = result.Value.Quantity,
                 PlacedAt = result.Value.PlacedAt,
             })
-            : result.Problem();
+            : result.Problem(HttpContext);
     }
 }

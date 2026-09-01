@@ -27,8 +27,17 @@ internal static class Behaviors
         }
 
         var message = string.Join(" ", validation.Errors.Select(e => e.ErrorMessage));
+
+        // Grouped by PropertyName, in the same shape ASP.NET Core's ModelState-driven
+        // ValidationProblemDetails.Errors uses, so a client can map a message back to a form
+        // field instead of only getting one prose blob.
+        var details = validation.Errors
+            .GroupBy(e => e.PropertyName, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray(), StringComparer.Ordinal);
+
         return Result.Failure<TResponse>(
-            new Error(ErrorKind.Validation, "validation.failed", message));
+            new Error(ErrorKind.Validation, "validation.failed", message, details));
     }
 
     /// <summary>

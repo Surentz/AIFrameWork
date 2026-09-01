@@ -1,16 +1,25 @@
+using System.Diagnostics;
 using AiFramework.Domain;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiFramework.Api;
 
-public sealed partial class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
+public sealed partial class GlobalExceptionHandler(
+    ILogger<GlobalExceptionHandler> logger, IProblemDetailsService problemDetailsService)
     : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
+
+        // Setting StatusCode (or writing) after the response has begun streaming throws.
+        if (httpContext.Response.HasStarted)
+        {
+            return false;
+        }
 
         var (status, title, detail) = exception switch
         {
@@ -25,11 +34,20 @@ public sealed partial class GlobalExceptionHandler(ILogger<GlobalExceptionHandle
         }
 
         httpContext.Response.StatusCode = status;
-        await httpContext.Response.WriteAsJsonAsync(
-            new ProblemDetails { Status = status, Title = title, Detail = detail },
-            cancellationToken).ConfigureAwait(false);
 
-        return true;
+        var problemDetails = new ProblemDetails { Status = status, Title = title, Detail = detail };
+
+        // Lets an operator holding a 500 report find the matching log line.
+        problemDetails.Extensions["traceId"] = Activity.Current?.Id ?? httpContext.TraceIdentifier;
+
+        // Writing through IProblemDetailsService (rather than a raw WriteAsJsonAsync) is what
+        // makes the registered AddProblemDetails() service actually run - it is what sets the
+        // RFC 9457 application/problem+json content type instead of a plain application/json.
+        return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = httpContext,
+            ProblemDetails = problemDetails,
+        }).ConfigureAwait(false);
     }
 
     // CA1848: log the message via the source-generated LoggerMessage delegate rather than
