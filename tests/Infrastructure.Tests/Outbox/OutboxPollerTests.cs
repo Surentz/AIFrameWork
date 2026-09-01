@@ -1,0 +1,139 @@
+using AiFramework.Infrastructure.Outbox;
+using AiFramework.Infrastructure.Persistence;
+using AiFramework.Infrastructure.Tests.Persistence;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+namespace AiFramework.Infrastructure.Tests.Outbox;
+
+[Collection(nameof(PostgresCollection))]
+public sealed class OutboxPollerTests(PostgresFixture fixture) : IAsyncLifetime
+{
+    private static readonly DateTimeOffset Now = new(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+
+    // CreatePoller hands the DbContext's ownership to this list rather than disposing it
+    // inline: the poller needs the context to stay open for the life of the test, so nothing
+    // in CreatePoller itself can dispose it. Tracking it here (disposed in DisposeAsync) is
+    // what satisfies CA2000 without leaking a connection past the test.
+    private readonly List<AiFrameworkDbContext> _createdContexts = [];
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public async Task DisposeAsync()
+    {
+        foreach (var context in _createdContexts)
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private OutboxPoller CreatePoller(TestClock clock, OutboxOptions? options = null)
+    {
+        var context = fixture.CreateContext();
+        _createdContexts.Add(context);
+        return new OutboxPoller(context, Options.Create(options ?? new OutboxOptions()), clock);
+    }
+
+    private async Task<Guid> SeedAsync(OutboxStatus status, DateTimeOffset? nextAttemptAt = null,
+        DateTimeOffset? leasedUntil = null, DateTimeOffset? processedAt = null)
+    {
+        var id = Guid.NewGuid();
+        await using var context = fixture.CreateContext();
+        context.Outbox.Add(new OutboxMessage
+        {
+            Id = id,
+            EventName = "test.event",
+            Payload = "{}",
+            OccurredAt = Now,
+            Status = status,
+            NextAttemptAt = nextAttemptAt,
+            LeasedUntil = leasedUntil,
+            ProcessedAt = processedAt,
+        });
+        await context.SaveChangesAsync();
+        return id;
+    }
+
+    [Fact]
+    public async Task ClaimAsync_ClaimsAPendingRowAndIncrementsAttempts()
+    {
+        var id = await SeedAsync(OutboxStatus.Pending);
+        var poller = CreatePoller(new TestClock(Now));
+
+        var claimed = await poller.ClaimAsync(CancellationToken.None);
+
+        claimed.Should().ContainSingle(i => i.Id == id).Which.Attempt.Should().Be(1);
+
+        await using var verify = fixture.CreateContext();
+        var row = await verify.Outbox.SingleAsync(m => m.Id == id);
+        row.Status.Should().Be(OutboxStatus.InFlight);
+        row.LeasedUntil.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ClaimAsync_SkipsARowWhoseBackoffHasNotElapsed()
+    {
+        await SeedAsync(OutboxStatus.Pending, nextAttemptAt: Now.AddMinutes(5));
+        var poller = CreatePoller(new TestClock(Now));
+
+        var claimed = await poller.ClaimAsync(CancellationToken.None);
+
+        claimed.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ClaimAsync_ReclaimsAnInFlightRowWhoseLeaseExpired()
+    {
+        var id = await SeedAsync(OutboxStatus.InFlight, leasedUntil: Now.AddMinutes(-1));
+        var poller = CreatePoller(new TestClock(Now));
+
+        var claimed = await poller.ClaimAsync(CancellationToken.None);
+
+        claimed.Should().ContainSingle(i => i.Id == id);
+    }
+
+    [Fact]
+    public async Task ClaimAsync_LeavesAProcessedRowAlone()
+    {
+        await SeedAsync(OutboxStatus.Processed, processedAt: Now);
+        var poller = CreatePoller(new TestClock(Now));
+
+        var claimed = await poller.ClaimAsync(CancellationToken.None);
+
+        claimed.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ClaimAsync_WithTwoConcurrentPollers_ReturnsDisjointSets()
+    {
+        for (var i = 0; i < 10; i++)
+        {
+            await SeedAsync(OutboxStatus.Pending);
+        }
+
+        var first = CreatePoller(new TestClock(Now), new OutboxOptions { BatchSize = 10 });
+        var second = CreatePoller(new TestClock(Now), new OutboxOptions { BatchSize = 10 });
+
+        var results = await Task.WhenAll(
+            first.ClaimAsync(CancellationToken.None),
+            second.ClaimAsync(CancellationToken.None));
+
+        results[0].Select(i => i.Id).Intersect(results[1].Select(i => i.Id))
+            .Should().BeEmpty("FOR UPDATE SKIP LOCKED must prevent double-claiming");
+    }
+
+    [Fact]
+    public async Task PruneAsync_DeletesProcessedRowsPastRetentionButKeepsDeadOnes()
+    {
+        var old = await SeedAsync(OutboxStatus.Processed, processedAt: Now.AddDays(-30));
+        var dead = await SeedAsync(OutboxStatus.Dead, processedAt: Now.AddDays(-30));
+        var poller = CreatePoller(new TestClock(Now));
+
+        await poller.PruneAsync(CancellationToken.None);
+
+        await using var verify = fixture.CreateContext();
+        (await verify.Outbox.AnyAsync(m => m.Id == old)).Should().BeFalse();
+        (await verify.Outbox.AnyAsync(m => m.Id == dead)).Should().BeTrue();
+    }
+}
