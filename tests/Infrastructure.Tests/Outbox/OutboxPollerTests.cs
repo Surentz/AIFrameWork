@@ -107,7 +107,16 @@ public sealed class OutboxPollerTests(PostgresFixture fixture) : IAsyncLifetime
     [Fact]
     public async Task ClaimAsync_WithTwoConcurrentPollers_ReturnsDisjointSets()
     {
-        for (var i = 0; i < 10; i++)
+        // Seed strictly more rows than a single BatchSize can take. With exactly BatchSize
+        // rows seeded, a poller that simply wins the race and grabs everything before the
+        // other's SELECT runs also produces an empty/empty split - disjoint, but vacuous,
+        // since it can't tell "SKIP LOCKED skipped locked rows" apart from "there was never
+        // any contention." Seeding 20 against BatchSize = 10 forces both outcomes (a genuine
+        // interleave, or a clean serialization) to leave both pollers non-empty, so the
+        // disjointness assertion below is only satisfiable if SKIP LOCKED actually worked.
+        // Do not shrink this back to BatchSize rows - it would silently remove the test's
+        // meaning while still showing green.
+        for (var i = 0; i < 20; i++)
         {
             await SeedAsync(OutboxStatus.Pending);
         }
@@ -119,6 +128,8 @@ public sealed class OutboxPollerTests(PostgresFixture fixture) : IAsyncLifetime
             first.ClaimAsync(CancellationToken.None),
             second.ClaimAsync(CancellationToken.None));
 
+        results[0].Should().HaveCount(10, "20 due rows and BatchSize 10 means a working claim must exhaust the first poller's batch");
+        results[1].Should().HaveCount(10, "the remaining 10 rows must go to the second poller, not vanish or double up");
         results[0].Select(i => i.Id).Intersect(results[1].Select(i => i.Id))
             .Should().BeEmpty("FOR UPDATE SKIP LOCKED must prevent double-claiming");
     }
