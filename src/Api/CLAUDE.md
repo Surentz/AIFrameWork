@@ -25,18 +25,29 @@ the global `IExceptionHandler`, middleware, and DI wiring.
 
 ## Exception handling
 
-One `IExceptionHandler` maps the domain hierarchy to RFC 9457 `ProblemDetails`:
+Two separate paths reach 400/404/409 — do not confuse them.
+
+`GlobalExceptionHandler` (`IExceptionHandler`) maps *thrown* exceptions to RFC 9457
+`ProblemDetails`:
 
 | Exception | Status |
 |---|---|
-| `ValidationException` | 400 |
-| `NotFoundException` | 404 |
-| `ConflictException` | 409 |
+| `DomainException` | 400 |
 | anything else | 500, logged, message not leaked |
 
 `IExceptionHandler.TryHandleAsync` receives the exception as a parameter, so this handler needs
 no `catch (Exception)` of its own — and could not have one without a suppression. CA1031 is
 `error` globally in `.editorconfig`, with no exemption for this file.
+
+Expected failures never throw. A handler returns a failed `Result`, and `ResultExtensions.Problem`
+maps `Result.Error.Kind` to a status code:
+
+| `ErrorKind` | Status |
+|---|---|
+| `Validation` | 400 |
+| `NotFound` | 404 |
+| `Conflict` | 409 |
+| anything else | 500 |
 
 ## Tests
 

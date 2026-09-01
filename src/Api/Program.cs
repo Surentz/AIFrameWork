@@ -1,9 +1,18 @@
+using AiFramework.Api;
+using AiFramework.Infrastructure;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddInfrastructure(
+    builder.Configuration.GetConnectionString("Default")
+        ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured."));
 
 var app = builder.Build();
 
+app.UseExceptionHandler();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

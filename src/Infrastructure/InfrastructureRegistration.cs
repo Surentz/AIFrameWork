@@ -1,7 +1,9 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using AiFramework.Infrastructure.Messaging;
+using AiFramework.Infrastructure.Persistence;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AiFramework.Infrastructure;
@@ -25,5 +27,19 @@ public static class InfrastructureRegistration
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
 
         return services;
+    }
+
+    /// <summary>The single entry point Api calls. Api must not reach past this into Infrastructure.</summary>
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services, string connectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddDbContext<AiFrameworkDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddSingleton<IClock, SystemClock>();
+
+        return services.AddMessaging();
     }
 }
