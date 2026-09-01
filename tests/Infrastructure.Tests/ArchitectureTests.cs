@@ -4,11 +4,15 @@ namespace AiFramework.Infrastructure.Tests;
 
 public sealed class ArchitectureTests
 {
-    // Infrastructure references both AiFramework.Application (e.g. ICommand<>,
-    // AbstractValidator<PlaceOrder>) and AiFramework.Domain (e.g. Order in
-    // PlaceOrderHandler), so the "AiFramework.*" set below is genuinely non-empty and this
-    // assertion is load-bearing, not vacuous. See Scan_returns_real_assembly_references for
-    // the guard against a broken scan.
+    // Infrastructure emits exactly one AiFramework reference today: AiFramework.Application
+    // (e.g. ICommand<>, PlaceOrder). It emits none to AiFramework.Domain, because no
+    // Infrastructure code names a Domain type yet — GetReferencedAssemblies() lists what the
+    // compiler actually emitted, not what the project file permits, and Domain is reached
+    // transitively through Application. So the scanned set is non-empty and this assertion is
+    // load-bearing rather than vacuous, but it is load-bearing on the Application reference
+    // alone. Domain stays in the allow-list because Infrastructure MAY depend on it and will
+    // once EF maps the Order aggregate. See Scan_returns_real_assembly_references for the
+    // guard against a broken scan.
     [Fact]
     public void Infrastructure_references_Application_and_Domain_only()
     {
