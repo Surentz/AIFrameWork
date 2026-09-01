@@ -1,5 +1,10 @@
+using AiFramework.Application.Abstractions;
+using AiFramework.Domain.Orders;
+using AiFramework.Infrastructure;
+using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
 namespace AiFramework.Infrastructure.Tests.Persistence;
@@ -26,6 +31,25 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         var options = new DbContextOptionsBuilder<AiFrameworkDbContext>()
             .UseNpgsql(ConnectionString)
+            .Options;
+
+        return new AiFrameworkDbContext(options);
+    }
+
+    /// <summary>A context with the domain-events interceptor attached, as production has it.</summary>
+    public AiFrameworkDbContext CreateContextWithOutbox()
+    {
+        var services = new ServiceCollection();
+        services.AddDomainEvent<OrderPlaced>("order.placed");
+        services.AddSingleton<DomainEventRegistry>();
+        services.AddSingleton<IClock, SystemClock>();
+        using var provider = services.BuildServiceProvider();
+
+        var options = new DbContextOptionsBuilder<AiFrameworkDbContext>()
+            .UseNpgsql(ConnectionString)
+            .AddInterceptors(new DomainEventsInterceptor(
+                provider.GetRequiredService<DomainEventRegistry>(),
+                provider.GetRequiredService<IClock>()))
             .Options;
 
         return new AiFrameworkDbContext(options);

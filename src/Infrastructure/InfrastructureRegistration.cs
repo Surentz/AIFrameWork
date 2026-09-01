@@ -1,6 +1,8 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
+using AiFramework.Domain.Orders;
 using AiFramework.Infrastructure.Messaging;
+using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +33,8 @@ public static class InfrastructureRegistration
 
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
 
+        services.AddDomainEvent<OrderPlaced>("order.placed");
+
         return services;
     }
 
@@ -40,7 +44,11 @@ public static class InfrastructureRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddDbContext<AiFrameworkDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddSingleton<DomainEventRegistry>();
+        services.AddSingleton<DomainEventsInterceptor>();
+        services.AddDbContext<AiFrameworkDbContext>((sp, options) => options
+            .UseNpgsql(connectionString)
+            .AddInterceptors(sp.GetRequiredService<DomainEventsInterceptor>()));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddSingleton<IClock, SystemClock>();
