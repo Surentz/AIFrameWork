@@ -3,12 +3,20 @@ using AiFramework.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var connectionString = builder.Configuration.GetConnectionString("Default");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    // GetConnectionString returns "" for an unset-but-present key, not null, so a
+    // `?? throw` guard never fires against appsettings.json's "Default": "". Checking for
+    // whitespace as well as null is what makes this fail at startup instead of deep inside
+    // Npgsql on the first request.
+    throw new InvalidOperationException("ConnectionStrings:Default is not configured.");
+}
+
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddInfrastructure(
-    builder.Configuration.GetConnectionString("Default")
-        ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured."));
+builder.Services.AddInfrastructure(connectionString);
 
 var app = builder.Build();
 

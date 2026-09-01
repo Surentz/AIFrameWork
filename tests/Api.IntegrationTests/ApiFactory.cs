@@ -1,8 +1,10 @@
+using AiFramework.Api.IntegrationTests.Diagnostics;
 using AiFramework.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
 
 namespace AiFramework.Api.IntegrationTests;
@@ -38,6 +40,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         ArgumentNullException.ThrowIfNull(builder);
 
+        // Program.cs now throws at startup when ConnectionStrings:Default is null or
+        // whitespace (see Program.cs). appsettings.json ships "" for that key, so this
+        // setting must be supplied before the host is built, not swapped in afterward via
+        // ConfigureServices below — otherwise the stricter guard throws first.
+        builder.UseSetting("ConnectionStrings:Default", _container.GetConnectionString());
+
         builder.ConfigureServices(services =>
         {
             var descriptor = services.Single(
@@ -45,6 +53,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.Remove(descriptor);
             services.AddDbContext<AiFrameworkDbContext>(
                 options => options.UseNpgsql(_container.GetConnectionString()));
+
+            // Test-only endpoints that throw on demand, exercising GlobalExceptionHandler's
+            // two branches over real HTTP. See TestEndpointsStartupFilter for why this is an
+            // IStartupFilter rather than a controller.
+            services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<IStartupFilter, TestEndpointsStartupFilter>());
         });
     }
 }
