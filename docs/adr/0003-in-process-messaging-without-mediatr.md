@@ -39,9 +39,15 @@ Recovering the concrete handler type from `command.GetType()` at dispatch time i
 `MakeGenericType`/`MethodInfo.Invoke` is for — and reflection was ruled out. Instead,
 `AddCommand<TCommand, TResponse, THandler>()` (and its query equivalent) captures the closed
 generic in a `static` local function at registration time, wraps it in a `CommandDescriptor`,
-and registers that as a singleton. `CommandDispatcher` collapses the descriptors into a
-`Dictionary<Type, CommandDescriptor>` once at startup; dispatch is then a dictionary lookup
-keyed on `command.GetType()` plus a delegate call — no reflection anywhere on the request path.
+and registers that as a singleton. `CommandRegistry` (and `QueryRegistry` for the query side),
+also registered as a singleton, collapses the descriptors into a `Dictionary<Type,
+CommandDescriptor>` once, at first resolution — not per request — and injects it into the
+still-scoped `CommandDispatcher`. Dispatch is then a dictionary lookup keyed on
+`command.GetType()` plus a delegate call — no reflection anywhere on the request path. An
+earlier revision of this design built that dictionary directly in `CommandDispatcher`'s own
+field initializer; because the dispatcher was registered `AddScoped`, that ran once per HTTP
+request rather than once — a review caught it, and `CommandRegistry`/`QueryRegistry` are the
+fix.
 
 Two behaviors run inside the registered delegate, commands only: validation (resolves
 `IValidator<TCommand>` if one is registered and short-circuits to a failed `Result`), then
@@ -62,7 +68,14 @@ are exercised by the `PlaceOrder`/`GetOrder` use case. The event half — `IDoma
 outbox, the `SaveChanges` interceptor, the channel, the poller and the worker pool — is
 specified in `docs/superpowers/specs/2026-08-28-in-process-messaging-design.md` §7–§10 but not
 built. A reader should not infer that domain events, an outbox, or at-least-once delivery ship
-today; nothing in this branch touches a database.
+today.
+
+This ADR originally claimed "nothing in this branch touches a database," written one commit
+before EF Core, Npgsql, an initial migration, `AiFrameworkDbContext`, and two
+Testcontainers-backed test suites (`Infrastructure.Tests` and `Api.IntegrationTests`) landed.
+That claim is false at HEAD and is corrected here rather than left standing: persistence exists
+in this branch, but only to back `IUnitOfWork.SaveChangesAsync` for the request path's
+unit-of-work behavior above — it is not the event-path outbox, which remains unbuilt.
 
 A missing `AddCommand`/`AddQuery` registration fails at runtime, not compile time — the one
 place this design is weaker than injecting the handler directly. The registration-completeness

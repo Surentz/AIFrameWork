@@ -2235,7 +2235,9 @@ git commit -m "docs: record the request path and add ADR 0003"
 - `dotnet test` passes, including Testcontainers-backed repository and end-to-end tests.
 - `POST /api/orders` persists an order in one transaction; a later `GET` in a different scope reads it back.
 - A missing `AddCommand`/`AddQuery` registration fails the registration-completeness test.
-- Zero new suppressions. Zero `catch (Exception)`.
+- Every suppression is argued at its site and recorded in `.editorconfig` (four repo-wide
+  `severity = none` rules, each with a comment explaining why) or as a local `#pragma` with a
+  justification comment — never bare. Zero `catch (Exception)`.
 - `Domain` still references no banned namespace — the architecture test proves EF Core reached `Infrastructure` only.
 - ADR 0003 records the decision; the four `CLAUDE.md` files match the code.
 
