@@ -24,6 +24,7 @@ public sealed class QueryDispatcherTests
     {
         var services = new ServiceCollection();
         services.AddQuery<Echo, int, EchoHandler>();
+        services.AddSingleton<QueryRegistry>();
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
         await using var provider = services.BuildServiceProvider();
         var dispatcher = provider.GetRequiredService<IQueryDispatcher>();
@@ -37,6 +38,7 @@ public sealed class QueryDispatcherTests
     public async Task SendAsync_WithAnUnregisteredQuery_Throws()
     {
         var services = new ServiceCollection();
+        services.AddSingleton<QueryRegistry>();
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
         await using var provider = services.BuildServiceProvider();
         var dispatcher = provider.GetRequiredService<IQueryDispatcher>();
@@ -52,6 +54,7 @@ public sealed class QueryDispatcherTests
         var services = new ServiceCollection();
         services.AddQuery<Echo, int, EchoHandler>();
         services.AddQuery<Echo, int, EchoHandler>();
+        services.AddSingleton<QueryRegistry>();
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
         using var provider = services.BuildServiceProvider();
 

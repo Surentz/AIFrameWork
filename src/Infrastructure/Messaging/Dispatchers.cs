@@ -4,21 +4,14 @@ namespace AiFramework.Infrastructure.Messaging;
 
 public sealed class CommandDispatcher(
     IServiceProvider serviceProvider,
-    IEnumerable<CommandDescriptor> descriptors) : ICommandDispatcher
+    CommandRegistry registry) : ICommandDispatcher
 {
-    private readonly Dictionary<Type, CommandDescriptor> _descriptors = descriptors
-        .GroupBy(d => d.CommandType)
-        .ToDictionary(g => g.Key, g => g.Count() == 1 ? g.Single()
-            : throw new InvalidOperationException(
-                $"Command '{g.Key.Name}' is registered {g.Count()} times. " +
-                "AddMessaging() must be called exactly once."));
-
     public async Task<Result<TResponse>> SendAsync<TResponse>(
         ICommand<TResponse> command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!_descriptors.TryGetValue(command.GetType(), out var descriptor))
+        if (!registry.TryGet(command.GetType(), out var descriptor))
         {
             throw new InvalidOperationException(
                 $"No handler registered for command '{command.GetType().Name}'. " +
@@ -37,21 +30,14 @@ public sealed class CommandDispatcher(
 
 public sealed class QueryDispatcher(
     IServiceProvider serviceProvider,
-    IEnumerable<QueryDescriptor> descriptors) : IQueryDispatcher
+    QueryRegistry registry) : IQueryDispatcher
 {
-    private readonly Dictionary<Type, QueryDescriptor> _descriptors = descriptors
-        .GroupBy(d => d.QueryType)
-        .ToDictionary(g => g.Key, g => g.Count() == 1 ? g.Single()
-            : throw new InvalidOperationException(
-                $"Query '{g.Key.Name}' is registered {g.Count()} times. " +
-                "AddMessaging() must be called exactly once."));
-
     public async Task<Result<TResponse>> SendAsync<TResponse>(
         IQuery<TResponse> query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        if (!_descriptors.TryGetValue(query.GetType(), out var descriptor))
+        if (!registry.TryGet(query.GetType(), out var descriptor))
         {
             throw new InvalidOperationException(
                 $"No handler registered for query '{query.GetType().Name}'. " +

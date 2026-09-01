@@ -24,6 +24,7 @@ public sealed class CommandDispatcherTests
     {
         var services = new ServiceCollection();
         services.AddCommand<Ping, string, PingHandler>();
+        services.AddSingleton<CommandRegistry>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         services.AddSingleton(Substitute.For<IUnitOfWork>());
         return services.BuildServiceProvider();
@@ -44,6 +45,7 @@ public sealed class CommandDispatcherTests
     public async Task SendAsync_WithAnUnregisteredCommand_Throws()
     {
         var services = new ServiceCollection();
+        services.AddSingleton<CommandRegistry>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         await using var provider = services.BuildServiceProvider();
         var dispatcher = provider.GetRequiredService<ICommandDispatcher>();
@@ -59,10 +61,15 @@ public sealed class CommandDispatcherTests
         var services = new ServiceCollection();
         services.AddCommand<Ping, string, PingHandler>();
         services.AddCommand<Ping, string, PingHandler>();
+        services.AddSingleton<CommandRegistry>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         services.AddSingleton(Substitute.For<IUnitOfWork>());
         using var provider = services.BuildServiceProvider();
 
+        // The duplicate check now lives in CommandRegistry (a singleton), so it fires at
+        // first resolution rather than in CommandDispatcher's own construction - but
+        // resolving the still-scoped dispatcher is what triggers that first resolution,
+        // so the observable behavior is unchanged.
         var act = () => provider.GetRequiredService<ICommandDispatcher>();
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*Ping*");

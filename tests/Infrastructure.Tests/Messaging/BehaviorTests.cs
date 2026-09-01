@@ -45,6 +45,7 @@ public sealed class BehaviorTests
     {
         var services = new ServiceCollection();
         services.AddCommand<Save, string, THandler>();
+        services.AddSingleton<CommandRegistry>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         services.AddSingleton(unitOfWork);
         if (withValidator)

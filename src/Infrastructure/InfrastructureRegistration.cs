@@ -18,6 +18,11 @@ public static class InfrastructureRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // CommandRegistry/QueryRegistry are singletons: the dictionary they build from the
+        // descriptors below (including the duplicate-registration check) is built once, at
+        // first resolution, not per request. The dispatchers that hold them stay scoped.
+        services.AddSingleton<CommandRegistry>();
+        services.AddSingleton<QueryRegistry>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
 
