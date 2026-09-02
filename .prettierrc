@@ -4,11 +4,5 @@
   "trailingComma": "all",
   "semi": true,
   "arrowParens": "always",
-  "endOfLine": "lf",
-  "overrides": [
-    {
-      "files": "*.html",
-      "options": { "parser": "angular" }
-    }
-  ]
+  "endOfLine": "lf"
 }

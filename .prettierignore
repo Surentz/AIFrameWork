@@ -1,6 +1,7 @@
 node_modules/
 dist/
-.angular/
+playwright-report/
+test-results/
 coverage/
 **/bin/
 **/obj/

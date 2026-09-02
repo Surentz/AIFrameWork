@@ -1,39 +1,31 @@
 // @ts-check
-// NOTE: this file uses CommonJS (require/module.exports), which only works as a bare
-// .js file if frontend/package.json does NOT set "type": "module". No package.json
-// exists yet - if `ng new` generates one with "type": "module", rename this file to
-// eslint.config.cjs, or convert it to ESM (import/export default) instead.
-const eslint = require('@eslint/js');
-const tseslint = require('typescript-eslint');
-const angular = require('angular-eslint');
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 
-module.exports = tseslint.config(
+export default tseslint.config(
+  { ignores: ['dist/', 'coverage/', 'playwright-report/'] },
   {
-    files: ['**/*.ts'],
+    files: ['**/*.{ts,tsx}'],
     extends: [
       eslint.configs.recommended,
       ...tseslint.configs.strictTypeChecked,
       ...tseslint.configs.stylisticTypeChecked,
-      ...angular.configs.tsRecommended,
     ],
     languageOptions: {
       parserOptions: { projectService: true },
     },
-    processor: angular.processInlineTemplates,
+    plugins: {
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+      'jsx-a11y': jsxA11y,
+    },
     rules: {
-      '@angular-eslint/directive-selector': [
-        'error',
-        { type: 'attribute', prefix: 'app', style: 'camelCase' },
-      ],
-      '@angular-eslint/component-selector': [
-        'error',
-        { type: 'element', prefix: 'app', style: 'kebab-case' },
-      ],
-      // Modern Angular, per frontend/CLAUDE.md
-      '@angular-eslint/prefer-standalone': 'error',
-      '@angular-eslint/prefer-on-push-component-change-detection': 'error',
-      '@angular-eslint/use-lifecycle-interface': 'error',
-      '@angular-eslint/no-empty-lifecycle-method': 'error',
+      ...reactHooks.configs.recommended.rules,
+      ...jsxA11y.configs.recommended.rules,
+      'react-refresh/only-export-components': ['error', { allowConstantExport: true }],
 
       // Type safety
       '@typescript-eslint/no-explicit-any': 'error',
@@ -50,18 +42,7 @@ module.exports = tseslint.config(
     },
   },
   {
-    files: ['**/*.html'],
-    extends: [
-      ...angular.configs.templateRecommended,
-      ...angular.configs.templateAccessibility,
-    ],
-    rules: {
-      '@angular-eslint/template/prefer-control-flow': 'error',
-      '@angular-eslint/template/no-any': 'error',
-    },
-  },
-  {
-    files: ['**/*.spec.ts'],
+    files: ['**/*.test.{ts,tsx}', 'e2e/**/*.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
     },
