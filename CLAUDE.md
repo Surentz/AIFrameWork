@@ -50,10 +50,13 @@ or `System.ComponentModel.DataAnnotations`.
 
 - **Warnings are errors.** All three sources — compiler, analyzers, build — see
   `Directory.Build.props`. Fix diagnostics; do not suppress them without a justification comment.
-  A handful of exemptions exist and each is documented at its site: `.editorconfig` carries
-  four repo-wide `severity = none` rules, and `src/Application/Abstractions/Messaging.cs` has
-  two local `#pragma` suppressions on its marker interfaces. `.editorconfig` is the place to
-  look for what's off and why.
+  Repo-wide exemptions live in `.editorconfig` as `severity = none` rules — that file is the
+  place to look for what's off and why. Everything narrower is a local `#pragma warning
+  disable`/`restore` pair at the point of use, and every one of those carries a justification
+  comment right above it explaining why the rule's intent doesn't apply there (see, for example,
+  `src/Application/Abstractions/Messaging.cs` and `tests/Infrastructure.Tests/Persistence/
+  PostgresFixture.cs`). Grep for `#pragma warning disable` if you need the current, exact list —
+  it grows as new sites are justified, so no count is kept here.
 - **Nullable is enabled.** A missing null check does not compile.
 - **`required` keyword in `Domain`, never `[Required]`.** DataAnnotations belong on `Api` DTOs.
 - **Never `catch (Exception)`.** The global `IExceptionHandler` receives it as a parameter.

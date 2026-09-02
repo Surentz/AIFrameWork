@@ -33,9 +33,12 @@ Postgres joins `PostgresCollection`; it does not declare its own fixture.
 
 `Api.IntegrationTests` now follows this too: every class that needs an `ApiFactory` joins
 `[Collection(nameof(ApiFactoryCollection))]` (the collection definition lives at the bottom of
-`ApiFactory.cs`, mirroring `PostgresFixture.cs`'s pattern), so xUnit starts exactly one host and
-one Postgres container for the whole project. A new `Api.IntegrationTests` class that needs the
-database joins that same collection — it does not declare its own `IClassFixture<ApiFactory>`.
+`ApiFactory.cs`, mirroring `PostgresFixture.cs`'s pattern), so xUnit starts exactly one Postgres
+container for the whole project. A new `Api.IntegrationTests` class that needs the database
+joins that same collection — it does not declare its own `IClassFixture<ApiFactory>`.
+`HealthTests` deliberately stays outside the collection: it uses its own
+`IClassFixture<WebApplicationFactory<Program>>` because `/health` needs a host but never
+touches the database, so it does not need the shared container.
 
 ## Rules
 

@@ -95,39 +95,65 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     }
 
     /// <summary>
-    /// Runs one claim-and-process cycle synchronously. Drives the same OutboxPoller and
-    /// OutboxWorkItemProcessor the hosted services use, so the wiring under test is real —
-    /// but deterministically, without waiting on BackgroundService timing. Each claimed item
-    /// gets its own scope, mirroring OutboxWorkerService.ProcessOneAsync: production never
-    /// shares one DbContext across items, so neither does this. What this does NOT cover: the
-    /// channel hop (ChannelWriter to ChannelReader), backpressure, and WorkerCount parallelism
-    /// — those are exercised by Infrastructure.Tests/Outbox/OutboxRegistrationTests.cs instead.
+    /// Drains every outbox row currently due — not just one batch. ClaimAsync's query is
+    /// <c>LIMIT BatchSize</c> (see OutboxOptions), so a single claim only ever picks up the
+    /// first BatchSize due rows; now that every Api.IntegrationTests class shares one database
+    /// via ApiFactoryCollection, rows from earlier tests in the run can sit ahead of the row a
+    /// later test cares about and nothing prunes between tests. This loops claim-and-process
+    /// cycles until a claim comes back empty, so the queue really is empty when this returns,
+    /// regardless of what other tests left behind. Drives the same OutboxPoller and
+    /// OutboxWorkItemProcessor the hosted services use, so the wiring under test is real — but
+    /// deterministically, without waiting on BackgroundService timing. Each claimed item gets
+    /// its own scope, mirroring OutboxWorkerService.ProcessOneAsync: production never shares one
+    /// DbContext across items, so neither does this. What this does NOT cover: the channel hop
+    /// (ChannelWriter to ChannelReader), backpressure, and WorkerCount parallelism — those are
+    /// exercised by Infrastructure.Tests/Outbox/OutboxRegistrationTests.cs instead.
+    /// This is bounded synchronous draining of rows already in the database, not polling for a
+    /// background state change, so looping here does not violate tests/CLAUDE.md's no-sleep
+    /// rule — keep it that way: no Thread.Sleep, no Task.Delay, no retry-until-timeout. The
+    /// MaxBatches cap is a safety net so a bug that keeps producing due rows fails loudly
+    /// instead of hanging CI.
     /// </summary>
     public async Task DrainOutboxOnceAsync()
     {
-        IReadOnlyList<OutboxWorkItem> claimed;
-        await using (var pollScope = Services.CreateAsyncScope())
+        const int MaxBatches = 1_000;
+
+        for (var batch = 0; batch < MaxBatches; batch++)
         {
-            var poller = pollScope.ServiceProvider.GetRequiredService<OutboxPoller>();
-            claimed = await poller.ClaimAsync(CancellationToken.None);
+            IReadOnlyList<OutboxWorkItem> claimed;
+            await using (var pollScope = Services.CreateAsyncScope())
+            {
+                var poller = pollScope.ServiceProvider.GetRequiredService<OutboxPoller>();
+                claimed = await poller.ClaimAsync(CancellationToken.None);
+            }
+
+            if (claimed.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var item in claimed)
+            {
+                await using var itemScope = Services.CreateAsyncScope();
+                var processor = itemScope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>();
+                await processor.ProcessAsync(item, CancellationToken.None);
+            }
         }
 
-        foreach (var item in claimed)
-        {
-            await using var itemScope = Services.CreateAsyncScope();
-            var processor = itemScope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>();
-            await processor.ProcessAsync(item, CancellationToken.None);
-        }
+        throw new InvalidOperationException(
+            $"DrainOutboxOnceAsync claimed {MaxBatches} batches without the outbox emptying; " +
+            "the queue is likely growing faster than it drains, or ClaimAsync is not converging.");
     }
 
     /// <summary>
     /// Forces a redelivery of an already-processed message, to exercise idempotency. Resets the
-    /// row to Pending — the same state OutboxPoller.ClaimAsync's lease-reclaim clause would
-    /// leave it in — and then runs it back through DrainOutboxOnceAsync, so the redelivery is
-    /// claimed by the real ClaimAsync rather than handed to the processor as a hand-built
-    /// OutboxWorkItem the poller could never actually produce (a Processed row is never
-    /// re-claimable). ExecuteUpdateAsync targets the row directly by predicate, so there is no
-    /// tracked (or untracked) read to reconcile with src/Infrastructure/CLAUDE.md's
+    /// row to the state DomainEventsInterceptor first inserts it in — Pending, NextAttemptAt
+    /// null, LeasedUntil null — except Attempts, which is deliberately left carried over from
+    /// the first delivery. It then runs the row back through DrainOutboxOnceAsync, so the
+    /// redelivery is claimed by the real ClaimAsync rather than handed to the processor as a
+    /// hand-built OutboxWorkItem the poller could never actually produce (a Processed row is
+    /// never re-claimable). ExecuteUpdateAsync targets the row directly by predicate, so there is
+    /// no tracked (or untracked) read to reconcile with src/Infrastructure/CLAUDE.md's
     /// AsNoTracking rule here.
     /// </summary>
     public async Task RedeliverAsync(Guid orderId)
