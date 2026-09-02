@@ -3,6 +3,7 @@ using System;
 using AiFramework.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AiFramework.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AiFrameworkDbContext))]
-    partial class AiFrameworkDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260901185127_AddOutbox")]
+    partial class AddOutbox
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -89,20 +92,6 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_outbox_pending");
 
                     b.ToTable("outbox", (string)null);
-                });
-
-            modelBuilder.Entity("AiFramework.Infrastructure.Persistence.OrderAudit", b =>
-                {
-                    b.Property<Guid>("MessageId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("OrderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("MessageId");
-
-                    b.ToTable("order_audit", (string)null);
                 });
 #pragma warning restore 612, 618
         }

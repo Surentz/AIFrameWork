@@ -1,4 +1,5 @@
 using AiFramework.Domain.Orders;
+using AiFramework.Infrastructure.Outbox;
 using Microsoft.EntityFrameworkCore;
 
 namespace AiFramework.Infrastructure.Persistence;
@@ -7,6 +8,10 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     : DbContext(options)
 {
     public DbSet<Order> Orders => Set<Order>();
+
+    public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
+
+    public DbSet<OrderAudit> OrderAudits => Set<OrderAudit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
