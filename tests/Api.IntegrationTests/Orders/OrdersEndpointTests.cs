@@ -5,7 +5,8 @@ using FluentAssertions;
 
 namespace AiFramework.Api.IntegrationTests.Orders;
 
-public sealed class OrdersEndpointTests(ApiFactory factory) : IClassFixture<ApiFactory>
+[Collection(nameof(ApiFactoryCollection))]
+public sealed class OrdersEndpointTests(ApiFactory factory)
 {
     [Fact]
     public async Task PostOrders_WithAValidRequest_Returns201()

@@ -31,13 +31,11 @@ the database joins that one collection, so xUnit starts exactly one container fo
 **One container per collection, never one per test class.** A new test class that needs
 Postgres joins `PostgresCollection`; it does not declare its own fixture.
 
-`Api.IntegrationTests` does not follow this yet: `OrdersEndpointTests` uses
-`IClassFixture<ApiFactory>` with no collection definition, so each test class that takes an
-`ApiFactory` starts its own container — a second endpoint test class in this project would
-start a second container rather than sharing the first one's. This is a known gap, not the
-convention to copy. A future `Api.IntegrationTests` class that needs the database should follow
-`Infrastructure.Tests`' pattern: a shared fixture behind a `[CollectionDefinition]`, joined via
-`[Collection(...)]`, not a fresh `IClassFixture<ApiFactory>`.
+`Api.IntegrationTests` now follows this too: every class that needs an `ApiFactory` joins
+`[Collection(nameof(ApiFactoryCollection))]` (the collection definition lives at the bottom of
+`ApiFactory.cs`, mirroring `PostgresFixture.cs`'s pattern), so xUnit starts exactly one host and
+one Postgres container for the whole project. A new `Api.IntegrationTests` class that needs the
+database joins that same collection — it does not declare its own `IClassFixture<ApiFactory>`.
 
 ## Rules
 

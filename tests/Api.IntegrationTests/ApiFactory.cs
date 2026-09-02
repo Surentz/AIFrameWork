@@ -65,11 +65,26 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             // The outbox pumps are removed here deliberately. They would compete with
             // DrainOutboxOnceAsync for the same rows and make outbox tests timing-dependent.
             // The drain helper below invokes the same OutboxPoller and OutboxWorkItemProcessor
-            // the pumps use, so the wiring under test is still the real one. Confirmed (by
-            // grepping AddHostedService usage) that OutboxPollerService and OutboxWorkerService
-            // are the only two hosted services this app registers, so a blanket removal and a
-            // narrowed one are equivalent today.
-            services.RemoveAll<IHostedService>();
+            // the pumps use, so the wiring under test is still the real one.
+            //
+            // This must be a narrowed removal, not a blanket one keyed only on the
+            // IHostedService service type: the generic host appends its own hosted service for
+            // GenericWebHostService — the piece that actually starts the server and builds the
+            // request pipeline — after user ConfigureServices callbacks run. Removing every
+            // IHostedService descriptor here would delete that one too; it only happens to work
+            // today because of that registration order, and moving this removal to a later hook
+            // (e.g. ConfigureTestServices) would silently stop the test host from serving
+            // requests. Filtering by ImplementationType keeps this immune to that ordering
+            // accident.
+            var outboxHostedServices = services
+                .Where(descriptor => descriptor.ServiceType == typeof(IHostedService)
+                    && (descriptor.ImplementationType == typeof(OutboxPollerService)
+                        || descriptor.ImplementationType == typeof(OutboxWorkerService)))
+                .ToList();
+            foreach (var descriptor in outboxHostedServices)
+            {
+                services.Remove(descriptor);
+            }
 
             // Test-only endpoints that throw on demand, exercising GlobalExceptionHandler's
             // two branches over real HTTP. See TestEndpointsStartupFilter for why this is an
@@ -84,7 +99,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// OutboxWorkItemProcessor the hosted services use, so the wiring under test is real —
     /// but deterministically, without waiting on BackgroundService timing. Each claimed item
     /// gets its own scope, mirroring OutboxWorkerService.ProcessOneAsync: production never
-    /// shares one DbContext across items, so neither does this.
+    /// shares one DbContext across items, so neither does this. What this does NOT cover: the
+    /// channel hop (ChannelWriter to ChannelReader), backpressure, and WorkerCount parallelism
+    /// — those are exercised by Infrastructure.Tests/Outbox/OutboxRegistrationTests.cs instead.
     /// </summary>
     public async Task DrainOutboxOnceAsync()
     {
@@ -103,16 +120,48 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         }
     }
 
-    /// <summary>Forces a redelivery of an already-processed message, to exercise idempotency.</summary>
+    /// <summary>
+    /// Forces a redelivery of an already-processed message, to exercise idempotency. Resets the
+    /// row to Pending — the same state OutboxPoller.ClaimAsync's lease-reclaim clause would
+    /// leave it in — and then runs it back through DrainOutboxOnceAsync, so the redelivery is
+    /// claimed by the real ClaimAsync rather than handed to the processor as a hand-built
+    /// OutboxWorkItem the poller could never actually produce (a Processed row is never
+    /// re-claimable). ExecuteUpdateAsync targets the row directly by predicate, so there is no
+    /// tracked (or untracked) read to reconcile with src/Infrastructure/CLAUDE.md's
+    /// AsNoTracking rule here.
+    /// </summary>
     public async Task RedeliverAsync(Guid orderId)
     {
-        await using var scope = Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
-        var row = await context.Outbox.SingleAsync(m => m.Payload.Contains(orderId.ToString()));
+        await using (var scope = Services.CreateAsyncScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+            var resetCount = await context.Outbox
+                .Where(m => m.Payload.Contains(orderId.ToString()))
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(m => m.Status, OutboxStatus.Pending)
+                    .SetProperty(m => m.NextAttemptAt, (DateTimeOffset?)null)
+                    .SetProperty(m => m.LeasedUntil, (DateTimeOffset?)null));
 
-        var processor = scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>();
-        await processor.ProcessAsync(
-            new OutboxWorkItem(row.Id, row.EventName, row.Payload, row.Attempts + 1),
-            CancellationToken.None);
+            if (resetCount != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Expected exactly one outbox row for order '{orderId}' to reset for redelivery, found {resetCount}.");
+            }
+        }
+
+        await DrainOutboxOnceAsync();
     }
 }
+
+// CA1711: the name ends in "Collection" without implementing ICollection<T>. This is the
+// xUnit collection-definition idiom - an empty marker type named after the fixture it groups,
+// referenced only via nameof() in [Collection(nameof(ApiFactoryCollection))] - not a general
+// collection type, so the rule's intent (avoid confusing a type for a collection API) does not
+// apply here. Mirrors PostgresFixture's ICollectionFixture<T> pattern in
+// tests/Infrastructure.Tests/Persistence/PostgresFixture.cs: every Api.IntegrationTests class
+// that needs an ApiFactory joins this one collection instead of declaring its own
+// IClassFixture<ApiFactory>, so xUnit starts exactly one container/host for the whole project.
+#pragma warning disable CA1711
+[CollectionDefinition(nameof(ApiFactoryCollection))]
+public sealed class ApiFactoryCollection : ICollectionFixture<ApiFactory>;
+#pragma warning restore CA1711
