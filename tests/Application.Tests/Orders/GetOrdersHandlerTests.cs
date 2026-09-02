@@ -87,9 +87,10 @@ public sealed class GetOrdersHandlerTests
         // makes the first HandleAsync(limit: 1) call receive exactly 1 row for a limit of 1 -
         // correctly no next page - so first.Value.NextCursor is null and the second assertion
         // below can never see a non-null cursor. Two rows make "there is a next page" true.
+        var head = Order.Place(Guid.NewGuid(), "SKU-1", 1, PlacedAt);
         _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns([
-                Order.Place(Guid.NewGuid(), "SKU-1", 1, PlacedAt),
+                head,
                 Order.Place(Guid.NewGuid(), "SKU-2", 1, PlacedAt.AddMinutes(-1)),
             ]);
         var handler = new GetOrdersHandler(_repository);
@@ -98,6 +99,42 @@ public sealed class GetOrdersHandlerTests
         _repository.ClearReceivedCalls();
         await handler.HandleAsync(new GetOrders(1, first.Value.NextCursor), CancellationToken.None);
 
-        await _repository.Received(1).ListAsync(2, Arg.Is<(DateTimeOffset, Guid)?>(a => a != null), Arg.Any<CancellationToken>());
+        // Asserting only "a cursor was passed" (a != null) would let a TryDecode that returns
+        // the wrong position, or swaps the two fields, pass silently - it is the exact
+        // (PlacedAt, Id) of the last row on page one that must reach the repository.
+        await _repository.Received(1).ListAsync(
+            2,
+            Arg.Is<(DateTimeOffset PlacedAt, Guid Id)?>(a => a!.Value.PlacedAt == head.PlacedAt && a.Value.Id == head.Id),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The Encode/TryDecode pair has no coverage anywhere else: Application.Tests substitutes
+    /// the repository and Infrastructure.Tests builds cursor tuples by hand, so nothing else
+    /// round-trips a real cursor string. A format that silently drops sub-second precision
+    /// (e.g. "u" instead of "O") would still look like "a cursor was passed" but decode to the
+    /// wrong instant - this test fails loudly on that, driven only through the handler's public
+    /// surface.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_WithACursorFromASubSecondPlacedAt_RoundTripsTheExactInstant()
+    {
+        var precise = new DateTimeOffset(2026, 8, 31, 12, 0, 0, 123, TimeSpan.Zero).AddTicks(4567);
+        var head = Order.Place(Guid.NewGuid(), "SKU-1", 1, precise);
+        _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
+            .Returns([
+                head,
+                Order.Place(Guid.NewGuid(), "SKU-2", 1, precise.AddMinutes(-1)),
+            ]);
+        var handler = new GetOrdersHandler(_repository);
+
+        var first = await handler.HandleAsync(new GetOrders(1, null), CancellationToken.None);
+        _repository.ClearReceivedCalls();
+        await handler.HandleAsync(new GetOrders(1, first.Value.NextCursor), CancellationToken.None);
+
+        await _repository.Received(1).ListAsync(
+            2,
+            Arg.Is<(DateTimeOffset PlacedAt, Guid Id)?>(a => a!.Value.PlacedAt == precise && a.Value.Id == head.Id),
+            Arg.Any<CancellationToken>());
     }
 }

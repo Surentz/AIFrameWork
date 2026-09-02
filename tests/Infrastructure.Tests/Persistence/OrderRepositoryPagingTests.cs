@@ -19,9 +19,19 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     private static (DateTimeOffset PlacedAt, Guid Id) TopOf(int windowMinute) =>
         (Base.AddMinutes(windowMinute), Guid.Empty);
 
-    private async Task<Guid> SeedAsync(string sku, DateTimeOffset placedAt)
+    // Deterministic tie-break endpoints: Postgres orders uuid byte-wise, so High > Low there,
+    // but .NET's Guid.CompareTo disagrees (its first three groups compare as little-endian
+    // integers) and puts High < Low instead. A tied-PlacedAt test seeded with Guid.NewGuid()
+    // only catches a Guid.CompareTo leak when the two random ids happen to straddle that
+    // disagreement - a coin flip per run. These two ids straddle it on every run.
+    private static readonly Guid Low = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid High = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+
+    private Task<Guid> SeedAsync(string sku, DateTimeOffset placedAt) =>
+        SeedAsync(sku, placedAt, Guid.NewGuid());
+
+    private async Task<Guid> SeedAsync(string sku, DateTimeOffset placedAt, Guid id)
     {
-        var id = Guid.NewGuid();
         await using var context = fixture.CreateContext();
         await new OrderRepository(context).AddAsync(
             Order.Place(id, sku, 1, placedAt), CancellationToken.None);
@@ -46,14 +56,17 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     public async Task ListAsync_HonoursTheLimit()
     {
         await SeedAsync("SKU-A", Base.AddMinutes(11));
-        await SeedAsync("SKU-B", Base.AddMinutes(12));
-        await SeedAsync("SKU-C", Base.AddMinutes(13));
+        var b = await SeedAsync("SKU-B", Base.AddMinutes(12));
+        var c = await SeedAsync("SKU-C", Base.AddMinutes(13));
 
         await using var context = fixture.CreateContext();
         var rows = await new OrderRepository(context)
             .ListAsync(2, TopOf(20), CancellationToken.None);
 
-        rows.Should().HaveCount(2);
+        // HaveCount(2) alone passes against any broken ListAsync, since the shared container
+        // always holds more than two rows regardless of ordering, cursor handling or tie-break.
+        // Asserting the exact two highest ids pins ordering inside this test's own window too.
+        rows.Select(o => o.Id).Should().Equal(c, b);
     }
 
     /// <summary>
@@ -90,8 +103,11 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     public async Task ListAsync_WhenTwoOrdersSharePlacedAt_ReturnsBothAcrossPages()
     {
         var tie = Base.AddMinutes(31);
-        var a = await SeedAsync("SKU-TIE-A", tie);
-        var b = await SeedAsync("SKU-TIE-B", tie);
+        // Low/High, not Guid.NewGuid(): Postgres orders High above Low, .NET's Guid.CompareTo
+        // orders them the other way round. Random ids only catch a Guid.CompareTo leak when
+        // they happen to straddle that disagreement; these two straddle it every run.
+        var a = await SeedAsync("SKU-TIE-A", tie, Low);
+        var b = await SeedAsync("SKU-TIE-B", tie, High);
 
         await using var context = fixture.CreateContext();
         var repository = new OrderRepository(context);
@@ -102,5 +118,22 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
             1, (cursorRow.PlacedAt, cursorRow.Id), CancellationToken.None);
 
         new[] { pageOne[0].Id, pageTwo[0].Id }.Should().BeEquivalentTo(new[] { a, b });
+    }
+
+    [Fact]
+    public async Task ListAsync_WithNoCursor_ReturnsRowsOrderedNewestFirst()
+    {
+        // Every other test in this class pages from a TopOf(...) cursor. ListAsync(limit, null,
+        // ct) is what the handler calls on every FIRST page - the most-exercised production
+        // path - yet had no repository-level coverage at all. A property assertion, not an
+        // identity one, because the shared container holds rows from every other test and this
+        // class's own windows, so asserting an exact id list here would be flaky by design.
+        await SeedAsync("SKU-HEAD", Base.AddMinutes(50));
+
+        await using var context = fixture.CreateContext();
+        var rows = await new OrderRepository(context)
+            .ListAsync(50, after: null, CancellationToken.None);
+
+        rows.Should().BeInDescendingOrder(o => o.PlacedAt);
     }
 }
