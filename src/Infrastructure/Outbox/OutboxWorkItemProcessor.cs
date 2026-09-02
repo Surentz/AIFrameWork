@@ -34,6 +34,11 @@ public sealed class OutboxWorkItemProcessor(
                 services, item.Payload, new DomainEventContext(item.Id, item.Attempt), cancellationToken)
                 .ConfigureAwait(false);
         }
+        // OperationCanceledException is deliberately NOT caught here — it propagates, leaving
+        // the row InFlight with its lease still set. OutboxPoller.ClaimAsync reclaims any
+        // InFlight row whose LeasedUntil has passed, so a cancelled (e.g. shutting-down) worker
+        // does not need to record a failure itself; the row is picked up again once the lease
+        // expires.
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await FailAsync(item, exception, cancellationToken).ConfigureAwait(false);

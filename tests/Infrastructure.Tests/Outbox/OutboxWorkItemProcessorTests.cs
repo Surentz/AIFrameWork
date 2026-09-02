@@ -28,6 +28,11 @@ public sealed class ContextCapturingHandler(ContextSink sink) : IDomainEventHand
     public Task HandleAsync(Contextual domainEvent, DomainEventContext context, CancellationToken cancellationToken)
     {
         sink.Seen.Add(context);
+        // Records the handler INSTANCE dispatch actually ran on, not just that some handler ran.
+        // This is what lets a test compare "the instance the processor dispatched to" against
+        // "the instance resolved from a given scope" — a same-count or non-empty check on Seen
+        // alone cannot distinguish the processor's scope from any other scope, or from root.
+        sink.Handlers.Add(this);
         return Task.CompletedTask;
     }
 }
@@ -36,6 +41,8 @@ public sealed class ContextCapturingHandler(ContextSink sink) : IDomainEventHand
 public sealed class ContextSink
 {
     public ICollection<DomainEventContext> Seen { get; } = [];
+
+    public ICollection<ContextCapturingHandler> Handlers { get; } = [];
 }
 
 [Collection(nameof(PostgresCollection))]
@@ -163,23 +170,26 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
 
     // Amendment 2: proves the processor's injected IServiceProvider actually IS the scope it
     // was resolved from — Task 9's pump depends on this, so it is verified here rather than
-    // assumed. A handler resolved from the scope should see the SAME scoped instance the test
-    // resolves from that same scope; a distinct instance (or a handler resolved from root)
-    // would mean Task 9's per-item scope buys nothing.
+    // assumed. This compares the HANDLER INSTANCE dispatch actually ran on (captured by
+    // ContextCapturingHandler into ContextSink.Handlers) against the instance resolved directly
+    // from the same scope. A scoped registration caches per scope regardless of what dispatch
+    // did internally, so resolving the same service twice from one scope proves nothing on its
+    // own — see the review round-1 note on the original version of this test, which did exactly
+    // that and could not have failed even if dispatch had gone through root or a different
+    // scope. Capturing "this" inside the handler and comparing it to a scope-resolved instance
+    // closes that gap: it fails if dispatch resolved from anywhere other than this scope.
     [Fact]
-    public async Task ProcessAsync_ResolvesHandlersFromTheScopeTheProcessorWasResolvedFrom()
+    public async Task ProcessAsync_DispatchesToAHandlerResolvedFromTheCallersScope()
     {
-        var id = await SeedAsync("test.pinged", """{"text":"scope-check"}""", 1);
+        var id = await SeedAsync("test.contextual", "{}", 1);
         await using var provider = BuildProvider();
         using var scope = provider.CreateScope();
-        var expectedSink = scope.ServiceProvider.GetRequiredService<IDomainEventHandler<Pinged>>();
+        var expectedHandler = scope.ServiceProvider.GetRequiredService<IDomainEventHandler<Contextual>>();
 
         await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
-            .ProcessAsync(new OutboxWorkItem(id, "test.pinged", """{"text":"scope-check"}""", 1), CancellationToken.None);
+            .ProcessAsync(new OutboxWorkItem(id, "test.contextual", "{}", 1), CancellationToken.None);
 
-        // RecordingHandler is scoped; resolving it again from the SAME scope must return the
-        // identical instance if and only if the handler the processor dispatched to was also
-        // resolved from this scope rather than from root.
-        scope.ServiceProvider.GetRequiredService<IDomainEventHandler<Pinged>>().Should().BeSameAs(expectedSink);
+        provider.GetRequiredService<ContextSink>().Handlers
+            .Should().ContainSingle().Which.Should().BeSameAs(expectedHandler);
     }
 }
