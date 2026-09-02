@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using AiFramework.Domain.Orders;
@@ -7,6 +8,7 @@ using AiFramework.Infrastructure.Persistence;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure;
 
@@ -53,6 +55,41 @@ public static class InfrastructureRegistration
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddSingleton<IClock, SystemClock>();
 
+        services.AddOutbox();
+
         return services.AddMessaging();
+    }
+
+    /// <summary>The outbox pipeline. Called from AddInfrastructure; the hosted services start with the app.</summary>
+    public static IServiceCollection AddOutbox(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOptions<OutboxOptions>();
+
+        // The channel is built from the CONFIGURED options, not from a fresh OutboxOptions() —
+        // constructing one here would silently ignore any capacity the host configured. It is
+        // registered as a singleton Channel<T>, with the reader and writer projected from it,
+        // so both pumps provably share one instance (see OutboxRegistrationTests).
+        services.AddSingleton(sp =>
+        {
+            var configured = sp.GetRequiredService<IOptions<OutboxOptions>>().Value;
+            return Channel.CreateBounded<OutboxWorkItem>(
+                new BoundedChannelOptions(configured.ChannelCapacity)
+                {
+                    FullMode = BoundedChannelFullMode.Wait,
+                    SingleWriter = true,
+                    SingleReader = false,
+                });
+        });
+
+        services.AddSingleton(sp => sp.GetRequiredService<Channel<OutboxWorkItem>>().Writer);
+        services.AddSingleton(sp => sp.GetRequiredService<Channel<OutboxWorkItem>>().Reader);
+        services.AddScoped<OutboxPoller>();
+        services.AddScoped<OutboxWorkItemProcessor>();
+        services.AddHostedService<OutboxPollerService>();
+        services.AddHostedService<OutboxWorkerService>();
+
+        return services;
     }
 }

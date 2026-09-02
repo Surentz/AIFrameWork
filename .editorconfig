@@ -57,6 +57,18 @@ end_of_line = crlf
 [*.md]
 trim_trailing_whitespace = false
 
+# --- Deliberately off, one file only: OutboxHostedServices.cs's two BackgroundServices each
+#     need a bare catch (Exception) for a different reason. The worker pump: a channel worker
+#     loop must catch every exception or one throwing handler kills that worker and the pool
+#     dies one at a time until nothing drains, with no record against the offending row. The
+#     poller pump: BackgroundServiceExceptionBehavior.StopHost is the .NET 6+ default, so an
+#     unhandled exception from a transient database failure would take down the entire host,
+#     not just the outbox. IExceptionHandler escapes CA1031 by receiving the exception as a
+#     parameter; a worker loop has no such out. See
+#     docs/superpowers/plans/2026-09-01-domain-events-outbox.md Task 9. ---
+[src/Infrastructure/Outbox/OutboxHostedServices.cs]
+dotnet_diagnostic.CA1031.severity = none
+
 # --- EF Core migrations: scaffolded by `dotnet ef migrations add`, not hand-written, and the
 # protect-migrations hook blocks editing them once created (see CLAUDE.md, "Never hand-edit an
 # applied EF migration"). The *.Designer.cs and *ModelSnapshot.cs files carry an

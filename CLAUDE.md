@@ -57,7 +57,9 @@ or `System.ComponentModel.DataAnnotations`.
 - **Nullable is enabled.** A missing null check does not compile.
 - **`required` keyword in `Domain`, never `[Required]`.** DataAnnotations belong on `Api` DTOs.
 - **Never `catch (Exception)`.** The global `IExceptionHandler` receives it as a parameter.
-  CA1031 is a global error with no exemption. `throw;`, never `throw ex;`.
+  CA1031 is an error everywhere except one file-scoped exemption in `.editorconfig`, for the
+  outbox's `BackgroundService` pumps, which have no such parameter and must not die mid-loop.
+  `throw;`, never `throw ex;`.
 - **Never hand-edit an applied EF migration.** Add a new one.
 - **No secrets in `appsettings*.json`.** Use `dotnet user-secrets` or environment variables.
 
