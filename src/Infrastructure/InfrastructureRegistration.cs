@@ -36,6 +36,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
 
         services.AddDomainEvent<OrderPlaced>("order.placed");
+        services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedAuditHandler>();
 
         return services;
     }
@@ -53,6 +54,7 @@ public static class InfrastructureRegistration
             .AddInterceptors(sp.GetRequiredService<DomainEventsInterceptor>()));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
         services.AddSingleton<IClock, SystemClock>();
 
         services.AddOutbox();
