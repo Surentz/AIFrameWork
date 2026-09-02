@@ -9,12 +9,13 @@
 | .NET SDK | 10.0.400 |
 | Target framework | net10.0 |
 | Node | 24.20.0 |
-| React | _unpinned — set at scaffold_ |
-| Vite | _unpinned — set at scaffold_ |
+| React | 19.2.8 |
+| Vite | 8.2.2 |
 
-Verified 2026-08-28 from `dotnet --list-sdks` and `node --version`. The target framework was
-pinned when the solution was scaffolded. React and Vite stay unpinned until the workspace is
-created; pin them from the generated `package.json`, not from memory.
+Verified 2026-09-03 from `dotnet --list-sdks`, `node --version`, and `frontend/package.json`
+(post-install, resolved versions). The target framework was pinned when the solution was
+scaffolded. React and Vite were pinned once the workspace was created, read from the
+generated `package.json` — not from memory.
 
 ## Layout
 
