@@ -64,18 +64,28 @@ time. Both are covered by tests in `Infrastructure.Tests`, not by the type syste
 
 The request half of this design is implemented: `ICommandDispatcher`, `IQueryDispatcher`,
 `AddCommand`/`AddQuery`, both behaviors, and the registration-completeness tests all exist and
-are exercised by the `PlaceOrder`/`GetOrder` use case. The event half — `IDomainEvent`, the
-outbox, the `SaveChanges` interceptor, the channel, the poller and the worker pool — is
-specified in `docs/superpowers/specs/2026-08-28-in-process-messaging-design.md` §7–§10 but not
-built. A reader should not infer that domain events, an outbox, or at-least-once delivery ship
-today.
+are exercised by the `PlaceOrder`/`GetOrder` use case.
+
+This ADR originally claimed the event half — `IDomainEvent`, the outbox, the `SaveChanges`
+interceptor, the channel, the poller and the worker pool — was "specified in
+`docs/superpowers/specs/2026-08-28-in-process-messaging-design.md` §7–§10 but not built," and
+that "a reader should not infer that domain events, an outbox, or at-least-once delivery ship
+today." That is false at HEAD and is corrected here rather than left standing: a later plan
+built the whole event half described there. `IDomainEvent` and `Entity.Raise` live in `Domain`;
+`IDomainEventHandler<TEvent>` lives in `Application`; `DomainEventsInterceptor`, `OutboxPoller`,
+`OutboxWorkItemProcessor`, and the `OutboxPollerService`/`OutboxWorkerService` pump pair live in
+`Infrastructure/Outbox`. An order placed over HTTP now raises `OrderPlaced`, the interceptor
+persists it to the outbox in the same transaction as the order, and `OutboxDeliveryTests`
+(`tests/Api.IntegrationTests/Orders`) proves it is delivered at least once end to end, including
+idempotent redelivery. See `src/Infrastructure/CLAUDE.md`'s Outbox section for the shape of it.
 
 This ADR originally claimed "nothing in this branch touches a database," written one commit
 before EF Core, Npgsql, an initial migration, `AiFrameworkDbContext`, and two
 Testcontainers-backed test suites (`Infrastructure.Tests` and `Api.IntegrationTests`) landed.
 That claim is false at HEAD and is corrected here rather than left standing: persistence exists
-in this branch, but only to back `IUnitOfWork.SaveChangesAsync` for the request path's
-unit-of-work behavior above — it is not the event-path outbox, which remains unbuilt.
+in this branch. When that correction was first written it backed only
+`IUnitOfWork.SaveChangesAsync` for the request path's unit-of-work behavior above; the event-path
+outbox described above now uses the same `DbContext` too.
 
 A missing `AddCommand`/`AddQuery` registration fails at runtime, not compile time — the one
 place this design is weaker than injecting the handler directly. The registration-completeness
@@ -87,7 +97,11 @@ per file), because a command, its validator and its handler are deliberately kep
 per feature, and `CA1716` (keyword collisions), not a risk worth renaming public types for in a
 C#-only codebase. `ICommand<T>`/`IQuery<T>` also carry a local `#pragma` suppression of `S2326`
 each, because `TResponse` is a phantom type parameter that never appears in the interface body
-but is load-bearing for call-site inference.
+but is load-bearing for call-site inference. This count is specific to the request path: the
+event path (the outbox) later added a third exemption, `CA1031`, file-scoped to
+`OutboxHostedServices.cs` rather than repo-wide — a different design, a different cost, tracked
+where it was spent rather than folded into this total. See `.editorconfig`'s comment above that
+section, or root `CLAUDE.md`'s "Never `catch (Exception)`" bullet, for why.
 
 ## Alternatives considered
 

@@ -28,6 +28,20 @@ Use-case handlers, `ICommand<T>` / `IQuery<T>` requests and their handlers, **po
 
 Blocked by the dependency-rule hook.
 
+## Domain event handlers
+
+`IDomainEventHandler<TEvent>` (`src/Application/Abstractions/DomainEventHandling.cs`) lives
+here, alongside `ICommand<T>`/`IQuery<T>`. Handlers go under `<Feature>/`, next to the command
+or query for that feature.
+
+**Handlers must be idempotent.** Delivery off the outbox is at-least-once, and retry granularity
+is the message rather than the handler: if one handler in a fan-out throws, the whole message is
+retried, re-running handlers that already succeeded on the first attempt. `DomainEventContext`
+(same file) carries `MessageId` and `Attempt`; `MessageId` is stable across every redelivery of
+the same event, so it is the dedupe key a handler checks before doing anything with a side
+effect — `OrderPlacedAuditHandler` is the existing example, keyed on `MessageId` via a database
+uniqueness constraint rather than an in-memory check.
+
 ## Error handling
 
 Expected failures — not found, conflict, validation — return `Result<T>` rather
