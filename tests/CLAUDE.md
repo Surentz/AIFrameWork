@@ -40,6 +40,30 @@ joins that same collection — it does not declare its own `IClassFixture<ApiFac
 `IClassFixture<WebApplicationFactory<Program>>` because `/health` needs a host but never
 touches the database, so it does not need the shared container.
 
+## Outbox tests
+
+Two projects cover the outbox, joining different collections for a reason:
+
+- `Infrastructure.Tests/Outbox/*` (`OutboxAtomicityTests`, `OutboxPollerTests`,
+  `OutboxWorkItemProcessorTests`, `OutboxRegistrationTests`, `DomainEventRegistryTests`) joins
+  `PostgresCollection` like every other database test in that project.
+- `Api.IntegrationTests/Orders/OutboxDeliveryTests.cs` joins `ApiFactoryCollection` instead — it
+  needs the host (to place an order over HTTP), not just the database.
+
+Timing throughout is driven by an injected `IClock`/`TestClock`, never by waiting on a poll
+interval — see the "no `Thread.Sleep`" rule below.
+
+`OutboxDeliveryTests` drives delivery by hand through `ApiFactory.DrainOutboxUntilEmptyAsync`,
+which claims and processes batches until a claim comes back empty (bounded by an internal
+`MaxBatches` safety cap), rather than waiting on the hosted pumps' own timing. It has to loop,
+not stop after one claim: `OutboxPoller.ClaimAsync` is `ORDER BY "OccurredAt" LIMIT BatchSize`,
+and every `Api.IntegrationTests` class now shares one database via `ApiFactoryCollection`, so a
+single claim could leave the row a later test cares about sitting unclaimed behind rows an
+earlier test left in the queue. The contract this proves is: everything currently due drains,
+deterministically, with no waiting — not "one poll cycle runs." It does not exercise the channel
+hop (`ChannelWriter`/`ChannelReader`), backpressure, or `WorkerCount` parallelism; those are
+`Infrastructure.Tests/Outbox/OutboxRegistrationTests.cs`'s job instead.
+
 ## Rules
 
 - Name tests `MethodName_Scenario_ExpectedOutcome`. Architecture and convention tests

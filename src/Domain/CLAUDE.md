@@ -36,6 +36,19 @@ never nullable-and-assumed-present. Setters are private; state changes go throug
 methods that enforce invariants. Collections are exposed as `IReadOnlyCollection<T>`
 and initialised, never null.
 
+## Domain events
+
+Domain events are pure data (`sealed record`s) implementing `IDomainEvent`
+(`src/Domain/Abstractions/DomainEvents.cs`) — a marker interface, nothing to implement. They
+carry no timestamp: `Domain` has no clock, so the outbox row's `OccurredAt` is stamped later by
+`DomainEventsInterceptor` in `Infrastructure`, which can inject `IClock`.
+
+Aggregates derive from `Entity` and raise events through the protected `Raise()` method; raised
+events sit in `DomainEvents` until something copies them off. `ClearDomainEvents()` is public,
+not internal — the interceptor, in another assembly, must call it after copying the events to
+the outbox, and `internal` plus `InternalsVisibleTo` would create a compile-time coupling
+between `Domain` and `Infrastructure` that the dependency rule exists to prevent.
+
 ## Tests
 
 `tests/Domain.Tests`. Pure unit tests, no mocks, no fixtures, no I/O.

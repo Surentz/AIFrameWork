@@ -63,7 +63,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             // PostOrders_WritesAPendingOutboxRow passes against this factory either way.
 
             // The outbox pumps are removed here deliberately. They would compete with
-            // DrainOutboxOnceAsync for the same rows and make outbox tests timing-dependent.
+            // DrainOutboxUntilEmptyAsync for the same rows and make outbox tests timing-dependent.
             // The drain helper below invokes the same OutboxPoller and OutboxWorkItemProcessor
             // the pumps use, so the wiring under test is still the real one.
             //
@@ -114,7 +114,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// MaxBatches cap is a safety net so a bug that keeps producing due rows fails loudly
     /// instead of hanging CI.
     /// </summary>
-    public async Task DrainOutboxOnceAsync()
+    public async Task DrainOutboxUntilEmptyAsync()
     {
         const int MaxBatches = 1_000;
 
@@ -141,7 +141,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         }
 
         throw new InvalidOperationException(
-            $"DrainOutboxOnceAsync claimed {MaxBatches} batches without the outbox emptying; " +
+            $"DrainOutboxUntilEmptyAsync claimed {MaxBatches} batches without the outbox emptying; " +
             "the queue is likely growing faster than it drains, or ClaimAsync is not converging.");
     }
 
@@ -149,7 +149,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// Forces a redelivery of an already-processed message, to exercise idempotency. Resets the
     /// row to the state DomainEventsInterceptor first inserts it in — Pending, NextAttemptAt
     /// null, LeasedUntil null — except Attempts, which is deliberately left carried over from
-    /// the first delivery. It then runs the row back through DrainOutboxOnceAsync, so the
+    /// the first delivery. It then runs the row back through DrainOutboxUntilEmptyAsync, so the
     /// redelivery is claimed by the real ClaimAsync rather than handed to the processor as a
     /// hand-built OutboxWorkItem the poller could never actually produce (a Processed row is
     /// never re-claimable). ExecuteUpdateAsync targets the row directly by predicate, so there is
@@ -175,7 +175,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             }
         }
 
-        await DrainOutboxOnceAsync();
+        await DrainOutboxUntilEmptyAsync();
     }
 }
 

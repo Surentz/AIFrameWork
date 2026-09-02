@@ -30,6 +30,36 @@ in `InfrastructureRegistration.cs` is the entry point.
 - Only commands get behaviors — validation, then unit-of-work commit. Queries get neither.
   A query that needs a transaction is a command.
 
+## Outbox
+
+`Outbox/` implements the event half of the messaging design: an aggregate raises a domain
+event, it is persisted with the aggregate, and it is delivered at least once afterward.
+
+- `DomainEventsInterceptor` is an `EF` `SaveChangesInterceptor` that copies pending domain
+  events off tracked `Entity` instances onto `OutboxMessage` rows and calls
+  `ClearDomainEvents()`. It overrides `SavingChangesAsync`, not `SavedChangesAsync`, and must
+  stay there: `SavingChangesAsync` runs before the save, so the outbox insert lands in the same
+  `SaveChangesAsync` call — and the same transaction — as the aggregate's own write.
+  `SavedChangesAsync` runs after the save has already committed, so a write there is a second,
+  unrelated transaction: an aggregate could commit with no outbox row, or vice versa, and the
+  atomicity guarantee is gone.
+- `OutboxPoller.ClaimAsync` claims due rows with `FOR UPDATE SKIP LOCKED` and increments
+  `Attempts` at claim time, not on failure — incrementing only on failure would let a message
+  that hard-crashes the process mid-handler loop forever without ever being counted against
+  `MaxAttempts`.
+- `OutboxWorkItemProcessor` owns the outcome of one claimed item: dispatch, retry with backoff,
+  or dead-letter. All of that decision logic lives here rather than in a `BackgroundService` loop
+  so it is testable without a host.
+- The two `BackgroundService` pumps in `OutboxHostedServices.cs` (`OutboxPollerService`,
+  `OutboxWorkerService`) are deliberately thin: they own scope creation and the channel hop, and
+  delegate the actual work to `OutboxPoller`/`OutboxWorkItemProcessor` above. `OutboxHostedServices.cs`
+  holds the repo's only CA1031 exemption — see the file-scoped comment above
+  `[src/Infrastructure/Outbox/OutboxHostedServices.cs]` in `.editorconfig` for why both pumps need
+  it (a worker loop and a `BackgroundService`'s `ExecuteAsync` have no `IExceptionHandler`-style
+  parameter to receive the exception, unlike the Api layer's global handler); root `CLAUDE.md`'s
+  "Never `catch (Exception)`" bullet also describes it. Do not re-explain the reasoning here —
+  point at `.editorconfig`, the one place it should live.
+
 ## EF rules
 
 - **All mapping lives in `IEntityTypeConfiguration<T>`.** Never annotate a Domain type.

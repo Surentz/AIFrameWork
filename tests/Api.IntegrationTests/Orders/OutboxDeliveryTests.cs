@@ -38,7 +38,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
         var orderId = await response.Content.ReadFromJsonAsync<Guid>();
 
-        await factory.DrainOutboxOnceAsync();
+        await factory.DrainOutboxUntilEmptyAsync();
 
         using var scope = factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
@@ -56,7 +56,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
         var orderId = await response.Content.ReadFromJsonAsync<Guid>();
 
-        await factory.DrainOutboxOnceAsync();
+        await factory.DrainOutboxUntilEmptyAsync();
 
         using var scope = factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
@@ -75,7 +75,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
         var orderId = await response.Content.ReadFromJsonAsync<Guid>();
 
-        await factory.DrainOutboxOnceAsync();
+        await factory.DrainOutboxUntilEmptyAsync();
         await factory.RedeliverAsync(orderId);
 
         using var scope = factory.Services.CreateScope();
@@ -101,7 +101,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
         var orderId = await response.Content.ReadFromJsonAsync<Guid>();
 
-        await factory.DrainOutboxOnceAsync();
+        await factory.DrainOutboxUntilEmptyAsync();
         await factory.RedeliverAsync(orderId);
 
         using var scope = factory.Services.CreateScope();
