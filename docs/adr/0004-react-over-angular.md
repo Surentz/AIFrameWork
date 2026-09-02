@@ -11,15 +11,6 @@ workspace was never created. The founding design spec (`docs/superpowers/specs/2
 listed "scaffold the solution and Angular workspace" in its deferred section. The .NET half
 was completed, but Angular remained unstarted.
 
-At the time this choice was made, Angular tooling was selected because it pairs well with
-Clean Architecture's layering on the backend: a server-side framework offering structured
-conventions and strong accessibility checking. However, the scope and complexity of Angular
-when used as a client-side SPA only began to feel expensive against the work it would add
-for a first UI slice, and the ecosystem's pace of change (recent migrations from tslint to
-ESLint, the standalone API, evolution of routing and state management) meant the gap between
-this repo's age and current Angular practice was already observable. Starting the Angular
-workspace today would mean starting from that moving target, not from a stable design point.
-
 The choice to reconsider became concrete when the first feature planning arrived: a UI is
 needed to exercise the backend's order API, and the decision on the frontend stack cannot be
 deferred further.
@@ -45,8 +36,6 @@ backend already provides — a stable, layered API to call.
 
 ## Consequences
 
-### Cost
-
 The switch introduced one real reduction in validation capability: **JSX accessibility
 analysis is weaker than Angular's template-based checks.** The `jsx-a11y` ESLint rule sees
 JSX source code only; it cannot see runtime composition (conditionals that render different
@@ -55,16 +44,12 @@ Angular's `@angular-eslint/templateAccessibility` works on the final template th
 with full component metadata available. On the frontend, we lose some static guarantees and
 must compensate with runtime testing and code review. This is a real cost, not a minor footnote.
 
-### Benefit
-
 The cost of this choice was predominantly configuration and documentation, not application
 code. The `frontend/` directory held no code to rewrite — only two infrastructure files. What
 existed was the Angular decision in the plan itself and in the design spec's deferred list, and
 the Angular-focused skills (`/ng-feature`, toolchain configurations, ESLint and TypeScript
 rules). All of that was already changed during Task 1, before the workspace existed. This is
 why the switch was possible to make with such low friction: Angular was planned but never built.
-
-### Historical record
 
 The founding design spec (`docs/superpowers/specs/2026-08-27-claude-framework-design.md`)
 remains unedited. That file is a dated historical record of decisions made at scaffold time.
