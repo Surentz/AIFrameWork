@@ -20,5 +20,11 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         // persisted. Without this, EF tries to map IDomainEvent as an entity type and the
         // model fails to build at first use.
         builder.Ignore(o => o.DomainEvents);
+
+        // The list endpoint orders by (PlacedAt DESC, Id DESC); without a matching index every
+        // page sorts the whole table.
+        builder.HasIndex(o => new { o.PlacedAt, o.Id })
+            .IsDescending(true, true)
+            .HasDatabaseName("IX_Orders_PlacedAt_Id_Desc");
     }
 }
