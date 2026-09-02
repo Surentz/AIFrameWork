@@ -65,7 +65,14 @@ public static class InfrastructureRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddOptions<OutboxOptions>();
+        // Validated so a misconfigured value fails loudly instead of silently doing nothing.
+        // WorkerCount = 0 in particular would otherwise make OutboxWorkerService.ExecuteAsync's
+        // Task.WhenAll over an empty sequence complete immediately - no exception, no log, and
+        // the outbox just stops delivering while the channel fills and backpressures the poller.
+        services.AddOptions<OutboxOptions>()
+            .Validate(o => o.WorkerCount >= 1, "OutboxOptions.WorkerCount must be at least 1.")
+            .Validate(o => o.BatchSize >= 1, "OutboxOptions.BatchSize must be at least 1.")
+            .Validate(o => o.ChannelCapacity >= 1, "OutboxOptions.ChannelCapacity must be at least 1.");
 
         // The channel is built from the CONFIGURED options, not from a fresh OutboxOptions() —
         // constructing one here would silently ignore any capacity the host configured. It is

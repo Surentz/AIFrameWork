@@ -119,29 +119,46 @@ public sealed partial class OutboxWorkerService(
     {
         await foreach (var item in reader.ReadAllAsync(stoppingToken).ConfigureAwait(false))
         {
+            await ProcessOneAsync(item, stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// One item's full cycle: scope creation, resolution, processing, and scope disposal, all
+    /// under one catch, mirroring OutboxPollerService.RunPollCycleAsync. Scope creation and
+    /// GetRequiredService can throw too (a broken registration, a constructor that throws), and
+    /// if either sat outside this try, that exception would escape RunAsync, then
+    /// Task.WhenAll, then ExecuteAsync, and BackgroundServiceExceptionBehavior.StopHost would
+    /// take the whole host down over one item. The await-using stays INSIDE the try
+    /// deliberately: its dispose still runs before an exception reaches the catch below, since
+    /// await-using compiles to a try/finally of its own around the rest of this block, so the
+    /// failure path disposes the scope rather than leaking it.
+    /// </summary>
+    private async Task ProcessOneAsync(OutboxWorkItem item, CancellationToken stoppingToken)
+    {
+        try
+        {
             await using var scope = scopeFactory.CreateAsyncScope();
             var processor = scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>();
 
-            // A worker loop must survive anything a handler or the database throws. Without
-            // this, one bad message kills this worker, and the pool dies one worker at a time
-            // until nothing drains — with no record against the row that caused it. The
-            // processor already records handler failures; this catches what escapes it, such
-            // as a database error while recording the outcome. See .editorconfig for the
-            // file-scoped CA1031 exemption this requires — shared with OutboxPollerService's
-            // catch above, which needs it for the equally serious reason that an unhandled
-            // exception here would stop the entire host, not just the outbox.
-            try
-            {
-                await processor.ProcessAsync(item, stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                LogWorkItemFailed(logger, exception, item.Id);
-            }
+            await processor.ProcessAsync(item, stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // A worker loop must survive anything a handler, resolution, the database, or scope
+            // disposal throws. Without this, one bad message - or one broken registration -
+            // kills this worker, and the pool dies one worker at a time until nothing drains,
+            // with no record against the row that caused it. The processor already records
+            // handler failures; this catches what escapes it: a resolution failure, a database
+            // error while recording the outcome, or a throwing DisposeAsync. See .editorconfig
+            // for the file-scoped CA1031 exemption this requires - shared with
+            // OutboxPollerService's catch, which needs it for the equally serious reason that
+            // an unhandled exception there would stop the entire host, not just the outbox.
+            LogWorkItemFailed(logger, exception, item.Id);
         }
     }
 
