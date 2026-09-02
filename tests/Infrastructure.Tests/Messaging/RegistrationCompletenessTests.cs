@@ -1,9 +1,13 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Domain.Abstractions;
 using AiFramework.Infrastructure.Messaging;
+using AiFramework.Infrastructure.Outbox;
 using FluentAssertions;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ApplicationMarker = AiFramework.Application.AssemblyMarker;
+using DomainMarker = AiFramework.Domain.AssemblyMarker;
 
 namespace AiFramework.Infrastructure.Tests.Messaging;
 
@@ -85,6 +89,87 @@ public sealed class RegistrationCompletenessTests
             "every AbstractValidator<T> needs an AddScoped<IValidator<T>, ...>() call " +
             "or validation for T silently never runs - absence is tolerated at dispatch " +
             "time, but not at registration time");
+    }
+
+    [Fact]
+    public void AddMessaging_RegistersEveryDomainEventInTheDomainAssembly()
+    {
+        var services = new ServiceCollection();
+        services.AddMessaging();
+        var registered = services
+            .Select(d => d.ImplementationInstance)
+            .OfType<DomainEventDescriptor>()
+            .Select(d => d.EventType)
+            .ToHashSet();
+
+        var domainEventTypes = DomainMarker.Assembly.GetTypes()
+            .Where(t => t is { IsAbstract: false, IsInterface: false }
+                && typeof(IDomainEvent).IsAssignableFrom(t))
+            .ToArray();
+
+        // A completeness test over an empty set passes vacuously. If the alias above ever binds
+        // to the wrong assembly (see the type comment), this scan silently finds nothing and the
+        // BeEmpty() below turns green for the wrong reason - so the non-empty scan is asserted,
+        // not eyeballed.
+        domainEventTypes.Should().NotBeEmpty(
+            "the scan must find at least OrderPlaced in AiFramework.Domain; an empty result " +
+            "means DomainMarker resolved to the wrong assembly, not that there are no events");
+
+        var unregistered = domainEventTypes.Where(t => !registered.Contains(t));
+
+        unregistered.Should().BeEmpty(
+            "an unregistered domain event throws at SaveChanges, taking the request down with it");
+    }
+
+    /// <summary>
+    /// A descriptor proves the event has an AddDomainEvent&lt;T&gt; registration, but its
+    /// DispatchAsync iterates GetServices&lt;IDomainEventHandler&lt;TEvent&gt;&gt;() - an empty
+    /// sequence there runs the foreach body zero times with no exception and no log, and the
+    /// outbox row still goes to Processed. This test composes the real root (AddInfrastructure,
+    /// not AddMessaging alone) and forces every handler chain to actually construct, so a missing
+    /// handler or a missing transitive dependency of a handler throws here instead of dropping an
+    /// event silently in production.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_ResolvesAHandlerForEveryRegisteredDomainEvent()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Never connects: UseNpgsql does not touch the network at registration or at DbContext
+        // construction. Only syntactic validity matters here.
+        services.AddInfrastructure(
+            "Host=localhost;Port=1;Database=unreachable;Username=none;Password=none");
+
+        // ValidateScopes = true and resolving from a CreateScope() (not the root provider) both
+        // matter: a scoped handler resolved from a validated root provider throws for a reason
+        // unrelated to the trap this test guards, which would make the test pass or fail for the
+        // wrong reason.
+        using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
+
+        var descriptors = services
+            .Select(d => d.ImplementationInstance)
+            .OfType<DomainEventDescriptor>()
+            .ToArray();
+
+        descriptors.Should().NotBeEmpty(
+            "there is nothing for this test to prove if AddInfrastructure registered no domain events");
+
+        foreach (var descriptor in descriptors)
+        {
+            var handlerType = typeof(IDomainEventHandler<>).MakeGenericType(descriptor.EventType);
+
+            // GetServices constructs every registered handler - and its dependencies - right now.
+            // A missing handler yields an empty sequence; a missing transitive dependency throws.
+            var handlers = scope.ServiceProvider.GetServices(handlerType).ToArray();
+
+            handlers.Should().NotBeEmpty(
+                $"'{descriptor.EventType.Name}' is registered as a domain event but has no " +
+                "resolvable IDomainEventHandler<> - DispatchAsync would iterate an empty " +
+                "sequence and drop the event silently, with no exception and no log");
+        }
     }
 
     [Fact]

@@ -15,8 +15,14 @@ namespace AiFramework.Infrastructure;
 public static class InfrastructureRegistration
 {
     /// <summary>
-    /// Every command and query in the Application assembly must appear here. The
-    /// registration-completeness test in Infrastructure.Tests fails the build if one is missed.
+    /// Every command, query, and domain event in their respective assemblies must appear here.
+    /// The registration-completeness tests in Infrastructure.Tests fail the build if one is
+    /// missed. This is a composition FRAGMENT, not a self-sufficient root: several handlers
+    /// registered here (PlaceOrderHandler, OrderPlacedAuditHandler) depend on services that are
+    /// only registered by AddInfrastructure (IOrderRepository, IClock, IOrderAuditWriter).
+    /// Calling AddMessaging() on its own and resolving one of them fails with a confusing DI
+    /// error naming the missing dependency, not this method. Always reach this through
+    /// AddInfrastructure, which calls it last.
     /// </summary>
     public static IServiceCollection AddMessaging(this IServiceCollection services)
     {
