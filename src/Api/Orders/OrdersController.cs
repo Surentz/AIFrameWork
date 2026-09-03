@@ -24,6 +24,32 @@ public sealed class OrdersController(
             : result.Problem(HttpContext);
     }
 
+    [HttpGet]
+    [ProducesResponseType<OrderPageResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> List(
+        [FromQuery] int limit = 20,
+        [FromQuery] string? cursor = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await queries.SendAsync(
+            new GetOrders(limit, cursor), cancellationToken).ConfigureAwait(false);
+
+        return result.IsSuccess
+            ? Ok(new OrderPageResponse
+            {
+                Items = [.. result.Value.Items.Select(i => new OrderListItemResponse
+                {
+                    Id = i.Id,
+                    Sku = i.Sku,
+                    Quantity = i.Quantity,
+                    PlacedAt = i.PlacedAt,
+                })],
+                NextCursor = result.Value.NextCursor,
+            })
+            : result.Problem(HttpContext);
+    }
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType<OrderResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

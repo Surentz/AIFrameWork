@@ -35,7 +35,7 @@ the database out of sync with the model snapshot, and every other environment
 keeps the old version.
 
 Create a new migration instead:
-  dotnet ef migrations add <DescriptiveName> --project src/Infrastructure --startup-project src/Api
+  dotnet ef migrations add <DescriptiveName> --project src/Infrastructure --startup-project src/Infrastructure
 
 If this migration has definitely never been applied anywhere, remove it with
 "dotnet ef migrations remove" and regenerate it rather than hand-editing $leaf.

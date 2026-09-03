@@ -38,6 +38,7 @@ public static class InfrastructureRegistration
 
         services.AddCommand<PlaceOrder, Guid, PlaceOrderHandler>();
         services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
+        services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
 
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
 

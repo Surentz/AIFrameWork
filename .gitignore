@@ -25,10 +25,12 @@ appsettings.*.Local.json
 .env.*
 !.env.example
 
-# --- Node / Angular ---
+# --- Node / React ---
 node_modules/
 dist/
-.angular/
+.vite/
+playwright-report/
+test-results/
 npm-debug.log*
 yarn-error.log*
 *.tsbuildinfo

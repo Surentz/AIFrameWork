@@ -41,6 +41,10 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PlacedAt", "Id")
+                        .IsDescending()
+                        .HasDatabaseName("IX_Orders_PlacedAt_Id_Desc");
+
                     b.ToTable("orders", (string)null);
                 });
 

@@ -22,3 +22,21 @@ public sealed record OrderResponse
 
     public required DateTimeOffset PlacedAt { get; init; }
 }
+
+public sealed record OrderListItemResponse
+{
+    public required Guid Id { get; init; }
+
+    public required string Sku { get; init; }
+
+    public required int Quantity { get; init; }
+
+    public required DateTimeOffset PlacedAt { get; init; }
+}
+
+public sealed record OrderPageResponse
+{
+    public required IReadOnlyList<OrderListItemResponse> Items { get; init; }
+
+    public required string? NextCursor { get; init; }
+}

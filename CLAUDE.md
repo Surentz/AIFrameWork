@@ -1,6 +1,6 @@
 # AIFrameWork
 
-.NET backend + Angular frontend, Clean Architecture, single repo.
+.NET backend + React frontend, Clean Architecture, single repo.
 
 ## Versions
 
@@ -9,11 +9,13 @@
 | .NET SDK | 10.0.400 |
 | Target framework | net10.0 |
 | Node | 24.20.0 |
-| Angular | _unpinned — set at `ng new`_ |
+| React | 19.2.8 |
+| Vite | 8.2.2 |
 
-Verified 2026-08-28 from `dotnet --list-sdks` and `node --version`. The target framework was
-pinned when the solution was scaffolded. Angular stays unpinned until the workspace is
-created; pin it from the generated `package.json`, not from memory.
+Verified 2026-09-03 from `dotnet --list-sdks`, `node --version`, and `frontend/package.json`
+(post-install, resolved versions). The target framework was pinned when the solution was
+scaffolded. React and Vite were pinned once the workspace was created, read from the
+generated `package.json` — not from memory.
 
 ## Layout
 
@@ -23,7 +25,7 @@ created; pin it from the generated `package.json`, not from memory.
 | `src/Application` | Use cases, ports, `Result<T>`, validators |
 | `src/Infrastructure` | EF Core, repositories, external clients |
 | `src/Api` | Controllers, DTOs, exception handling, composition root |
-| `frontend` | Angular workspace |
+| `frontend` | Vite + React workspace |
 | `tests` | Test projects, one per layer |
 
 ## The dependency rule
@@ -71,14 +73,14 @@ or `System.ComponentModel.DataAnnotations`.
 | Command | Does |
 |---|---|
 | `/feature <name>` | Scaffold a feature across all four layers, with tests |
-| `/ng-feature <name>` | Scaffold an Angular feature |
+| `/react-feature <name>` | Scaffold a React feature |
 | `/verify` | Build, test, and lint both stacks |
 | `/adr <title>` | Record an architecture decision |
 
 ## More context
 
 Each layer has its own `CLAUDE.md`, loaded when you work in that directory.
-Conventions live in the `dotnet-conventions`, `dotnet-testing`, `angular-conventions`,
-and `angular-testing` skills.
+Conventions live in the `dotnet-conventions`, `dotnet-testing`, `react-conventions`,
+and `react-testing` skills.
 
 Design rationale: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`

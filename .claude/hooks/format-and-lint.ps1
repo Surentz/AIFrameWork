@@ -32,7 +32,7 @@ try {
             }
             # No SDK: nothing to do. Warnings are caught at build time instead.
         }
-        elseif (@('.ts', '.html', '.scss', '.css', '.js', '.mjs') -contains $extension) {
+        elseif (@('.ts', '.tsx', '.js', '.jsx', '.mjs', '.css', '.scss', '.html') -contains $extension) {
             $frontendDir = Join-Path $repoRoot 'frontend'
             $binDir = Join-Path $frontendDir 'node_modules\.bin'
             $eslint = Join-Path $binDir 'eslint.cmd'
@@ -70,7 +70,7 @@ Lint errors remain in $path after eslint --fix.
 
 $detail
 
-Fix them before continuing. See frontend/CLAUDE.md and the angular-conventions skill.
+Fix them before continuing. See frontend/CLAUDE.md and the react-conventions skill.
 "@
                 }
             }

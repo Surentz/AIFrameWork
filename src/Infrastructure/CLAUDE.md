@@ -60,6 +60,14 @@ event, it is persisted with the aggregate, and it is delivered at least once aft
   "Never `catch (Exception)`" bullet also describes it. Do not re-explain the reasoning here —
   point at `.editorconfig`, the one place it should live.
 
+## dotnet-ef
+
+`src/Infrastructure` is both the `--project` and the `--startup-project`: it has its own
+`DesignTimeDbContextFactory`, so it needs nothing else to be self-sufficient at design time.
+`src/Api` deliberately is **not** a valid startup project for this — giving it the
+`Microsoft.EntityFrameworkCore.Design` package puts Roslyn in the production publish output
+(measured: 7.9MB → 37MB), so don't add it there to make a startup-project error go away.
+
 ## EF rules
 
 - **All mapping lives in `IEntityTypeConfiguration<T>`.** Never annotate a Domain type.

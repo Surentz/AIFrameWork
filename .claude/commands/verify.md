@@ -41,9 +41,35 @@ npm run build --prefix frontend
 npm test --prefix frontend -- --run
 ```
 
-`ng lint` runs with `--max-warnings 0`: one warning is a failure.
+`npm run lint` runs `eslint . --max-warnings 0`: one warning is a failure.
 
-## 3. Hooks
+## 3. End-to-end
+
+```
+docker info
+```
+
+Fails? Docker is not running. Say so and skip to step 4 — a skipped e2e run is never
+reported as a pass.
+
+`frontend/node_modules` missing? Same skip as step 2.
+
+First time on this machine? `global-setup.ts` does not install Playwright's browser binary
+itself — run `npx --prefix frontend playwright install chromium` once (documented in
+`frontend/CLAUDE.md`, "Before the first `npm run e2e`") or this step fails with a missing-browser
+error rather than an assertion failure.
+
+Otherwise:
+
+```
+npm run e2e --prefix frontend
+```
+
+This starts a Postgres container, applies migrations, and runs the API and a preview build
+under Playwright. It is the slowest step and the one most likely to fail environmentally —
+report the distinction between an environmental failure and an assertion failure.
+
+## 4. Hooks
 
 ```
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tests/run-hook-tests.ps1
