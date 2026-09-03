@@ -19,8 +19,12 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set('Content-Type', 'application/json');
+  // Seed the default, then let anything the caller passed overwrite it - Headers.set()
+  // always wins over what's already there, so the default has to go in first.
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  new Headers(init?.headers).forEach((value, key) => {
+    headers.set(key, value);
+  });
 
   const response = await fetch(path, { ...init, headers });
 

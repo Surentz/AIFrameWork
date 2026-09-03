@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/handlers';
-import { ApiError } from './client';
+import { ApiError, request } from './client';
 import { listOrders, placeOrder } from './orders';
 
 describe('the api client', () => {
@@ -56,5 +56,23 @@ describe('the api client', () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).fieldErrors.Quantity).toEqual(['Quantity must be positive.']);
+  });
+
+  it('lets a caller-supplied header override the default Content-Type', async () => {
+    let seenContentType: string | null = null;
+    server.use(
+      http.post('/api/orders', ({ request: incoming }) => {
+        seenContentType = incoming.headers.get('Content-Type');
+        return HttpResponse.json('11111111-1111-1111-1111-111111111111', { status: 201 });
+      }),
+    );
+
+    await request('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/merge-patch+json' },
+      body: JSON.stringify({ sku: 'SKU-1', quantity: 1 }),
+    });
+
+    expect(seenContentType).toBe('application/merge-patch+json');
   });
 });
