@@ -20,9 +20,11 @@ public sealed class OrderRepository(AiFrameworkDbContext context) : IOrderReposi
         if (after is { } cursor)
         {
             // Keyset, not offset: a row inserted while a caller sits on page 1 must not make
-            // page 2 repeat what page 1 already showed. Both the comparison and the ordering
-            // run in SQL - Postgres orders uuid byte-wise and .NET's Guid.CompareTo does not,
-            // so re-sorting a page in memory would break the agreement.
+            // page 2 repeat what page 1 already showed. Both the comparison and the ordering run
+            // as Postgres SQL, never as CLR code: EF Core translates o.Id.CompareTo(...) into
+            // Postgres's own uuid comparison operator, and throws rather than silently
+            // client-evaluating a clause it cannot translate. Never re-sort a page in memory -
+            // that is the one thing that would put .NET's own Guid ordering in the path instead.
             query = query.Where(o => o.PlacedAt < cursor.PlacedAt
                 || (o.PlacedAt == cursor.PlacedAt && o.Id.CompareTo(cursor.Id) < 0));
         }

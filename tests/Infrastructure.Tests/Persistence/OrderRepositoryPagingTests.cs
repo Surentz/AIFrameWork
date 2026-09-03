@@ -19,11 +19,10 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     private static (DateTimeOffset PlacedAt, Guid Id) TopOf(int windowMinute) =>
         (Base.AddMinutes(windowMinute), Guid.Empty);
 
-    // Deterministic tie-break endpoints: Postgres orders uuid byte-wise, so High > Low there,
-    // but .NET's Guid.CompareTo disagrees (its first three groups compare as little-endian
-    // integers) and puts High < Low instead. A tied-PlacedAt test seeded with Guid.NewGuid()
-    // only catches a Guid.CompareTo leak when the two random ids happen to straddle that
-    // disagreement - a coin flip per run. These two ids straddle it on every run.
+    // Fixed, not Guid.NewGuid(): deterministic ids make the expected page contents and order
+    // predictable ahead of time. High is the maximum possible uuid and Low is near the minimum,
+    // so Postgres will always place High above Low when PlacedAt ties - letting the test below
+    // assert the exact page split, not just that both rows appear somewhere.
     private static readonly Guid Low = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid High = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
 
@@ -103,9 +102,8 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     public async Task ListAsync_WhenTwoOrdersSharePlacedAt_ReturnsBothAcrossPages()
     {
         var tie = Base.AddMinutes(31);
-        // Low/High, not Guid.NewGuid(): Postgres orders High above Low, .NET's Guid.CompareTo
-        // orders them the other way round. Random ids only catch a Guid.CompareTo leak when
-        // they happen to straddle that disagreement; these two straddle it every run.
+        // Low/High make the correct split predictable ahead of time - see the class-level
+        // comment above their declaration.
         var a = await SeedAsync("SKU-TIE-A", tie, Low);
         var b = await SeedAsync("SKU-TIE-B", tie, High);
 
@@ -113,11 +111,17 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
         var repository = new OrderRepository(context);
 
         var pageOne = await repository.ListAsync(1, TopOf(40), CancellationToken.None);
+        // Order matters, not just membership: BeEquivalentTo would still pass with the tie-break
+        // implemented backwards (ascending instead of descending on Id), since both rows would
+        // still show up somewhere across the two pages either way. High comes first because
+        // PlacedAt ties and the ordering is Id DESC.
+        pageOne.Select(o => o.Id).Should().Equal(b);
+
         var cursorRow = pageOne[0];
         var pageTwo = await repository.ListAsync(
             1, (cursorRow.PlacedAt, cursorRow.Id), CancellationToken.None);
 
-        new[] { pageOne[0].Id, pageTwo[0].Id }.Should().BeEquivalentTo(new[] { a, b });
+        pageTwo.Select(o => o.Id).Should().Equal(a);
     }
 
     [Fact]
