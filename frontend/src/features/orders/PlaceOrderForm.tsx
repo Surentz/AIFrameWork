@@ -49,7 +49,6 @@ export function PlaceOrderForm(): React.JSX.Element {
         Place order
       </button>
 
-      {mutation.isSuccess && <p role="status">Order placed.</p>}
       {mutation.error && Object.keys(fieldErrors).length === 0 && (
         <p role="alert">{mutation.error.message}</p>
       )}
