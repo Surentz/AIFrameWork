@@ -42,7 +42,7 @@ public sealed class GetOrdersHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_AsksTheRepositoryForOneMoreRowThanTheLimit()
+    public async Task HandleAsync_WhenQueried_AsksTheRepositoryForOneMoreRowThanTheLimit()
     {
         _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns([]);

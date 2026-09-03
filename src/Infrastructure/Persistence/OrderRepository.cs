@@ -15,6 +15,8 @@ public sealed class OrderRepository(AiFrameworkDbContext context) : IOrderReposi
     public async Task<IReadOnlyList<Order>> ListAsync(
         int limit, (DateTimeOffset PlacedAt, Guid Id)? after, CancellationToken cancellationToken)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+
         var query = context.Orders.AsNoTracking();
 
         if (after is { } cursor)

@@ -38,6 +38,42 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task GetOrders_WhenFollowingTheCursorAfterANewOrderArrives_NeitherRepeatsNorSkipsARow()
+    {
+        using var client = factory.CreateClient();
+
+        // Unique per run, not "SKU-LIST-N": this shared database also holds rows from every
+        // other test in ApiFactoryCollection, so the ids returned - not the row count - are
+        // what this test can safely pin down.
+        var suffix = Guid.NewGuid().ToString("N");
+        var createdA = await client.PostAsJsonAsync(
+            "/api/orders", new { Sku = $"SKU-CURSOR-A-{suffix}", Quantity = 1 });
+        var idA = await createdA.Content.ReadFromJsonAsync<Guid>();
+        var createdB = await client.PostAsJsonAsync(
+            "/api/orders", new { Sku = $"SKU-CURSOR-B-{suffix}", Quantity = 1 });
+        var idB = await createdB.Content.ReadFromJsonAsync<Guid>();
+
+        var pageOne = await client.GetFromJsonAsync<OrderPageDto>("/api/orders?limit=1");
+        pageOne.Should().NotBeNull();
+        pageOne.Items.Select(i => i.Id).Should().Equal(idB);
+        var cursor = pageOne.NextCursor
+            ?? throw new InvalidOperationException("expected a next cursor after page one.");
+
+        // The row that arrives while the caller sits on page 1 is the whole point: a client
+        // paging a static table would pass identically under correct keyset paging and under
+        // broken offset paging. Only a row inserted between the two HTTP calls tells them apart.
+        await client.PostAsJsonAsync(
+            "/api/orders", new { Sku = $"SKU-CURSOR-C-{suffix}", Quantity = 1 });
+
+        var pageTwo = await client.GetFromJsonAsync<OrderPageDto>(
+            $"/api/orders?limit=1&cursor={Uri.EscapeDataString(cursor)}");
+
+        pageTwo.Should().NotBeNull();
+        pageTwo.Items.Select(i => i.Id).Should().Equal(idA);
+        pageTwo.Items.Should().NotContain(i => i.Id == idB);
+    }
+
+    [Fact]
     public async Task GetOrders_WithAnOutOfRangeLimit_Returns400()
     {
         using var client = factory.CreateClient();

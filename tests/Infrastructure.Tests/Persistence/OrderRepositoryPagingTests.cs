@@ -39,7 +39,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task ListAsync_ReturnsNewestFirst()
+    public async Task ListAsync_WithTwoOrders_ReturnsNewestFirst()
     {
         var older = await SeedAsync("SKU-OLD", Base.AddMinutes(1));
         var newer = await SeedAsync("SKU-NEW", Base.AddMinutes(2));
@@ -52,7 +52,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task ListAsync_HonoursTheLimit()
+    public async Task ListAsync_WithMoreRowsThanTheLimit_HonoursTheLimit()
     {
         await SeedAsync("SKU-A", Base.AddMinutes(11));
         var b = await SeedAsync("SKU-B", Base.AddMinutes(12));
@@ -125,19 +125,24 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task ListAsync_WithNoCursor_ReturnsRowsOrderedNewestFirst()
+    public async Task ListAsync_WithNoCursorAndTwoOrders_ReturnsRowsOrderedNewestFirst()
     {
         // Every other test in this class pages from a TopOf(...) cursor. ListAsync(limit, null,
         // ct) is what the handler calls on every FIRST page - the most-exercised production
-        // path - yet had no repository-level coverage at all. A property assertion, not an
-        // identity one, because the shared container holds rows from every other test and this
-        // class's own windows, so asserting an exact id list here would be flaky by design.
-        await SeedAsync("SKU-HEAD", Base.AddMinutes(50));
+        // path - yet had no repository-level coverage at all.
+        //
+        // Two rows, seeded at the highest window this class uses (minutes 50-51, above every
+        // other test's window): asserting on a single seeded row would pass vacuously, since
+        // BeInDescendingOrder is trivially true on a one-element (or empty) result. With two
+        // known rows at the very top of the whole shared table, ListAsync(2, null, ...) must
+        // return exactly [newer, older] - it cannot pass under a broken or inverted ordering.
+        var older = await SeedAsync("SKU-HEAD-OLD", Base.AddMinutes(50));
+        var newer = await SeedAsync("SKU-HEAD-NEW", Base.AddMinutes(51));
 
         await using var context = fixture.CreateContext();
         var rows = await new OrderRepository(context)
-            .ListAsync(50, after: null, CancellationToken.None);
+            .ListAsync(2, after: null, CancellationToken.None);
 
-        rows.Should().BeInDescendingOrder(o => o.PlacedAt);
+        rows.Select(o => o.Id).Should().Equal(newer, older);
     }
 }

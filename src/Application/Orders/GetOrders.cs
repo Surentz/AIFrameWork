@@ -36,7 +36,7 @@ public sealed class GetOrdersHandler(IOrderRepository orders) : IQueryHandler<Ge
             {
                 return Result.Failure<OrderPage>(new Error(
                     ErrorKind.Validation, "orders.malformed_cursor",
-                    "The cursor is not a cursor this endpoint issued."));
+                    "The cursor could not be parsed."));
             }
 
             after = decoded;
@@ -52,7 +52,7 @@ public sealed class GetOrdersHandler(IOrderRepository orders) : IQueryHandler<Ge
             .Select(o => new OrderListItem(o.Id, o.Sku, o.Quantity, o.PlacedAt))
             .ToArray();
 
-        var next = hasMore && page.Length > 0
+        var next = hasMore
             ? Encode(page[^1].PlacedAt, page[^1].Id)
             : null;
 
