@@ -8,7 +8,10 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${PREVIEW_PORT}` },
   webServer: [
     {
-      command: 'dotnet run --project ../src/Api --launch-profile http',
+      // --no-launch-profile, not --launch-profile http: launchSettings.json hard-codes
+      // applicationUrl to 5234 and wins over ASPNETCORE_URLS, so API_PORT was silently
+      // ignored and the run hung for 120s. Setting the environment explicitly keeps it honest.
+      command: 'dotnet run --project ../src/Api --no-launch-profile',
       // /health already exists, so readiness is a real check rather than a fixed wait.
       url: `http://localhost:${API_PORT}/health`,
       timeout: 120_000,
@@ -16,6 +19,7 @@ export default defineConfig({
       env: {
         ConnectionStrings__Default: E2E_CONNECTION_STRING,
         ASPNETCORE_URLS: `http://localhost:${API_PORT}`,
+        ASPNETCORE_ENVIRONMENT: 'Development',
       },
     },
     {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePlaceOrder } from './queries';
@@ -17,8 +17,10 @@ export function PlaceOrderForm(): React.JSX.Element {
   const fieldErrors = mutation.error?.fieldErrors ?? {};
   const skuErrors = fieldErrors.Sku ?? [];
   const quantityErrors = fieldErrors.Quantity ?? [];
-  const skuErrorId = 'sku-error';
-  const quantityErrorId = 'quantity-error';
+  // useId, not literals: two mounted forms would emit duplicate ids and aria-describedby
+  // would resolve to the wrong one.
+  const skuErrorId = useId();
+  const quantityErrorId = useId();
 
   return (
     <form onSubmit={handleSubmit}>
@@ -34,13 +36,13 @@ export function PlaceOrderForm(): React.JSX.Element {
           setSku(e.target.value);
         }}
       />
-      {skuErrors.length > 0 && (
-        <div id={skuErrorId}>
-          {skuErrors.map((message) => (
-            <p key={message}>{message}</p>
-          ))}
-        </div>
-      )}
+      {/* Rendered unconditionally: a live region inserted together with its text may
+          not be announced, so it has to already exist when the error arrives. */}
+      <div id={skuErrorId} aria-live="polite">
+        {skuErrors.map((message) => (
+          <p key={message}>{message}</p>
+        ))}
+      </div>
 
       <label htmlFor="quantity">Quantity</label>
       <input
@@ -53,13 +55,13 @@ export function PlaceOrderForm(): React.JSX.Element {
           setQuantity(Number(e.target.value));
         }}
       />
-      {quantityErrors.length > 0 && (
-        <div id={quantityErrorId}>
-          {quantityErrors.map((message) => (
-            <p key={message}>{message}</p>
-          ))}
-        </div>
-      )}
+      {/* Rendered unconditionally: a live region inserted together with its text may
+          not be announced, so it has to already exist when the error arrives. */}
+      <div id={quantityErrorId} aria-live="polite">
+        {quantityErrors.map((message) => (
+          <p key={message}>{message}</p>
+        ))}
+      </div>
 
       <button type="submit" disabled={mutation.isPending}>
         Place order
