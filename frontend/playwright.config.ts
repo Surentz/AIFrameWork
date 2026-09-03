@@ -1,25 +1,26 @@
 import { defineConfig } from '@playwright/test';
-
-const connectionString =
-  'Host=localhost;Port=55432;Database=aiframework_e2e;Username=e2e;Password=e2e';
+import { API_PORT, E2E_CONNECTION_STRING, PREVIEW_PORT } from './e2e/env.ts';
 
 export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
-  use: { baseURL: 'http://localhost:4173' },
+  use: { baseURL: `http://localhost:${PREVIEW_PORT}` },
   webServer: [
     {
       command: 'dotnet run --project ../src/Api --launch-profile http',
       // /health already exists, so readiness is a real check rather than a fixed wait.
-      url: 'http://localhost:5234/health',
+      url: `http://localhost:${API_PORT}/health`,
       timeout: 120_000,
       reuseExistingServer: false,
-      env: { ConnectionStrings__Default: connectionString },
+      env: {
+        ConnectionStrings__Default: E2E_CONNECTION_STRING,
+        ASPNETCORE_URLS: `http://localhost:${API_PORT}`,
+      },
     },
     {
-      command: 'npm run build && npm run preview -- --port 4173',
-      url: 'http://localhost:4173',
+      command: `npm run build && npm run preview -- --port ${PREVIEW_PORT}`,
+      url: `http://localhost:${PREVIEW_PORT}`,
       timeout: 120_000,
       reuseExistingServer: false,
     },

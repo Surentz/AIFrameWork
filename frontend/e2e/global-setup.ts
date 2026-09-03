@@ -1,7 +1,5 @@
 import { execFileSync } from 'node:child_process';
-
-const connectionString =
-  'Host=localhost;Port=55432;Database=aiframework_e2e;Username=e2e;Password=e2e';
+import { E2E_CONNECTION_STRING } from './env.ts';
 
 export default function globalSetup(): void {
   // dotnet-ef is a local tool (.config/dotnet-tools.json); without a restore this only works
@@ -27,6 +25,9 @@ export default function globalSetup(): void {
       '--startup-project',
       '../src/Infrastructure',
     ],
-    { stdio: 'inherit', env: { ...process.env, ConnectionStrings__Default: connectionString } },
+    {
+      stdio: 'inherit',
+      env: { ...process.env, ConnectionStrings__Default: E2E_CONNECTION_STRING },
+    },
   );
 }

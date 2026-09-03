@@ -21,6 +21,14 @@ describe('OrderList', () => {
     expect(await screen.findAllByRole('link', { name: /SKU-/ })).toHaveLength(2);
   });
 
+  it('announces the loading state before the orders arrive', async () => {
+    renderList();
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading orders…');
+
+    expect(await screen.findAllByRole('link', { name: /SKU-/ })).toHaveLength(2);
+  });
+
   it('renders an empty message when there are no orders', async () => {
     server.use(http.get('/api/orders', () => HttpResponse.json({ items: [], nextCursor: null })));
 

@@ -38,7 +38,10 @@ Dev runs two processes: Vite on 5173 and the API on 5234. `vite.config.ts` proxi
 configuration. Production is a static bundle.
 
 Ports are fixed (5173 dev, 4173 preview, 5234 API, 55432 the e2e Postgres) and can collide on
-a busy machine. Each is overridable by environment variable.
+a busy machine. Each is overridable by environment variable: `DEV_PORT`, `PREVIEW_PORT`,
+`API_PORT`, and `PG_PORT` respectively. `vite.config.ts` reads the first three;
+`playwright.config.ts` and `e2e/global-setup.ts` (via the shared `e2e/env.ts`) and
+`docker-compose.e2e.yml` read all four between them for the e2e run.
 
 ## Commands
 

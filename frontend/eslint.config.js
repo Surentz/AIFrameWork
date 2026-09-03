@@ -30,21 +30,12 @@ export default tseslint.config(
       // Type safety
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
-      '@typescript-eslint/explicit-function-return-type': [
-        'error',
-        { allowExpressions: true },
-      ],
+      '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }],
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
 
       // Never silently swallow a failure - see frontend/CLAUDE.md
       'no-empty': ['error', { allowEmptyCatch: false }],
-    },
-  },
-  {
-    files: ['**/*.test.{ts,tsx}', 'e2e/**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-non-null-assertion': 'off',
     },
   },
 );

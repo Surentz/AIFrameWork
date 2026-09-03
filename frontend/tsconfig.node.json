@@ -17,7 +17,15 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Repo-wide strictness delta (frontend/CLAUDE.md) - kept in step with tsconfig.app.json so
+       e2e/** and the config files themselves get strictNullChecks too */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true
   },
   "include": ["vite.config.ts", "playwright.config.ts", "e2e"]
 }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -29,6 +29,14 @@ function renderFormWithRoutes(): void {
     </MemoryRouter>,
     { wrapper: withQueryClient() },
   );
+}
+
+function requireElementById(id: string): HTMLElement {
+  const element = document.getElementById(id);
+  if (element === null) {
+    throw new Error(`expected an element with id "${id}"`);
+  }
+  return element;
 }
 
 describe('PlaceOrderForm', () => {
@@ -78,7 +86,21 @@ describe('PlaceOrderForm', () => {
     await userEvent.type(screen.getByLabelText('Sku'), 'SKU-9');
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
 
-    expect(await screen.findByText('Quantity must be positive.')).toBeInTheDocument();
+    await screen.findByText('Quantity must be positive.');
+
+    const quantityInput = screen.getByLabelText('Quantity');
+    expect(quantityInput).toHaveAttribute('aria-invalid', 'true');
+
+    const describedBy = quantityInput.getAttribute('aria-describedby');
+    if (describedBy === null) {
+      throw new Error('expected the quantity input to have aria-describedby set');
+    }
+    const errorRegion = requireElementById(describedBy);
+    expect(within(errorRegion).getByText('Quantity must be positive.')).toBeInTheDocument();
+
+    // Pins the field-level placement: the generic role="alert" banner branch must not also
+    // be rendering, or a bug that routes field errors to the banner would pass this test too.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('shows the general failure when the request fails without field errors', async () => {

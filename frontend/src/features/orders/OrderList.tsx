@@ -5,7 +5,7 @@ export function OrderList(): React.JSX.Element {
   const { data, isPending, error } = useOrders();
 
   if (isPending) {
-    return <p>Loading orders…</p>;
+    return <p role="status">Loading orders…</p>;
   }
 
   if (error) {

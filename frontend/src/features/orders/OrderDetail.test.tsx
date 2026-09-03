@@ -25,6 +25,17 @@ describe('OrderDetail', () => {
     expect(await screen.findByRole('heading', { name: 'SKU-1' })).toBeInTheDocument();
   });
 
+  it('announces the loading state before the order arrives', async () => {
+    // Rendered through the real /orders/:id route (renderDetail uses <Routes>, not a bare
+    // MemoryRouter) so useParams genuinely resolves an id and the query genuinely runs - a
+    // bare-router render previously let an unreachable status element pass its test.
+    renderDetail();
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading order…');
+
+    expect(await screen.findByRole('heading', { name: 'SKU-1' })).toBeInTheDocument();
+  });
+
   it('renders the failure instead of a blank article when the order is missing', async () => {
     server.use(
       http.get('/api/orders/:id', () =>

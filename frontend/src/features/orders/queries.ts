@@ -14,8 +14,13 @@ export function useOrders(cursor?: string): UseQueryResult<OrderPage, ApiError> 
   return useQuery({ queryKey: orderKeys.list(cursor), queryFn: () => listOrders({ cursor }) });
 }
 
-export function useOrder(id: string): UseQueryResult<Order, ApiError> {
-  return useQuery({ queryKey: orderKeys.detail(id), queryFn: () => getOrder(id) });
+export function useOrder(id: string | undefined): UseQueryResult<Order, ApiError> {
+  return useQuery({
+    queryKey: orderKeys.detail(id ?? ''),
+    // Never actually invoked while disabled, but must still type-check against Promise<Order>.
+    queryFn: () => getOrder(id ?? ''),
+    enabled: id !== undefined,
+  });
 }
 
 export function usePlaceOrder(): UseMutationResult<

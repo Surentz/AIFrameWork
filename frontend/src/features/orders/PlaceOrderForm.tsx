@@ -15,6 +15,10 @@ export function PlaceOrderForm(): React.JSX.Element {
   }
 
   const fieldErrors = mutation.error?.fieldErrors ?? {};
+  const skuErrors = fieldErrors.Sku ?? [];
+  const quantityErrors = fieldErrors.Quantity ?? [];
+  const skuErrorId = 'sku-error';
+  const quantityErrorId = 'quantity-error';
 
   return (
     <form onSubmit={handleSubmit}>
@@ -24,26 +28,38 @@ export function PlaceOrderForm(): React.JSX.Element {
       <input
         id="sku"
         value={sku}
+        aria-invalid={skuErrors.length > 0}
+        aria-describedby={skuErrors.length > 0 ? skuErrorId : undefined}
         onChange={(e) => {
           setSku(e.target.value);
         }}
       />
-      {fieldErrors.Sku?.map((message) => (
-        <p key={message}>{message}</p>
-      ))}
+      {skuErrors.length > 0 && (
+        <div id={skuErrorId}>
+          {skuErrors.map((message) => (
+            <p key={message}>{message}</p>
+          ))}
+        </div>
+      )}
 
       <label htmlFor="quantity">Quantity</label>
       <input
         id="quantity"
         type="number"
         value={quantity}
+        aria-invalid={quantityErrors.length > 0}
+        aria-describedby={quantityErrors.length > 0 ? quantityErrorId : undefined}
         onChange={(e) => {
           setQuantity(Number(e.target.value));
         }}
       />
-      {fieldErrors.Quantity?.map((message) => (
-        <p key={message}>{message}</p>
-      ))}
+      {quantityErrors.length > 0 && (
+        <div id={quantityErrorId}>
+          {quantityErrors.map((message) => (
+            <p key={message}>{message}</p>
+          ))}
+        </div>
+      )}
 
       <button type="submit" disabled={mutation.isPending}>
         Place order

@@ -3,10 +3,10 @@ import { useOrder } from './queries';
 
 export function OrderDetail(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { data, isPending, error } = useOrder(id ?? '');
+  const { data, isPending, error } = useOrder(id);
 
   if (isPending) {
-    return <p>Loading order…</p>;
+    return <p role="status">Loading order…</p>;
   }
 
   if (error) {
