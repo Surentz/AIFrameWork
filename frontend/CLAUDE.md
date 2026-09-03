@@ -51,3 +51,15 @@ a busy machine. Each is overridable by environment variable.
 | `npm run e2e` | Playwright, against a real API and a real Postgres |
 
 Lint runs with `--max-warnings 0`: one warning is a failure.
+
+## Before the first `npm run e2e`
+
+`npm ci --prefix frontend` installs the `@playwright/test` package but not its browser
+binary — run this once per machine:
+
+```
+npx --prefix frontend playwright install chromium
+```
+
+`e2e/global-setup.ts` runs `dotnet tool restore` itself, so `dotnet-ef` (pinned in the repo's
+`.config/dotnet-tools.json`) needs no separate setup step.

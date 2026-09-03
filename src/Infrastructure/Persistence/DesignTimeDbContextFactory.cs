@@ -17,9 +17,14 @@ internal sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<A
 {
     public AiFrameworkDbContext CreateDbContext(string[] args)
     {
-        var connectionString =
-            Environment.GetEnvironmentVariable("ConnectionStrings__Default")
-            ?? "Host=localhost;Database=design_time_only";
+        // GetEnvironmentVariable returns "" for an exported-but-empty variable, not null, so a
+        // `??` guard alone would not fall back for it - same trap Program.cs documents for
+        // GetConnectionString. Checking for whitespace as well as null is what keeps an
+        // empty-but-set ConnectionStrings__Default from reaching Npgsql as a blank string.
+        var fromEnvironment = Environment.GetEnvironmentVariable("ConnectionStrings__Default");
+        var connectionString = string.IsNullOrWhiteSpace(fromEnvironment)
+            ? "Host=localhost;Database=design_time_only"
+            : fromEnvironment;
 
         var options = new DbContextOptionsBuilder<AiFrameworkDbContext>()
             .UseNpgsql(connectionString)

@@ -9,20 +9,4 @@
     <ProjectReference Include="..\Infrastructure\AiFramework.Infrastructure.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!--
-      dotnet-ef requires the Design package on the *startup* project, not just the project
-      that owns the DbContext. Infrastructure's own reference to this package is
-      PrivateAssets="all" (deliberately, see its csproj comment), so it does not flow through
-      the ProjectReference above. Task 8's e2e global setup runs "dotnet ef database update"
-      with Api as the startup project, which fails at the CLI level without this.
-      PrivateAssets="all" here too: it is a build/tooling time package only and must not ship
-      in the runtime output.
-    -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-  </ItemGroup>
-
 </Project>
