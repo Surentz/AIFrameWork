@@ -24,8 +24,7 @@ backend already provides — a stable, layered API to call.
 - **Vite** as the build tool and dev server — fast rebuilds, minimal config, ESM-native, and
   widely used with React.
 - **React** as the component framework — simpler mental model than Angular's directives and
-  decorators, lighter abstraction over the DOM, and a smaller ecosystem to commit to for a
-  first UI.
+  decorators, and a lighter abstraction over the DOM.
 - **React Router** for client-side routing — the standard choice, proven, and sufficient for
   a SPA of this scale.
 - **TanStack Query** (React Query) for server state management — it separates concerns clearly
@@ -73,10 +72,6 @@ But React Router is the familiar baseline, and the unfamiliarity of TanStack Rou
 justify its learning curve for a first UI slice. React Router is sufficient; TanStack Router
 can be reconsidered when routing becomes a bottleneck or when the team is more settled on React.
 
-**Remix.** Not considered; it sits between Next.js and pure SPA in terms of overlap with the
-backend and would introduce the same auth/data-fetching split concerns as Next.js.
+**Remix.** Not considered.
 
-**Solid.js, Svelte, Vue.** Not considered. React's ecosystem size and community maturity are
-unmatched in this space, and the choice needed to be made and built now. Alternatives with
-smaller ecosystems were rejected on the principle that the cost of community and hiring
-knowledge outweighs syntactic advantages for a team starting a codebase.
+**Solid.js, Svelte, Vue.** Not considered.
