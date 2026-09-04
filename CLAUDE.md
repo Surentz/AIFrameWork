@@ -77,6 +77,43 @@ or `System.ComponentModel.DataAnnotations`.
 | `/verify` | Build, test, and lint both stacks |
 | `/adr <title>` | Record an architecture decision |
 
+## Running locally
+
+```bash
+docker compose up -d --wait                                  # dev Postgres on 55433
+dotnet ef database update --project src/Infrastructure --startup-project src/Infrastructure
+dotnet run --project src/Api                                 # then `npm start` in frontend/
+```
+
+Two databases, two ports, and they are meant to coexist: **55433** is the dev database from
+`docker-compose.yml` (named volume, data persists); **55432** is the e2e one from
+`docker-compose.e2e.yml` (throwaway). Override either with `DEV_PG_PORT` / `PG_PORT`.
+
+The dev connection string is committed in `src/Api/appsettings.Development.json` — throwaway
+credentials against a localhost-only container that is never deployed, the same judgement
+already applied to `docker-compose.e2e.yml`. The no-secrets-in-`appsettings*.json` rule still
+holds for everything else.
+
+The two *databases* coexist happily, but the two *API* processes do not: `npm run e2e` starts
+its own API on 5234 — the same port `dotnet run` uses — with `reuseExistingServer: false`. Stop
+the dev API before an e2e run, or set `API_PORT`.
+
+**The gotcha that will cost you an afternoon: `dotnet ef` cannot see user-secrets.** Migrations
+run through `src/Infrastructure/Persistence/DesignTimeDbContextFactory.cs`, which reads only the
+`ConnectionStrings__Default` environment variable — so `database update` against anything but
+the default needs it passed explicitly:
+
+```bash
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=aiframework;Username=postgres;Password=postgres' \
+  dotnet ef database update --project src/Infrastructure --startup-project src/Infrastructure
+```
+
+The reverse also bites: a user-secret sits *above* `appsettings.Development.json` in the
+configuration order, so a stale `ConnectionStrings:Default` there silently wins over the
+committed value at runtime while `dotnet ef` ignores it. Check with
+`dotnet user-secrets list --project src/Api` if the app and the migrations disagree about which
+database they are talking to.
+
 ## More context
 
 Each layer has its own `CLAUDE.md`, loaded when you work in that directory.
