@@ -1,0 +1,25 @@
+# Development database. The e2e stack lives in docker-compose.e2e.yml and runs on its own
+# port; the two are meant to be up at the same time, so this file sets an explicit project
+# name to avoid a container-name collision with it.
+name: aiframework-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aiframework
+    ports:
+      - '${DEV_PG_PORT:-55433}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d aiframework']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      # Named, unlike the e2e stack's throwaway container: dev data survives a `down`.
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
