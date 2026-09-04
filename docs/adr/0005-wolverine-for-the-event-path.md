@@ -54,7 +54,12 @@ only**, using PostgreSQL for both durability and transport:
   added with the local dev setup remains the only infrastructure this project runs.
 - `WolverineFx.EntityFrameworkCore` enrolls the existing `AiFrameworkDbContext` in Wolverine's
   transaction, so application state and outgoing messages commit atomically — the same guarantee
-  `DomainEventsInterceptor` hand-builds today.
+  `DomainEventsInterceptor` hand-builds today. This goes through
+  `opts.UseEntityFrameworkCoreTransactions()` and `IDbContextOutbox<AiFrameworkDbContext>`,
+  **not** `AddDbContextWithWolverineIntegration`: the latter replaces this repo's own
+  `AddDbContext` registration and forces its options to a singleton lifetime, which would mean
+  giving up the `AddInterceptors(DomainEventsInterceptor)` wiring the existing outbox depends on.
+  The chosen route is purely additive, which is what lets both paths run at once.
 - `Marten` is deliberately **not** adopted. Wolverine's PostgreSQL durability does not require
   it.
 

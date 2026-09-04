@@ -3,6 +3,7 @@ using JasperFx;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Wolverine;
+using Wolverine.EntityFrameworkCore;
 using Wolverine.Postgresql;
 
 namespace AiFramework.Infrastructure.EventPath;
@@ -52,6 +53,14 @@ public static class WolverineEventPath
                 // envelope tables are outside `dotnet ef migrations` by design (ADR 0005).
                 opts.PersistMessagesWithPostgresql(connectionString, EnvelopeSchema)
                     .OverrideAutoCreateResources(AutoCreate.CreateOrUpdate);
+
+                // What makes IDbContextOutbox<AiFrameworkDbContext> available: messages published
+                // through it are held until the DbContext's transaction commits, and discarded if
+                // it does not. Deliberately NOT AddDbContextWithWolverineIntegration, which would
+                // replace this repo's own AddDbContext registration (and force its options to a
+                // singleton lifetime). This way the existing registration in
+                // InfrastructureRegistration — interceptor and all — is untouched.
+                opts.UseEntityFrameworkCoreTransactions();
             }
             else
             {
