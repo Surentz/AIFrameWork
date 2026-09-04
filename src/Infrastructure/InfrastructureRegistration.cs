@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using AiFramework.Domain.Orders;
+using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Messaging;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
@@ -65,6 +66,10 @@ public static class InfrastructureRegistration
         services.AddSingleton<IClock, SystemClock>();
 
         services.AddOutbox();
+
+        // ADR 0005 spike: registers only what the Wolverine handler needs. The Wolverine host
+        // itself is wired in Program.cs, because UseWolverine hooks IHostBuilder, not IServiceCollection.
+        services.AddWolverineEventPathServices();
 
         return services.AddMessaging();
     }

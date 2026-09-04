@@ -16,10 +16,20 @@ public sealed class HealthTests : IClassFixture<WebApplicationFactory<Program>>
     {
         ArgumentNullException.ThrowIfNull(factory);
 
-        _factory = factory.WithWebHostBuilder(
-            builder => builder.UseSetting(
+        _factory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting(
                 "ConnectionStrings:Default",
-                "Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder"));
+                "Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder");
+
+            // A placeholder connection string stopped being enough once the ADR 0005 Wolverine
+            // spike was wired in: durable Wolverine migrates its envelope schema during host
+            // startup, so the host stopped booting here at all ("Failed to connect to
+            // 127.0.0.1:5432") even though /health never touches the database. MediatorOnly
+            // turns off envelope storage and with it that startup connection, which keeps this
+            // test container-free — the property it was written to have.
+            builder.UseSetting("Wolverine:Durable", "false");
+        });
     }
 
     [Fact]

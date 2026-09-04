@@ -1,5 +1,6 @@
 using AiFramework.Api;
 using AiFramework.Infrastructure;
+using AiFramework.Infrastructure.EventPath;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +18,15 @@ builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddInfrastructure(connectionString);
+
+// ADR 0005 spike: Wolverine's durable event path, alongside the existing outbox rather than
+// replacing it. UseWolverine hooks the host builder, so this cannot go through AddInfrastructure.
+builder.Host.AddWolverineEventPath(
+    connectionString,
+    // Durable Wolverine connects to Postgres while the host starts, so a host with no reachable
+    // database no longer boots. Configurable so a test that deliberately runs without one
+    // (HealthTests) can still start the app. Defaults to durable everywhere else.
+    durable: builder.Configuration.GetValue("Wolverine:Durable", defaultValue: true));
 
 var app = builder.Build();
 
