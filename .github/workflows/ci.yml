@@ -140,6 +140,14 @@ jobs:
 
       - run: npm ci --prefix frontend
 
+      # A separate step, not folded into the msbuild call below. `dotnet msbuild` does not
+      # restore implicitly the way `dotnet build` does, and this job fails without it
+      # (NETSDK1004, assets file not found). Nor can it be `-t:"Restore;Build;..."`: MSBuild
+      # evaluates the project once, before Restore writes NuGet's props, so the OpenAPI XML
+      # comment source generator then fails with CS9137 about interceptors. Restore first, in
+      # its own invocation.
+      - run: dotnet restore src/Api
+
       # BOTH variables are required, and Task 1 proved why. The generator runs the application:
       # without a connection string it dies on Program.cs's startup guard ("ConnectionStrings:
       # Default is not configured"), and with one but still durable, Wolverine's startup
@@ -233,3 +241,4 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+

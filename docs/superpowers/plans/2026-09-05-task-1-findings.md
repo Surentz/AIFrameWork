@@ -229,3 +229,34 @@ nothing breaks.
 `consistent-indexed-object-style` under `--max-warnings 0`. It is added to the existing
 `ignores` list beside `dist/`, `coverage/` and `playwright-report/` — declaring it as
 non-authored output, not relaxing the rule for hand-written code.
+
+---
+
+## Sixth correction, found by CI — `dotnet msbuild` does not restore
+
+The `contract` job failed on its first real run:
+
+```
+error NETSDK1004: Assets file '/home/runner/.../src/Api/obj/project.assets.json' not found.
+Run a NuGet package restore to generate this file.
+```
+
+It passed locally only because `obj/` was already warm. `dotnet msbuild` does not restore
+implicitly the way `dotnet build` does, and the documented regenerate command had the same bug —
+it would have failed on any fresh clone.
+
+`-t:"Restore;Build;GenerateOpenApiDocuments"` is **not** the fix. Verified from a cold `obj/`, it
+fails differently:
+
+```
+error CS9137: The 'interceptors' feature is not enabled in this namespace. Add
+'<InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.AspNetCore.OpenApi.Generated</InterceptorsNamespaces>'
+```
+
+MSBuild evaluates the project once, before Restore writes NuGet's props, so the OpenAPI
+XML-comment source generator never sees the properties it needs. Restore has to be its own
+invocation — which is exactly why `dotnet build` runs it as a separate phase internally.
+
+The fix is a separate `dotnet restore src/Api` step, in CI and in the documented command.
+Verified from a fully cold `obj/` and `bin/`: restore, then `-t:"Build;GenerateOpenApiDocuments"`,
+produces a byte-identical document.
