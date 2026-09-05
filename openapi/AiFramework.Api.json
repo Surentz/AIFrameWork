@@ -324,7 +324,7 @@
             "format": "int32"
           }
         },
-        "description": "Business-rule validation (non-empty, max length, positive quantity) is owned by\r\n`PlaceOrderValidator` in the validation behavior — not duplicated here as\r\nDataAnnotations. See `src/Api/CLAUDE.md`."
+        "description": "Business-rule validation (non-empty, max length, positive quantity) is owned by\n`PlaceOrderValidator` in the validation behavior — not duplicated here as\nDataAnnotations. See `src/Api/CLAUDE.md`."
       },
       "ProblemDetails": {
         "type": "object",
