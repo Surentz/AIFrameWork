@@ -145,6 +145,26 @@ tests fail with "The server has not been started".
 
 See ADR 0005.
 
+## The API contract
+
+`openapi/AiFramework.Api.json` is generated from the running application at build time and **committed**.
+`frontend/src/api/schema.d.ts` is generated from it. Both are checked by CI.
+
+**After changing a controller, a DTO, or a `[ProducesResponseType]`, regenerate both:**
+
+```bash
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
+  Wolverine__Durable=false \
+  dotnet build src/Api
+npm run generate:api --prefix frontend
+```
+
+Then commit the result. **Both environment variables are required**, and neither is defensive:
+document generation runs the application, so without a connection string it fails on the startup
+guard in `Program.cs`, and with one but still durable, Wolverine's startup migration dials
+Postgres (ADR 0005). The connection string is never actually opened — it only has to be
+non-empty.
+
 ## CI
 
 `.github/workflows/ci.yml` runs what `/verify` runs, on every push to `main` and every pull
