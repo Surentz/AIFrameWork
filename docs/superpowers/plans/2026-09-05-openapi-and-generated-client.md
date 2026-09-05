@@ -23,6 +23,46 @@
 - **Commands:** backend `dotnet build`, `dotnet test`; frontend `npm run <script> --prefix frontend`.
 - **Never commit without the build and the full test suite green.**
 
+## Guardrails for executors
+
+**Every one of these means: stop and report. Do not improvise past a blocked step.**
+A task reported as blocked is a good outcome. A task reported as green that quietly defeated
+its own purpose is the failure this section exists to prevent.
+
+**Never suppress a diagnostic to reach green.** No new `#pragma warning disable`, no
+`severity = none` in `.editorconfig`, no `<NoWarn>`. This repo runs SonarAnalyzer, Meziantou
+and AsyncFixer alongside the .NET analyzers under warnings-as-errors, and genuine catch-22s
+happen — one analyzer demanding `static` while another forbids it is a real case that has
+already occurred here. When you hit one, report the exact diagnostic IDs and what each demands.
+Do not pick a suppression yourself.
+
+**Never weaken TypeScript to make it compile.** No `as any`, no `@ts-expect-error`, no `!`
+non-null assertion, no edits to `tsconfig.*.json` or the eslint config. The strictness
+(`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) is what makes the
+generated types load-bearing; loosening it to accommodate them destroys the feature while
+leaving the build green.
+
+**Never hand-edit a generated file.** `openapi/v1.json`, `frontend/src/api/schema.d.ts` and
+`src/Api/Internal/Generated/**` are outputs. If one is wrong, the generator or its input is
+wrong. Editing the output makes CI's drift job fail and hides the real cause.
+
+**Never delete, skip or weaken an existing test** to make a change pass. If an existing test
+now fails, that is a finding — report it with the failure output. The 116 tests currently
+passing are the baseline.
+
+**Never add a package that is not named in Global Constraints.** If a step seems to need one,
+report that instead.
+
+**No sleeps in tests.** No `Task.Delay`, no `Thread.Sleep`, no retry-until-timeout —
+`tests/CLAUDE.md` forbids them. Deterministic waits only.
+
+**When a step's expected output does not match, stop.** Every step states what to expect
+precisely so that a mismatch is informative. A mismatch is a signal, not an obstacle to route
+around.
+
+**Report what actually happened.** If a step was skipped, say so. If tests fail, quote the
+output. Never describe work as complete that was not run.
+
 ---
 
 ### Task 1: Prove build-time document generation can run without a database
