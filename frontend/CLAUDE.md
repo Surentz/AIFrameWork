@@ -74,3 +74,30 @@ nothing. Durable Wolverine migrates its envelope schema during host startup (ADR
 now means the API does not boot at all, and Playwright reports only "Process from
 config.webServer was not able to start. Exit code: 1". Teardown stays `globalTeardown`, which
 runs late by design.
+
+## The API contract
+
+`src/api/schema.d.ts` is **generated** from `openapi/AiFramework.Api.json` at the repo root —
+never edit it. `features/orders/types.ts` is a thin set of aliases over it, which is why a
+backend rename now breaks the frontend build instead of breaking it at runtime.
+
+Regenerate after any backend contract change:
+
+```bash
+npm run generate:api
+```
+
+CI regenerates and fails on a diff, so a stale `schema.d.ts` cannot merge.
+
+Three things about this worth knowing before you change it:
+
+- **The generator is not a devDependency, deliberately.** Every `openapi-typescript` 7.x declares
+  `peer typescript@"^5.x"` and this repo is on TypeScript 6, so `npm install` refuses.
+  `--legacy-peer-deps` installs but re-resolves the tree and breaks `@testing-library/react`. It
+  is a build-time CLI rather than something the app imports, so `generate:api` runs it through
+  `npx --yes openapi-typescript@7.13.0` — version pinned, dependency tree untouched.
+- **`quantity` is typed `number | string`, and that is correct.** ASP.NET Core's web JSON
+  defaults set `AllowReadingFromString`, so the API genuinely accepts `"5"` as well as `5` and
+  the document says so. Do not narrow it to `number` to make it look tidier.
+- **`schema.d.ts` is in eslint's `ignores`**, beside `dist/`. It is generated output, so a style
+  rule failing on it is answered by not linting it, never by relaxing the rule.

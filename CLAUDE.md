@@ -155,7 +155,7 @@ See ADR 0005.
 ```bash
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+  dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 npm run generate:api --prefix frontend
 ```
 

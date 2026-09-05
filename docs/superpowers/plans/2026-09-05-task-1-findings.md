@@ -133,7 +133,7 @@ escalated instead.
 ```bash
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+  dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 ```
 
 Verified end to end: a plain `dotnet build` succeeds again with no environment variables,
@@ -155,3 +155,77 @@ absent from the output, so its `PrivateAssets` works. Task 3 Step 5 and Task 7 S
 Note for later: Scalar ships 1.4MB into production despite being mapped only in Development,
 because the code references its types and so must compile in Release. Making it Debug-only would
 need `#if` around the mapping. Not worth it for 1.4MB, but worth knowing it is there.
+
+---
+
+## Second correction, found during Task 5 — the target alone generates from a STALE assembly
+
+`dotnet msbuild src/Api -t:GenerateOpenApiDocuments` does **not** rebuild first. It reads the
+already-compiled DLL, so after a source change it silently regenerates the *old* contract.
+
+Caught by Task 5's Step 8 drift proof, which is the only step that tests the feature rather than
+the plumbing: a backend property was renamed, the document was regenerated, and it came back
+unchanged. Without that step this would have shipped, and the committed document would have
+drifted from the code the first time anyone edited a DTO — with CI's drift job reporting
+"no change" and confirming the wrong answer.
+
+**The command is therefore `-t:"Build;GenerateOpenApiDocuments"`, not `-t:GenerateOpenApiDocuments`.**
+Verified: touch a source file, run the combined form, and the document reflects the change.
+Corrected in `CLAUDE.md`, the csproj comment, this plan, and the CI job.
+
+## Third correction — Task 5's Step 8 as written cannot work
+
+The plan's drift demonstration renames `Sku` in `OrderDtos.cs`. That **breaks the C# build**:
+`OrdersController` maps `.Sku` in three places, so nothing regenerates and the frontend is never
+reached. The step was written assuming the backend would still compile.
+
+The demonstration that does work changes the *wire* contract while leaving C# untouched:
+
+```csharp
+[JsonPropertyName("productCode")]
+public required string Sku { get; init; }
+```
+
+on `OrderResponse` only. C# still compiles, the document changes, the generated types change, and
+the frontend build fails with exactly:
+
+```
+src/features/orders/OrderDetail.tsx(18,17): error TS2339: Property 'sku' does not exist on type
+  '{ readonly id: string; readonly productCode: string; ... }'.
+src/test/handlers.ts(10,3): error TS2353: Object literal may only specify known properties, and
+  'sku' does not exist in type '{ readonly id: string; readonly productCode: string; ... }'.
+```
+
+Both failures matter. `OrderDetail.tsx` is the app; `handlers.ts` is the MSW fixture — the exact
+place drift used to hide, since a stale fixture kept the tests green while the app broke. Typing
+that fixture is what converts a silent failure into a build error.
+
+Reverting produced a byte-identical document and schema, so the round-trip is clean.
+
+## Fourth correction — openapi-typescript cannot be a devDependency here
+
+Every 7.x version, including 7.13.0, declares `peer typescript@"^5.x"`. This repo pins
+TypeScript 6.0.3, so `npm install` refuses.
+
+`--legacy-peer-deps` is **not** an acceptable answer: it installs, but re-resolves the tree and
+breaks `@testing-library/react`, failing six test files with
+`Module '"@testing-library/react"' has no exported member 'screen'`. That is npm's warned-about
+"potentially broken dependency resolution", and it has nothing to do with this feature.
+
+The generator is a build-time CLI, not a library the app imports, so it does not need to be in
+the dependency tree at all. The `generate:api` script runs it through `npx --yes
+openapi-typescript@7.13.0`, which pins the version, leaves `package.json` and
+`package-lock.json` untouched, and produces byte-identical output.
+
+## Fifth item — two accepted deviations, approved before proceeding
+
+**`quantity` generates as `number | string`.** Not a generator fault: ASP.NET Core's
+`JsonSerializerDefaults.Web` sets `NumberHandling = AllowReadingFromString`, so the document
+honestly declares `type: ["integer","string"]` and the API really does accept `"5"`. Accepted as
+the truthful contract rather than narrowed. Nothing in the frontend does arithmetic on it, so
+nothing breaks.
+
+**ESLint ignores the generated file.** `src/api/schema.d.ts` trips
+`consistent-indexed-object-style` under `--max-warnings 0`. It is added to the existing
+`ignores` list beside `dist/`, `coverage/` and `playwright-report/` — declaring it as
+non-authored output, not relaxing the rule for hand-written code.

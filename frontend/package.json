@@ -10,6 +10,7 @@
     "test": "vitest",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
+    "generate:api": "npx --yes openapi-typescript@7.13.0 ../openapi/AiFramework.Api.json --immutable --output src/api/schema.d.ts",
     "e2e": "node e2e/prepare-database.ts && playwright test"
   },
   "dependencies": {

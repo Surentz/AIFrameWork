@@ -122,7 +122,7 @@ builder.Services.AddOpenApi();
 ```bash
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+  dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 ```
 
 Expected outcome is unknown — that is the point. Record which happens:
@@ -136,7 +136,7 @@ Expected outcome is unknown — that is the point. Record which happens:
 Change `OpenApiGenerateDocumentsOnBuild` to `false` in the csproj, then invoke the target directly with the environment set:
 
 ```bash
-Wolverine__Durable=false dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+Wolverine__Durable=false dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 ```
 
 Expected: the document appears at `openapi/AiFramework.Api.json` without a database.
@@ -410,7 +410,7 @@ Add to `src/Api/AiFramework.Api.csproj`, inside the existing `<PropertyGroup>` t
 docker compose down
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+  dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 ls -la openapi/
 ```
 
@@ -450,7 +450,7 @@ In `CLAUDE.md`, add a section after the existing `## Wolverine codegen` section:
 ```bash
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+  dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 npm run generate:api --prefix frontend
 ```
 
@@ -705,7 +705,7 @@ This is the only step that tests the feature rather than the plumbing. Temporari
 sed -i 's/public required string Sku { get; init; }/public required string ProductCode { get; init; }/' src/Api/Orders/OrderDtos.cs
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+  dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 npm run generate:api --prefix frontend
 npm run build --prefix frontend
 ```
@@ -718,7 +718,7 @@ Before this change, that rename would have left the frontend compiling and its t
 git checkout -- src/Api/Orders/OrderDtos.cs
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+  dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 npm run generate:api --prefix frontend
 git diff --stat
 ```
@@ -786,7 +786,7 @@ In `.github/workflows/ci.yml`, add after the existing `codegen` job and before `
         env:
           ConnectionStrings__Default: 'Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y'
           Wolverine__Durable: 'false'
-        run: dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+        run: dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 
       - name: Regenerate the TypeScript schema
         run: npm run generate:api --prefix frontend

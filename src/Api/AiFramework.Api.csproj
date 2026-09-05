@@ -13,7 +13,7 @@
          an explicit target, run by the two commands in the root CLAUDE.md and by CI's contract
          job:
 
-           dotnet msbuild src/Api -t:GenerateOpenApiDocuments -->
+           dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments" -->
     <OpenApiDocumentsDirectory>$(MSBuildThisFileDirectory)../../openapi</OpenApiDocumentsDirectory>
     <OpenApiGenerateDocumentsOnBuild>false</OpenApiGenerateDocumentsOnBuild>
   </PropertyGroup>
