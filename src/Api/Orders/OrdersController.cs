@@ -9,6 +9,7 @@ namespace AiFramework.Api.Orders;
 public sealed class OrdersController(
     ICommandDispatcher commands, IQueryDispatcher queries) : ControllerBase
 {
+    /// <summary>Places an order and returns its new identifier.</summary>
     [HttpPost]
     [ProducesResponseType<Guid>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -24,6 +25,7 @@ public sealed class OrdersController(
             : result.Problem(HttpContext);
     }
 
+    /// <summary>Lists orders newest first, one page at a time.</summary>
     [HttpGet]
     [ProducesResponseType<OrderPageResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -50,6 +52,7 @@ public sealed class OrdersController(
             : result.Problem(HttpContext);
     }
 
+    /// <summary>Fetches a single order by its identifier.</summary>
     [HttpGet("{id:guid}")]
     [ProducesResponseType<OrderResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
