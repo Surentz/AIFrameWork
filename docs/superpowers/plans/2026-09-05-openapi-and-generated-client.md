@@ -4,7 +4,7 @@
 
 **Goal:** Serve a browsable OpenAPI document in Development, and generate the React app's TypeScript payload types from it so the frontend cannot silently disagree with the backend contract.
 
-**Architecture:** The built-in .NET 10 OpenAPI generator produces the document; Scalar renders it, both behind an `IsDevelopment()` check. `Microsoft.Extensions.ApiDescription.Server` writes the same document to a committed `openapi/v1.json` at build time, and `openapi-typescript` turns that file into `frontend/src/api/schema.d.ts` (types only, no runtime code). Both generated artifacts are committed and guarded by a CI drift job, matching the existing Wolverine codegen pattern.
+**Architecture:** The built-in .NET 10 OpenAPI generator produces the document; Scalar renders it, both behind an `IsDevelopment()` check. `Microsoft.Extensions.ApiDescription.Server` writes the same document to a committed `openapi/AiFramework.Api.json` at build time, and `openapi-typescript` turns that file into `frontend/src/api/schema.d.ts` (types only, no runtime code). Both generated artifacts are committed and guarded by a CI drift job, matching the existing Wolverine codegen pattern.
 
 **Tech Stack:** .NET 10 / ASP.NET Core, `Microsoft.AspNetCore.OpenApi`, `Scalar.AspNetCore`, `Microsoft.Extensions.ApiDescription.Server`, `openapi-typescript`, React 19 + TypeScript, xUnit + FluentAssertions, Vitest + MSW.
 
@@ -42,7 +42,7 @@ non-null assertion, no edits to `tsconfig.*.json` or the eslint config. The stri
 generated types load-bearing; loosening it to accommodate them destroys the feature while
 leaving the build green.
 
-**Never hand-edit a generated file.** `openapi/v1.json`, `frontend/src/api/schema.d.ts` and
+**Never hand-edit a generated file.** `openapi/AiFramework.Api.json`, `frontend/src/api/schema.d.ts` and
 `src/Api/Internal/Generated/**` are outputs. If one is wrong, the generator or its input is
 wrong. Editing the output makes CI's drift job fail and hides the real cause.
 
@@ -67,6 +67,11 @@ output. Never describe work as complete that was not run.
 
 ### Task 1: Prove build-time document generation can run without a database
 
+> **DONE — 2026-09-05.** Option A works, but needs **two** environment variables, not one.
+> Findings, including two corrections already applied to the tasks below:
+> `docs/superpowers/plans/2026-09-05-task-1-findings.md`. Kept here as the record of why
+> Task 3 looks the way it does.
+
 This is a **spike**, not a feature. Its output is an answer that decides Task 3's shape. Nothing built here is kept unless it happens to be the answer.
 
 The spec's highest risk: `Microsoft.Extensions.ApiDescription.Server` generates the document by *running the application*, and durable Wolverine opens a PostgreSQL connection during host startup (ADR 0005). A build would therefore need a database — fatal in CI. The known mitigation is `Wolverine__Durable=false`, but how that value reaches an MSBuild-spawned process is unverified.
@@ -78,7 +83,7 @@ The spec's highest risk: `Microsoft.Extensions.ApiDescription.Server` generates 
 - Consumes: nothing.
 - Produces: a decision recorded in the task's commit message — which of options A/B/C below Task 3 uses. No code.
 
-- [ ] **Step 1: Stop the dev database so the probe cannot pass by accident**
+- [x] **Step 1: Stop the dev database so the probe cannot pass by accident**
 
 ```bash
 docker compose down
@@ -87,7 +92,7 @@ docker ps --format "{{.Names}}"
 
 Expected: no `aiframework-dev-postgres-1`. If it is still running, the probe proves nothing — a build could reach the database and you would not learn whether the mitigation works.
 
-- [ ] **Step 2: Add the package and enable document generation (Option A — plain build)**
+- [x] **Step 2: Add the package and enable document generation (Option A — plain build)**
 
 In `src/Api/AiFramework.Api.csproj`, inside the existing `<ItemGroup>` with the `ProjectReference` entries, add a new `<ItemGroup>`:
 
@@ -112,10 +117,12 @@ Also add the minimum registration needed for a document to exist — in `src/Api
 builder.Services.AddOpenApi();
 ```
 
-- [ ] **Step 3: Build with the environment variable set, and see what happens**
+- [x] **Step 3: Build with the environment variable set, and see what happens**
 
 ```bash
-Wolverine__Durable=false dotnet build src/Api -c Debug
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
+  Wolverine__Durable=false \
+  dotnet build src/Api -c Debug
 ```
 
 Expected outcome is unknown — that is the point. Record which happens:
@@ -124,7 +131,7 @@ Expected outcome is unknown — that is the point. Record which happens:
 - **Build fails with `Failed to connect to 127.0.0.1:55433`** → the environment did not reach the spawned process. Go to Step 4.
 - **Build fails some other way** → read the error; it may be an unrelated wiring problem in Step 2.
 
-- [ ] **Step 4: If Option A failed, try Option B — generation off the build, on an explicit target**
+- [x] **Step 4: If Option A failed, try Option B — generation off the build, on an explicit target**
 
 Change `OpenApiGenerateDocumentsOnBuild` to `false` in the csproj, then invoke the target directly with the environment set:
 
@@ -132,9 +139,9 @@ Change `OpenApiGenerateDocumentsOnBuild` to `false` in the csproj, then invoke t
 Wolverine__Durable=false dotnet msbuild src/Api -t:GenerateOpenApiDocuments
 ```
 
-Expected: the document appears at `openapi/v1.json` without a database.
+Expected: the document appears at `openapi/AiFramework.Api.json` without a database.
 
-- [ ] **Step 5: If Option B failed, try Option C — set the value where the app reads it, not where MSBuild runs**
+- [x] **Step 5: If Option B failed, try Option C — set the value where the app reads it, not where MSBuild runs**
 
 Revert the environment approach and instead make the *application* default to non-durable when it is being run for document generation. `ApiDescription.Server` invokes the app through `GetDocument.Insider`; check for its marker rather than guessing. Inspect what the app receives:
 
@@ -145,7 +152,7 @@ grep -iE "getdocument|insider|--document" /tmp/probe.log | head
 
 If a distinguishable signal exists (an argument, an assembly, an environment variable), Option C is: read it in `Program.cs` and pass `durable: false` to `AddWolverineEventPath`. Record the exact signal.
 
-- [ ] **Step 6: Revert everything from this task**
+- [x] **Step 6: Revert everything from this task**
 
 ```bash
 git checkout -- src/Api/AiFramework.Api.csproj src/Api/Program.cs
@@ -154,7 +161,7 @@ git status --short
 
 Expected: clean. This was a probe; Task 2 and Task 3 build the real thing.
 
-- [ ] **Step 7: Record the decision**
+- [x] **Step 7: Record the decision**
 
 Create `docs/superpowers/plans/2026-09-05-task-1-findings.md` with: which option worked, the exact command or code that made it work, and the verbatim error from any that did not.
 
@@ -366,12 +373,12 @@ git commit -m "feat(api): serve an OpenAPI document and Scalar UI in Development
 
 **Files:**
 - Modify: `src/Api/AiFramework.Api.csproj`
-- Create: `openapi/v1.json` (generated, committed)
+- Create: `openapi/AiFramework.Api.json` (generated, committed)
 - Modify: `CLAUDE.md`
 
 **Interfaces:**
 - Consumes: `AddOpenApi()` from Task 2.
-- Produces: `openapi/v1.json` at the repository root — the input Task 5's generator reads, and the file Task 7's drift job regenerates.
+- Produces: `openapi/AiFramework.Api.json` at the repository root — the input Task 5's generator reads, and the file Task 7's drift job regenerates.
 
 - [ ] **Step 1: Add the generator package**
 
@@ -401,16 +408,18 @@ Add to `src/Api/AiFramework.Api.csproj`, inside the existing `<PropertyGroup>` t
 
 ```bash
 docker compose down
-Wolverine__Durable=false dotnet build src/Api -c Debug
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
+  Wolverine__Durable=false \
+  dotnet build src/Api -c Debug
 ls -la openapi/
 ```
 
-Expected: `openapi/v1.json` exists, and the build succeeded with no database running. If it fails with `Failed to connect`, Task 1's recorded option was not applied correctly — re-read its findings file.
+Expected: `openapi/AiFramework.Api.json` exists, and the build succeeded with no database running. If it fails with `Failed to connect`, Task 1's recorded option was not applied correctly — re-read its findings file.
 
 - [ ] **Step 4: Sanity-check the document**
 
 ```bash
-node -e "const d=require('./openapi/v1.json');console.log('paths:',Object.keys(d.paths).join(', '));console.log('schemas:',Object.keys(d.components.schemas).join(', '))"
+node -e "const d=require('./openapi/AiFramework.Api.json');console.log('paths:',Object.keys(d.paths).join(', '));console.log('schemas:',Object.keys(d.components.schemas).join(', '))"
 ```
 
 Expected paths include `/api/orders` and `/api/orders/{id}`. Expected schemas include `PlaceOrderRequest`, `OrderResponse`, `OrderListItemResponse`, `OrderPageResponse`.
@@ -433,19 +442,23 @@ In `CLAUDE.md`, add a section after the existing `## Wolverine codegen` section:
 ```markdown
 ## The API contract
 
-`openapi/v1.json` is generated from the running application at build time and **committed**.
+`openapi/AiFramework.Api.json` is generated from the running application at build time and **committed**.
 `frontend/src/api/schema.d.ts` is generated from it. Both are checked by CI.
 
 **After changing a controller, a DTO, or a `[ProducesResponseType]`, regenerate both:**
 
 ```bash
-Wolverine__Durable=false dotnet build src/Api
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
+  Wolverine__Durable=false \
+  dotnet build src/Api
 npm run generate:api --prefix frontend
 ```
 
-Then commit the result. The `Wolverine__Durable=false` is not optional: document generation
-runs the application, and durable Wolverine connects to Postgres during host startup (ADR 0005),
-so without it the build needs a database.
+Then commit the result. **Both environment variables are required**, and neither is defensive:
+document generation runs the application, so without a connection string it fails on the startup
+guard in `Program.cs`, and with one but still durable, Wolverine's startup migration dials
+Postgres (ADR 0005). The connection string is never actually opened — it only has to be
+non-empty.
 ```
 
 - [ ] **Step 7: Full verification and commit**
@@ -453,8 +466,8 @@ so without it the build needs a database.
 ```bash
 docker compose up -d --wait
 dotnet build -c Debug && dotnet test -c Debug --no-build
-git add src/Api/AiFramework.Api.csproj openapi/v1.json CLAUDE.md
-git commit -m "feat(api): emit openapi/v1.json at build time and commit it"
+git add src/Api/AiFramework.Api.csproj openapi/AiFramework.Api.json CLAUDE.md
+git commit -m "feat(api): emit openapi/AiFramework.Api.json at build time and commit it"
 ```
 
 Expected: 119/119.
@@ -573,7 +586,7 @@ git commit -m "test(api): pin the ProblemDetails fields the frontend reads"
 - Modify: `frontend/CLAUDE.md`
 
 **Interfaces:**
-- Consumes: `openapi/v1.json` from Task 3, and the schema names confirmed in Task 3 Step 4.
+- Consumes: `openapi/AiFramework.Api.json` from Task 3, and the schema names confirmed in Task 3 Step 4.
 - Produces: `frontend/src/api/schema.d.ts` exporting a `components` type. `types.ts` continues to export `Order` and `OrderPage` with the same names, so no component or test import changes.
 
 - [ ] **Step 1: Add the generator**
@@ -595,7 +608,7 @@ Expected: `dev: 7.13.0 | runtime: undefined`.
 In `frontend/package.json`, add to `"scripts"`, after `"format"`:
 
 ```json
-    "generate:api": "openapi-typescript ../openapi/v1.json --immutable --output src/api/schema.d.ts",
+    "generate:api": "openapi-typescript ../openapi/AiFramework.Api.json --immutable --output src/api/schema.d.ts",
 ```
 
 `--immutable` is load-bearing: it emits `readonly` members, which is what the hand-written types being replaced already are and what `exactOptionalPropertyTypes` needs.
@@ -671,7 +684,7 @@ In `frontend/CLAUDE.md`, append:
 ```markdown
 ## The API contract
 
-`src/api/schema.d.ts` is **generated** from `openapi/v1.json` at the repo root — do not edit it.
+`src/api/schema.d.ts` is **generated** from `openapi/AiFramework.Api.json` at the repo root — do not edit it.
 `features/orders/types.ts` is a thin set of aliases over it, which is why a backend rename
 breaks the frontend build instead of breaking it at runtime.
 
@@ -690,7 +703,9 @@ This is the only step that tests the feature rather than the plumbing. Temporari
 
 ```bash
 sed -i 's/public required string Sku { get; init; }/public required string ProductCode { get; init; }/' src/Api/Orders/OrderDtos.cs
-Wolverine__Durable=false dotnet build src/Api -c Debug
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
+  Wolverine__Durable=false \
+  dotnet build src/Api -c Debug
 npm run generate:api --prefix frontend
 npm run build --prefix frontend
 ```
@@ -701,7 +716,9 @@ Before this change, that rename would have left the frontend compiling and its t
 
 ```bash
 git checkout -- src/Api/Orders/OrderDtos.cs
-Wolverine__Durable=false dotnet build src/Api -c Debug
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
+  Wolverine__Durable=false \
+  dotnet build src/Api -c Debug
 npm run generate:api --prefix frontend
 git diff --stat
 ```
@@ -723,7 +740,7 @@ git commit -m "feat(frontend): generate API types from the OpenAPI document"
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
-- Consumes: `openapi/v1.json` (Task 3) and `frontend/src/api/schema.d.ts` (Task 5).
+- Consumes: `openapi/AiFramework.Api.json` (Task 3) and `frontend/src/api/schema.d.ts` (Task 5).
 - Produces: a CI job named `api contract is current`.
 
 - [ ] **Step 1: Add the job**
@@ -760,11 +777,14 @@ In `.github/workflows/ci.yml`, add after the existing `codegen` job and before `
 
       - run: npm ci --prefix frontend
 
-      # Wolverine__Durable=false is required, not defensive: generating the document runs the
-      # application, and durable Wolverine connects to Postgres during host startup (ADR 0005).
-      # There is no database in this job.
+      # BOTH variables are required, and Task 1 proved why. The generator runs the application:
+      # without a connection string it dies on Program.cs's startup guard ("ConnectionStrings:
+      # Default is not configured"), and with one but still durable, Wolverine's startup
+      # migration dials Postgres (ADR 0005). There is no database in this job. The connection
+      # string is never opened - it only has to be non-empty.
       - name: Regenerate the OpenAPI document
         env:
+          ConnectionStrings__Default: 'Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y'
           Wolverine__Durable: 'false'
         run: dotnet build src/Api -c Debug
 
@@ -774,7 +794,7 @@ In `.github/workflows/ci.yml`, add after the existing `codegen` job and before `
       - name: Fail if either artifact is stale
         run: |
           if ! git diff --exit-code -- openapi/ frontend/src/api/schema.d.ts; then
-            echo "::error::The API contract is out of date. Run 'Wolverine__Durable=false dotnet build src/Api' and 'npm run generate:api --prefix frontend', then commit the result."
+            echo "::error::The API contract is out of date. Regenerate it with the two commands under 'The API contract' in CLAUDE.md, then commit the result."
             exit 1
           fi
 ```
@@ -865,7 +885,7 @@ Task 5 Step 8 demonstrates this: renaming `Sku` now fails the frontend build.
 
 - `/openapi/v1.json` and a Scalar UI at `/scalar/v1`, **Development only**, asserted in both
   directions.
-- `openapi/v1.json` emitted at build time and committed.
+- `openapi/AiFramework.Api.json` emitted at build time and committed.
 - `frontend/src/api/schema.d.ts` generated from it — types only, no runtime dependency.
 - A CI job failing on stale artifacts, in the same shape as the Wolverine codegen guard.
 - A test pinning the `ProblemDetails` fields the frontend reads, which OpenAPI cannot describe
