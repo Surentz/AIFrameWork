@@ -82,19 +82,7 @@ public static class WolverineEventPath
         {
             if (durable)
             {
-                // CreateOrUpdate, not All: All drops and rebuilds, which would be catastrophic
-                // pointed at a real database. Wolverine patches its own schema on startup — the
-                // envelope tables are outside `dotnet ef migrations` by design (ADR 0005).
-                opts.PersistMessagesWithPostgresql(connectionString, EnvelopeSchema)
-                    .OverrideAutoCreateResources(AutoCreate.CreateOrUpdate);
-
-                // What makes IDbContextOutbox<AiFrameworkDbContext> available: messages published
-                // through it are held until the DbContext's transaction commits, and discarded if
-                // it does not. Deliberately NOT AddDbContextWithWolverineIntegration, which would
-                // replace this repo's own AddDbContext registration (and force its options to a
-                // singleton lifetime). This way the existing registration in
-                // InfrastructureRegistration — interceptor and all — is untouched.
-                opts.UseEntityFrameworkCoreTransactions();
+                ConfigureDurability(opts, connectionString);
             }
             else
             {
@@ -125,6 +113,38 @@ public static class WolverineEventPath
                 .DisableConventionalDiscovery()
                 .IncludeType<OrderPlacedNotificationHandler>();
         });
+    }
+
+    /// <summary>
+    /// The durable half of the configuration. Extracted so the UseWolverine lambda stays under
+    /// Meziantou's MA0051 length limit — the rule is satisfied rather than suppressed.
+    /// </summary>
+    private static void ConfigureDurability(WolverineOptions opts, string connectionString)
+    {
+        // CreateOrUpdate, not All: All drops and rebuilds, which would be catastrophic
+        // pointed at a real database. Wolverine patches its own schema on startup — the
+        // envelope tables are outside `dotnet ef migrations` by design (ADR 0005).
+        opts.PersistMessagesWithPostgresql(connectionString, EnvelopeSchema)
+            .OverrideAutoCreateResources(AutoCreate.CreateOrUpdate);
+
+        // What makes IDbContextOutbox<AiFrameworkDbContext> available: messages published
+        // through it are held until the DbContext's transaction commits, and discarded if
+        // it does not. Deliberately NOT AddDbContextWithWolverineIntegration, which would
+        // replace this repo's own AddDbContext registration (and force its options to a
+        // singleton lifetime). This way the existing registration in
+        // InfrastructureRegistration — interceptor and all — is untouched.
+        opts.UseEntityFrameworkCoreTransactions();
+
+        // Local queues are BufferedInMemory unless enrolled, which means a message sitting in
+        // one when the process dies is gone. That is not an exotic failure on either deployment
+        // target: IIS recycles app pools on a schedule and shuts the worker down after an idle
+        // timeout, and Kubernetes reschedules pods for deploys, drains and scaling. Both kill
+        // BackgroundServices, and this app's message handling is one.
+        //
+        // Measured before this line existed, via ServiceCapabilities.MessagingEndpoints:
+        //   local://...orderplacednotification/  mode=BufferedInMemory
+        // and Durable after. WolverineLocalQueueDurabilityTests pins it.
+        opts.Policies.UseDurableLocalQueues();
     }
 
     /// <summary>Registers what the spike's handler needs. Called from AddInfrastructure.</summary>
