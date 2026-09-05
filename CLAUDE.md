@@ -129,7 +129,8 @@ dotnet run --project src/Api -- codegen write
 Then commit the result. Debug does not need this — it still compiles adapters at startup — which
 is exactly the trap: stale generated code leaves Debug green and the build succeeding, and breaks
 only in Release, at startup. `WolverineCodegenTests` exists to catch that in the Debug suite; if
-it fails, the fix is the command above.
+it fails, the fix is the command above. CI additionally re-runs `codegen write` and fails on
+any diff, catching generated code that still loads but has drifted.
 
 `Program.cs` therefore ends in `RunJasperFxCommands(args)` rather than `RunAsync()`, which is what
 makes `codegen write` reachable. Ordinary `dotnet run` is unaffected. Tests using
@@ -138,6 +139,19 @@ assembly in `tests/Api.IntegrationTests/JasperFxTestEnvironment.cs`; without it 
 fails with "The server has not been started".
 
 See ADR 0005.
+
+## CI
+
+`.github/workflows/ci.yml` runs what `/verify` runs, on every push to `main` and every pull
+request: backend build and test, frontend lint/build/test, and the Playwright e2e suite.
+
+Two things it does that a local `/verify` does not:
+
+- **Builds and tests both Debug and Release.** Release was broken in this repo for the whole life
+  of the Wolverine spike without anyone noticing, because `dotnet build` succeeded with zero
+  warnings and only the *startup* failed. Debug alone is not evidence.
+- **Checks the committed generated code is current**, by re-running `codegen write` and failing on
+  any diff — see "Wolverine codegen" above.
 
 ## More context
 
