@@ -104,3 +104,54 @@ deleted); the working tree was confirmed clean. Nothing from this task is kept.
 
 The dev database is left **stopped**. Start it with `docker compose up -d --wait` before running
 the test suite.
+
+---
+
+## Correction, found during Task 3 — this document was wrong
+
+**The "Corrections to the plan" section above under-generalised, and it mattered.**
+
+It listed the *commands* that needed both environment variables. The real consequence is broader:
+with `OpenApiGenerateDocumentsOnBuild=true`, **every `dotnet build` of `src/Api` needs them** —
+including a plain `dotnet build` with the database running, and `dotnet publish`. Verified:
+
+```
+$ dotnet build -c Debug          # dev database UP, no env vars
+error : System.InvalidOperationException: ConnectionStrings:Default is not configured.
+Build FAILED.  10 Error(s)
+```
+
+That is not a documentation gap. It would have broken every developer's build, and the existing
+CI `backend` (both configurations) and `e2e` jobs, neither of which Task 6 touches. The Task 3
+subagent caught it, correctly declined to edit CI because it was outside its task scope, and
+escalated instead.
+
+### The fix: Option B after all
+
+`OpenApiGenerateDocumentsOnBuild` is now **false**, and generation runs as an explicit target:
+
+```bash
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
+  Wolverine__Durable=false \
+  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
+```
+
+Verified end to end: a plain `dotnet build` succeeds again with no environment variables,
+`dotnet publish` succeeds, and the explicit target still produces a document **byte-identical**
+to the committed one with the database stopped.
+
+Option A was reported as "works" in this document because the only question asked was whether the
+document could be generated without a database. It could. The question not asked was what that
+setting costs every *other* build — and that is where the real problem was.
+
+### Also corrected
+
+**Publish size is ~19MB, not ~17MB.** The 2MB increase is `Scalar.AspNetCore.dll` (1.4MB),
+`Microsoft.OpenApi.dll` (475KB) and `Microsoft.AspNetCore.OpenApi.dll` (189KB) — real libraries
+from Task 2, not a Roslyn-style leak. `Microsoft.Extensions.ApiDescription.Server` is correctly
+absent from the output, so its `PrivateAssets` works. Task 3 Step 5 and Task 7 Step 2 now expect
+19MB.
+
+Note for later: Scalar ships 1.4MB into production despite being mapped only in Development,
+because the code references its types and so must compile in Release. Making it Debug-only would
+need `#if` around the mapping. Not worth it for 1.4MB, but worth knowing it is there.

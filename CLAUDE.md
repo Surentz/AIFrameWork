@@ -147,7 +147,7 @@ See ADR 0005.
 
 ## The API contract
 
-`openapi/AiFramework.Api.json` is generated from the running application at build time and **committed**.
+`openapi/AiFramework.Api.json` is generated from the application and **committed**.
 `frontend/src/api/schema.d.ts` is generated from it. Both are checked by CI.
 
 **After changing a controller, a DTO, or a `[ProducesResponseType]`, regenerate both:**
@@ -155,15 +155,23 @@ See ADR 0005.
 ```bash
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet build src/Api
+  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
 npm run generate:api --prefix frontend
 ```
 
-Then commit the result. **Both environment variables are required**, and neither is defensive:
-document generation runs the application, so without a connection string it fails on the startup
-guard in `Program.cs`, and with one but still durable, Wolverine's startup migration dials
-Postgres (ADR 0005). The connection string is never actually opened — it only has to be
-non-empty.
+Then commit the result.
+
+**An explicit target, not part of `dotnet build`.** Generation runs the whole application, so it
+needs both environment variables: without a connection string it fails on the startup guard in
+`Program.cs`, and with one but still durable, Wolverine's startup migration dials Postgres
+(ADR 0005). The connection string is never actually opened — it only has to be non-empty.
+
+Generating on every build was tried and reverted: it made a plain `dotnet build` of `src/Api`
+fail without those variables *even with the database running*, which would have broken every
+developer's build and the existing CI `backend` and `e2e` jobs. Keeping it on a target means an
+ordinary build stays ordinary, and only the two commands above and CI's `contract` job pay
+the cost.
+
 
 ## CI
 

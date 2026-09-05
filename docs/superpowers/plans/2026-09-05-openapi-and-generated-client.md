@@ -107,7 +107,7 @@ In `src/Api/AiFramework.Api.csproj`, inside the existing `<ItemGroup>` with the 
 
   <PropertyGroup>
     <OpenApiDocumentsDirectory>$(MSBuildThisFileDirectory)../../openapi</OpenApiDocumentsDirectory>
-    <OpenApiGenerateDocumentsOnBuild>true</OpenApiGenerateDocumentsOnBuild>
+    <OpenApiGenerateDocumentsOnBuild>false</OpenApiGenerateDocumentsOnBuild>
   </PropertyGroup>
 ```
 
@@ -122,7 +122,7 @@ builder.Services.AddOpenApi();
 ```bash
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet build src/Api -c Debug
+  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
 ```
 
 Expected outcome is unknown — that is the point. Record which happens:
@@ -401,7 +401,7 @@ Add to `src/Api/AiFramework.Api.csproj`, inside the existing `<PropertyGroup>` t
     <!-- The document is committed at the repo root so frontend generation reads a file rather
          than a running API, and so a contract change shows up as a diff in review. -->
     <OpenApiDocumentsDirectory>$(MSBuildThisFileDirectory)../../openapi</OpenApiDocumentsDirectory>
-    <OpenApiGenerateDocumentsOnBuild>true</OpenApiGenerateDocumentsOnBuild>
+    <OpenApiGenerateDocumentsOnBuild>false</OpenApiGenerateDocumentsOnBuild>
 ```
 
 - [ ] **Step 3: Generate with the database down**
@@ -410,7 +410,7 @@ Add to `src/Api/AiFramework.Api.csproj`, inside the existing `<PropertyGroup>` t
 docker compose down
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet build src/Api -c Debug
+  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
 ls -la openapi/
 ```
 
@@ -433,7 +433,7 @@ dotnet publish src/Api -c Release -o /tmp/openapi-publish
 du -sm /tmp/openapi-publish
 ```
 
-Expected: ~17MB, matching the figure recorded in ADR 0005. A large jump means one of these packages is shipping something heavy into production output; investigate before committing rather than after.
+Expected: **~19MB**. That is 2MB above ADR 0005's 17MB figure, and the increase is accounted for: `Scalar.AspNetCore.dll` (1.4MB), `Microsoft.OpenApi.dll` (475KB) and `Microsoft.AspNetCore.OpenApi.dll` (189KB) — real libraries, not a Roslyn-style leak. `Microsoft.Extensions.ApiDescription.Server` is correctly absent, so its `PrivateAssets` is working. A figure near 50MB would mean something dragged the compiler in; investigate before committing rather than after.
 
 - [ ] **Step 6: Document the workflow**
 
@@ -450,7 +450,7 @@ In `CLAUDE.md`, add a section after the existing `## Wolverine codegen` section:
 ```bash
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet build src/Api
+  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
 npm run generate:api --prefix frontend
 ```
 
@@ -705,7 +705,7 @@ This is the only step that tests the feature rather than the plumbing. Temporari
 sed -i 's/public required string Sku { get; init; }/public required string ProductCode { get; init; }/' src/Api/Orders/OrderDtos.cs
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet build src/Api -c Debug
+  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
 npm run generate:api --prefix frontend
 npm run build --prefix frontend
 ```
@@ -718,7 +718,7 @@ Before this change, that rename would have left the frontend compiling and its t
 git checkout -- src/Api/Orders/OrderDtos.cs
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
   Wolverine__Durable=false \
-  dotnet build src/Api -c Debug
+  dotnet msbuild src/Api -t:GenerateOpenApiDocuments
 npm run generate:api --prefix frontend
 git diff --stat
 ```
@@ -786,7 +786,7 @@ In `.github/workflows/ci.yml`, add after the existing `codegen` job and before `
         env:
           ConnectionStrings__Default: 'Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y'
           Wolverine__Durable: 'false'
-        run: dotnet build src/Api -c Debug
+        run: dotnet msbuild src/Api -t:GenerateOpenApiDocuments
 
       - name: Regenerate the TypeScript schema
         run: npm run generate:api --prefix frontend
@@ -863,7 +863,7 @@ Expected: 0 warnings both configurations, 121/121 backend (116 existing + 3 from
 dotnet publish src/Api -c Release -o /tmp/final-publish && du -sm /tmp/final-publish
 ```
 
-Expected: ~17MB, unchanged from ADR 0005's recorded figure.
+Expected: **~19MB**, per Task 3 Step 5 — 2MB above ADR 0005's figure, all of it Scalar and the OpenAPI libraries.
 
 - [ ] **Step 3: Open the pull request**
 
