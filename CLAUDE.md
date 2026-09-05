@@ -132,11 +132,16 @@ only in Release, at startup. `WolverineCodegenTests` exists to catch that in the
 it fails, the fix is the command above. CI additionally re-runs `codegen write` and fails on
 any diff, catching generated code that still loads but has drifted.
 
-`Program.cs` therefore ends in `RunJasperFxCommands(args)` rather than `RunAsync()`, which is what
-makes `codegen write` reachable. Ordinary `dotnet run` is unaffected. Tests using
-`WebApplicationFactory` need `JasperFxEnvironment.AutoStartHost` — set once for the whole test
-assembly in `tests/Api.IntegrationTests/JasperFxTestEnvironment.cs`; without it every one of them
-fails with "The server has not been started".
+`Program.cs` therefore routes to `RunJasperFxCommands(args)` when args are present, and to plain
+`RunAsync()` when they are not — which is what makes `codegen write` reachable without paying for
+it on every ordinary start. JasperFx discovers commands by reflecting over every loaded assembly
+and prints a line per assembly as it goes; with no args there is no command to find, so the
+no-args branch skips that entirely and keeps `dotnet run` and F5 quiet.
+
+`WebApplicationFactory` passes args of its own, so tests still take the JasperFx branch and need
+`JasperFxEnvironment.AutoStartHost` — set once for the whole test assembly in
+`tests/Api.IntegrationTests/JasperFxTestEnvironment.cs`. Without it, 23 of the 24 integration
+tests fail with "The server has not been started".
 
 See ADR 0005.
 

@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using AiFramework.Application.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -15,9 +16,15 @@ public sealed partial class OutboxPollerService(
     IServiceScopeFactory scopeFactory,
     ChannelWriter<OutboxWorkItem> writer,
     IOptions<OutboxOptions> options,
+    IClock clock,
     ILogger<OutboxPollerService> logger) : BackgroundService
 {
     private readonly OutboxOptions _options = options.Value;
+
+    // MinValue rather than "now + interval" so the first idle cycle sweeps once at startup,
+    // then settles into PruneInterval. Only ever touched from the single ExecuteAsync loop,
+    // so it needs no synchronisation.
+    private DateTimeOffset _nextPruneDueAt = DateTimeOffset.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -67,7 +74,10 @@ public sealed partial class OutboxPollerService(
                 await writer.WriteAsync(item, stoppingToken).ConfigureAwait(false);
             }
 
-            if (batch.Count == 0)
+            // Still only when the queue is idle, but now also only when the retention sweep is
+            // actually due. See OutboxOptions.PruneInterval for why running it every cycle was
+            // wrong: RetentionPeriod is measured in days, so a per-second DELETE is pure noise.
+            if (batch.Count == 0 && DueForPrune())
             {
                 await poller.PruneAsync(stoppingToken).ConfigureAwait(false);
             }
@@ -93,6 +103,26 @@ public sealed partial class OutboxPollerService(
             LogPollCycleFailed(logger, exception);
             return 0;
         }
+    }
+
+    /// <summary>
+    /// Whether the retention sweep is due, advancing the schedule when it is. Uses IClock rather
+    /// than a Stopwatch so a test can drive it with the same fake clock the rest of the outbox
+    /// already uses.
+    /// </summary>
+    private bool DueForPrune()
+    {
+        var now = clock.UtcNow;
+
+        if (now < _nextPruneDueAt)
+        {
+            return false;
+        }
+
+        // Scheduled from "now" rather than from the previous due time on purpose: after a long
+        // stall there is nothing to gain from firing a burst of catch-up sweeps.
+        _nextPruneDueAt = now.Add(_options.PruneInterval);
+        return true;
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Outbox poll cycle failed.")]

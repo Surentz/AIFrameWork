@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Outbox;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +29,12 @@ public sealed class OutboxRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        // OutboxPollerService takes IClock (it schedules the retention sweep against
+        // OutboxOptions.PruneInterval rather than sweeping every cycle), and unlike
+        // OutboxPoller it is a singleton the provider activates eagerly here. AddOutbox
+        // deliberately does not register IClock - AddInfrastructure owns that, as the
+        // Application port it implements - so this stand-in composition supplies it.
+        services.AddSingleton<IClock, SystemClock>();
         services.AddOutbox();
 
         if (options is not null)
@@ -117,6 +124,8 @@ public sealed class OutboxRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        // Same IClock reason as BuildProvider above.
+        services.AddSingleton<IClock, SystemClock>();
         services.AddOutbox();
         services.AddSingleton<IConfigureOptions<OutboxOptions>>(new SetWorkerCountToZero());
 
@@ -161,6 +170,8 @@ public sealed class OutboxRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        // Same IClock reason as BuildProvider above.
+        services.AddSingleton<IClock, SystemClock>();
         services.AddOutbox();
 
         var resolutionAttempts = 0;

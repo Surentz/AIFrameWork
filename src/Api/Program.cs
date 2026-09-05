@@ -39,17 +39,36 @@ app.UseExceptionHandler();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-// Not app.RunAsync(). Wolverine generates its handler adapters with Roslyn, and Release
-// deliberately ships without the compiler (see the Debug-only package reference in
-// AiFramework.Infrastructure.csproj - it costs 33MB, measured: 17MB -> 50MB published).
-// Release therefore runs pre-generated code, and this is what generates it:
+// Wolverine generates its handler adapters with Roslyn, and Release deliberately ships without
+// the compiler (see the Debug-only package reference in AiFramework.Infrastructure.csproj - it
+// costs 33MB, measured: 17MB -> 50MB published). Release therefore runs pre-generated code, and
+// RunJasperFxCommands is what makes the command that generates it reachable:
 //
 //     dotnet run --project src/Api -- codegen write
 //
-// RunJasperFxCommands still runs the web application normally when args carry no command,
-// so `dotnet run` and WebApplicationFactory are unaffected. It only diverges when a JasperFx
-// command is actually named. ADR 0005.
-return await app.RunJasperFxCommands(args);
+// Only when a command is actually named, though. RunJasperFxCommands discovers commands by
+// reflecting over every loaded assembly and announces each one it scans ("Searching 'Wolverine,
+// Version=...' for commands"), six lines of noise before every ordinary startup. With no args
+// there is no command to find, so plain RunAsync costs nothing and keeps `dotnet run` and F5
+// quiet.
+//
+// This does NOT make WebApplicationFactory take the RunAsync branch: it passes args of its own,
+// so the tests still go through JasperFx and still depend on
+// tests/Api.IntegrationTests/JasperFxTestEnvironment.cs setting AutoStartHost. Verified by
+// removing that module initializer, which fails 23 of the 24 integration tests.
+//
+// ADR 0005.
+return args.Length == 0
+    ? await RunTheWebApplicationAsync(app)
+    : await app.RunJasperFxCommands(args);
+
+// A local function purely so both branches are expression-bodied and return int; RunAsync
+// itself returns Task. Zero is the conventional "exited cleanly" code JasperFx also returns.
+static async Task<int> RunTheWebApplicationAsync(WebApplication webApplication)
+{
+    await webApplication.RunAsync();
+    return 0;
+}
 
 /// <summary>Exposed so <c>WebApplicationFactory</c> can find the entry point.</summary>
 public partial class Program
