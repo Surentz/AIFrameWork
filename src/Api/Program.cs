@@ -2,6 +2,7 @@ using AiFramework.Api;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.EventPath;
 using JasperFx;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +19,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(connectionString);
 
 // ADR 0005 spike: Wolverine's durable event path, alongside the existing outbox rather than
@@ -38,6 +40,15 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+// Development only, deliberately: a deployed instance must not publish its endpoint surface.
+// Asserted in both directions by OpenApiDocumentTests, because a missing environment check
+// here would otherwise ship silently.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference();
+}
 
 // Wolverine generates its handler adapters with Roslyn, and Release deliberately ships without
 // the compiler (see the Debug-only package reference in AiFramework.Infrastructure.csproj - it

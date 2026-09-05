@@ -111,6 +111,64 @@ jobs:
             exit 1
           fi
 
+  contract:
+    # The same guard as the `codegen` job above, for the other pair of committed generated
+    # artifacts. A contract change that regenerates neither leaves the React app compiling
+    # against a shape the API no longer returns - which is the failure this whole feature
+    # exists to make impossible.
+    name: api contract is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: npm ci --prefix frontend
+
+      # A separate step, not folded into the msbuild call below. `dotnet msbuild` does not
+      # restore implicitly the way `dotnet build` does, and this job fails without it
+      # (NETSDK1004, assets file not found). Nor can it be `-t:"Restore;Build;..."`: MSBuild
+      # evaluates the project once, before Restore writes NuGet's props, so the OpenAPI XML
+      # comment source generator then fails with CS9137 about interceptors. Restore first, in
+      # its own invocation.
+      - run: dotnet restore src/Api
+
+      # BOTH variables are required, and Task 1 proved why. The generator runs the application:
+      # without a connection string it dies on Program.cs's startup guard ("ConnectionStrings:
+      # Default is not configured"), and with one but still durable, Wolverine's startup
+      # migration dials Postgres (ADR 0005). There is no database in this job. The connection
+      # string is never opened - it only has to be non-empty.
+      - name: Regenerate the OpenAPI document
+        env:
+          ConnectionStrings__Default: 'Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y'
+          Wolverine__Durable: 'false'
+        run: dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
+
+      - name: Regenerate the TypeScript schema
+        run: npm run generate:api --prefix frontend
+
+      - name: Fail if either artifact is stale
+        run: |
+          if ! git diff --exit-code -- openapi/ frontend/src/api/schema.d.ts; then
+            echo "::error::The API contract is out of date. Regenerate it with the two commands under 'The API contract' in CLAUDE.md, then commit the result."
+            exit 1
+          fi
+
   frontend:
     name: frontend
     runs-on: ubuntu-latest
@@ -183,3 +241,4 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+

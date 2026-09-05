@@ -2,11 +2,34 @@
 
   <PropertyGroup>
     <UserSecretsId>ac9fbbb7-d110-4c66-a077-d8399f9a1103</UserSecretsId>
+    <!-- The document is committed at the repo root so frontend generation reads a file rather
+         than a running API, and so a contract change shows up as a diff in review.
+
+         OnBuild is deliberately FALSE. Generation runs the whole application, which needs a
+         connection string to clear the startup guard in Program.cs and Wolverine__Durable=false
+         to stop Wolverine dialling Postgres (ADR 0005). With OnBuild true, every `dotnet build`
+         of this project needed both - a plain build failed even with the database running, and
+         the existing CI backend and e2e jobs would have started failing. Generation is therefore
+         an explicit target, run by the two commands in the root CLAUDE.md and by CI's contract
+         job:
+
+           dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments" -->
+    <OpenApiDocumentsDirectory>$(MSBuildThisFileDirectory)../../openapi</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOnBuild>false</OpenApiGenerateDocumentsOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Application\AiFramework.Application.csproj" />
     <ProjectReference Include="..\Infrastructure\AiFramework.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.17.2" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

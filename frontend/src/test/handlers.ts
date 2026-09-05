@@ -1,7 +1,11 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
+import type { Order } from '../features/orders/types';
 
-export const anOrder = {
+// Typed against the generated schema, not loose. An untyped fixture is how a renamed backend
+// property leaves the frontend tests passing while the app breaks — the tests would keep
+// asserting against a shape the API no longer returns. This makes that a build failure.
+export const anOrder: Order = {
   id: '11111111-1111-1111-1111-111111111111',
   sku: 'SKU-1',
   quantity: 2,
