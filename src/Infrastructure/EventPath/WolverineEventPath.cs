@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 using JasperFx;
+using JasperFx.CodeGeneration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Wolverine;
@@ -28,6 +30,27 @@ public static class WolverineEventPath
     /// </summary>
     /// <param name="host">The host builder to attach Wolverine to.</param>
     /// <param name="connectionString">The same PostgreSQL connection string the DbContext uses.</param>
+    /// <param name="applicationAssembly">
+    /// The assembly Wolverine treats as "the application", and therefore the one it loads
+    /// pre-generated handler adapters from in Release. Passed in rather than inferred: left to
+    /// itself Wolverine picks the assembly that called UseWolverine — Infrastructure — while
+    /// `codegen write` writes into the Api project, so Release failed with
+    /// MissingPreBuiltTypesException until the two were pointed at the same assembly. It is a
+    /// parameter rather than typeof(Program).Assembly here because Infrastructure cannot
+    /// reference Api, and rather than Assembly.GetEntryAssembly() because under `dotnet test`
+    /// that resolves to the test host instead of the Api.
+    /// </param>
+    /// <param name="usePreGeneratedCode">
+    /// Whether Wolverine must load handler adapters that were generated ahead of time
+    /// (<c>TypeLoadMode.Static</c>) instead of compiling them at startup with Roslyn.
+    ///
+    /// Defaults to false in Debug and true in Release, mirroring the Debug-only
+    /// WolverineFx.RuntimeCompilation package reference in AiFramework.Infrastructure.csproj —
+    /// Release has no compiler to fall back on. It is a parameter rather than a bare
+    /// <c>#if</c> so that a Debug test can still opt in and prove the committed code under
+    /// src/Api/Internal/Generated is current; without that, stale generated code stays green
+    /// in Debug and only breaks in Release. See WolverineCodegenTests.
+    /// </param>
     /// <param name="durable">
     /// When false, Wolverine runs in <c>DurabilityMode.MediatorOnly</c>: no envelope storage, no
     /// inbox, no outbox, and — the reason this switch exists — no database connection at startup.
@@ -40,9 +63,20 @@ public static class WolverineEventPath
     /// the moment Wolverine was wired in. Recorded in ADR 0005 as a consequence.
     /// </param>
     public static IHostBuilder AddWolverineEventPath(
-        this IHostBuilder host, string connectionString, bool durable = true)
+        this IHostBuilder host,
+        string connectionString,
+        Assembly applicationAssembly,
+        bool durable = true,
+        bool usePreGeneratedCode =
+#if DEBUG
+            false
+#else
+            true
+#endif
+        )
     {
         ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(applicationAssembly);
 
         return host.UseWolverine(opts =>
         {
@@ -66,6 +100,20 @@ public static class WolverineEventPath
             {
                 opts.Durability.Mode = DurabilityMode.MediatorOnly;
             }
+
+            // Static rather than Auto deliberately: Auto silently falls back to generating code
+            // at runtime, which in Release means failing later and less clearly. Static throws
+            // at startup when a pre-built type is missing, so forgetting to re-run codegen after
+            // adding or changing a handler is caught immediately rather than in production.
+            if (usePreGeneratedCode)
+            {
+                opts.CodeGeneration.TypeLoadMode = TypeLoadMode.Static;
+            }
+
+            // Set in every configuration, not just Release: it is what Static mode reads, and
+            // leaving Debug on a different assembly would mean codegen write and the Release
+            // load path could silently disagree.
+            opts.ApplicationAssembly = applicationAssembly;
 
             // Load-bearing. Wolverine's conventional discovery claims any type whose name ends
             // in "Handler" or "Consumer" with a Handle/Consume method — which is every handler

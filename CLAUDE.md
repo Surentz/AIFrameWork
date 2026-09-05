@@ -114,6 +114,31 @@ committed value at runtime while `dotnet ef` ignores it. Check with
 `dotnet user-secrets list --project src/Api` if the app and the migrations disagree about which
 database they are talking to.
 
+## Wolverine codegen
+
+Wolverine builds its handler adapters with Roslyn, and **Release ships without the compiler** —
+it costs 33MB (measured: a Release publish is 17MB without it, 50MB with). Release instead loads
+adapters generated ahead of time and committed under `src/Api/Internal/Generated`.
+
+**After adding or changing a Wolverine handler, regenerate them:**
+
+```bash
+dotnet run --project src/Api -- codegen write
+```
+
+Then commit the result. Debug does not need this — it still compiles adapters at startup — which
+is exactly the trap: stale generated code leaves Debug green and the build succeeding, and breaks
+only in Release, at startup. `WolverineCodegenTests` exists to catch that in the Debug suite; if
+it fails, the fix is the command above.
+
+`Program.cs` therefore ends in `RunJasperFxCommands(args)` rather than `RunAsync()`, which is what
+makes `codegen write` reachable. Ordinary `dotnet run` is unaffected. Tests using
+`WebApplicationFactory` need `JasperFxEnvironment.AutoStartHost` — set once for the whole test
+assembly in `tests/Api.IntegrationTests/JasperFxTestEnvironment.cs`; without it every one of them
+fails with "The server has not been started".
+
+See ADR 0005.
+
 ## More context
 
 Each layer has its own `CLAUDE.md`, loaded when you work in that directory.
