@@ -1,4 +1,4 @@
-// Shared by playwright.config.ts and global-setup.ts, so the e2e Postgres connection
+// Shared by playwright.config.ts and prepare-database.ts, so the e2e Postgres connection
 // string and the ports it depends on are declared once rather than triplicated (a third
 // copy lives in docker-compose.e2e.yml, which cannot import this - it reads the same
 // PG_PORT name directly via shell ${PG_PORT:-55432} substitution instead).

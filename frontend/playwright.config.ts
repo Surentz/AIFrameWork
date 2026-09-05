@@ -3,7 +3,6 @@ import { API_PORT, E2E_CONNECTION_STRING, PREVIEW_PORT } from './e2e/env.ts';
 
 export default defineConfig({
   testDir: './e2e',
-  globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   use: { baseURL: `http://localhost:${PREVIEW_PORT}` },
   webServer: [
@@ -16,6 +15,12 @@ export default defineConfig({
       url: `http://localhost:${API_PORT}/health`,
       timeout: 120_000,
       reuseExistingServer: false,
+      // Playwright discards webServer output by default, which makes a start-up failure in CI
+      // unreadable: all it reports is "Process from config.webServer was not able to start.
+      // Exit code: 1", naming neither which server nor why. Piping costs nothing locally and
+      // is the difference between a diagnosable CI failure and a guessing game.
+      stdout: 'pipe',
+      stderr: 'pipe',
       env: {
         ConnectionStrings__Default: E2E_CONNECTION_STRING,
         ASPNETCORE_URLS: `http://localhost:${API_PORT}`,
@@ -27,6 +32,9 @@ export default defineConfig({
       url: `http://localhost:${PREVIEW_PORT}`,
       timeout: 120_000,
       reuseExistingServer: false,
+      // Same reason as the API server above.
+      stdout: 'pipe',
+      stderr: 'pipe',
     },
   ],
 });
