@@ -85,6 +85,11 @@ dotnet ef database update --project src/Infrastructure --startup-project src/Inf
 dotnet run --project src/Api                                 # then `npm start` in frontend/
 ```
 
+Both open a browser tab of their own: the API reference at `/scalar/v1` (from
+`launchSettings.json`) and the app at `http://localhost:5173` (from `vite.config.ts`). For
+one-keystroke startup in Rider or Visual Studio, and the gotchas that come with it, see
+[docs/local-development.md](docs/local-development.md).
+
 Two databases, two ports, and they are meant to coexist: **55433** is the dev database from
 `docker-compose.yml` (named volume, data persists); **55432** is the e2e one from
 `docker-compose.e2e.yml` (throwaway). Override either with `DEV_PG_PORT` / `PG_PORT`.
