@@ -40,7 +40,7 @@ configuration. Production is a static bundle.
 Ports are fixed (5173 dev, 4173 preview, 5234 API, 55432 the e2e Postgres) and can collide on
 a busy machine. Each is overridable by environment variable: `DEV_PORT`, `PREVIEW_PORT`,
 `API_PORT`, and `PG_PORT` respectively. `vite.config.ts` reads the first three;
-`playwright.config.ts` and `e2e/global-setup.ts` (via the shared `e2e/env.ts`) and
+`playwright.config.ts` and `e2e/prepare-database.ts` (via the shared `e2e/env.ts`) and
 `docker-compose.e2e.yml` read all four between them for the e2e run.
 
 ## Commands
@@ -64,5 +64,13 @@ binary — run this once per machine:
 npx --prefix frontend playwright install chromium
 ```
 
-`e2e/global-setup.ts` runs `dotnet tool restore` itself, so `dotnet-ef` (pinned in the repo's
+`e2e/prepare-database.ts` runs `dotnet tool restore` itself, so `dotnet-ef` (pinned in the repo's
 `.config/dotnet-tools.json`) needs no separate setup step.
+
+**It runs from the `e2e` npm script, before `playwright test` — not as Playwright's
+`globalSetup`, and it must not be moved back.** Playwright starts `webServer` processes *before*
+`globalSetup`, so as a global setup the database arrived too late and the API booted against
+nothing. Durable Wolverine migrates its envelope schema during host startup (ADR 0005), so that
+now means the API does not boot at all, and Playwright reports only "Process from
+config.webServer was not able to start. Exit code: 1". Teardown stays `globalTeardown`, which
+runs late by design.

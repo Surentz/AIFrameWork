@@ -1,0 +1,185 @@
+# What /verify does locally, run on every push and pull request.
+#
+# The one thing this adds beyond /verify is the Release dimension. Release was broken in this
+# repo for the whole life of the Wolverine spike and nothing noticed, because `dotnet build`
+# succeeded with zero warnings and only failed at *startup* — Wolverine ships without the Roslyn
+# compiler in Release and needs pre-generated handler adapters (ADR 0005). A Debug-only CI would
+# have stayed green through exactly that bug, so the backend job runs both configurations and a
+# separate job proves the committed generated code is still current.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes the older run's answer irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned to CLAUDE.md's version table. There is no global.json, so this workflow is the only
+  # thing holding CI to the SDK the repo documents — if that table changes, change this too.
+  DOTNET_VERSION: '10.0.400'
+  NODE_VERSION: '24.20.0'
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  backend:
+    # Both configurations, deliberately. See the note at the top of this file: Debug alone is
+    # what let a non-booting Release sit in the repo unnoticed.
+    name: backend (${{ matrix.configuration }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Debug and Release fail for different reasons and both answers are wanted.
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # No packages.lock.json in this repo, so the key is the project files instead. Imperfect
+      # (a floating version could resolve differently on a hit) but every version here is pinned.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore
+
+      # Warnings are errors across compiler, analyzers and build (Directory.Build.props), so
+      # this step failing on a warning is the intended behaviour, not a CI misconfiguration.
+      - name: Build
+        run: dotnet build -c ${{ matrix.configuration }} --no-restore
+
+      # Testcontainers needs a Docker daemon; ubuntu-latest runners ship one already running,
+      # which is why there is no service container or setup step here.
+      - name: Test
+        run: dotnet test -c ${{ matrix.configuration }} --no-build
+
+  codegen:
+    # The failure this job exists for is invisible everywhere else: generated code that no
+    # longer matches its handlers still compiles (it is valid C# regardless) and still passes a
+    # Debug run (Debug compiles adapters at startup). WolverineCodegenTests catches a *missing*
+    # adapter; this catches one that merely drifted. `codegen write` is deterministic, so a
+    # non-empty diff here means the committed output is genuinely out of date.
+    name: generated code is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore
+
+      - run: dotnet build -c Debug --no-restore
+
+      - name: Regenerate Wolverine handler adapters
+        env:
+          # codegen write boots the host. Wolverine__Durable=false keeps it in MediatorOnly, so
+          # it never opens a connection, and the connection string only has to be non-empty to
+          # get past the startup guard in Program.cs.
+          ConnectionStrings__Default: 'Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder'
+          Wolverine__Durable: 'false'
+        run: dotnet run --project src/Api --no-build -- codegen write
+
+      - name: Fail if the committed generated code is stale
+        run: |
+          if ! git diff --exit-code -- src/Api/Internal; then
+            echo "::error file=src/Api/Internal::Generated Wolverine code is out of date. Run 'dotnet run --project src/Api -- codegen write' and commit the result."
+            exit 1
+          fi
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --prefix frontend
+
+      # eslint runs with --max-warnings 0, so one warning fails this step.
+      - run: npm run lint --prefix frontend
+
+      - run: npm run build --prefix frontend
+
+      # --run because `npm test` is bare `vitest`, which otherwise sits in watch mode forever.
+      - run: npm test --prefix frontend -- --run
+
+  e2e:
+    name: e2e
+    # Gated behind the fast jobs: e2e is by far the slowest and the most environmentally
+    # fragile, and there is nothing to learn from it when the build or the unit tests are red.
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --prefix frontend
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Built here rather than left to `dotnet run` inside Playwright's webServer. A compile
+      # error there surfaces only as "Process from config.webServer was not able to start.
+      # Exit code: 1" - naming neither the server nor the reason - and the build also eats into
+      # the 120s readiness timeout.
+      - name: Build backend
+        run: dotnet build -c Debug
+
+      # global-setup.ts already does `dotnet tool restore`, `docker compose up --wait` and
+      # `dotnet ef database update` itself, so the only thing it cannot provide is the browser
+      # binary — the same one-off documented in frontend/CLAUDE.md for a fresh machine.
+      - name: Install Playwright browser
+        run: npx --prefix frontend playwright install --with-deps chromium
+
+      - run: npm run e2e --prefix frontend
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

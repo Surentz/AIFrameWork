@@ -54,7 +54,7 @@ reported as a pass.
 
 `frontend/node_modules` missing? Same skip as step 2.
 
-First time on this machine? `global-setup.ts` does not install Playwright's browser binary
+First time on this machine? `prepare-database.ts` does not install Playwright's browser binary
 itself — run `npx --prefix frontend playwright install chromium` once (documented in
 `frontend/CLAUDE.md`, "Before the first `npm run e2e`") or this step fails with a missing-browser
 error rather than an assertion failure.

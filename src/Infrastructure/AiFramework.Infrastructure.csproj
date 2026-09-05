@@ -24,6 +24,29 @@
     <!-- BackgroundService/IHostedService for the outbox pumps (OutboxHostedServices.cs). -->
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="WolverineFx" Version="6.33.0" />
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.33.0" />
+    <PackageReference Include="WolverineFx.Postgresql" Version="6.33.0" />
+  </ItemGroup>
+
+  <!--
+    Debug only, and deliberately so (ADR 0005). Wolverine generates its handler adapters with
+    Roslyn; as of 6.0 core WolverineFx no longer carries the compiler, so it is referenced here
+    for development and left out of Release entirely. This repo has already paid the
+    Roslyn-in-the-publish-output tax once - Microsoft.EntityFrameworkCore.Design in Api.csproj
+    took the publish from 7.9MB to 37MB - and PrivateAssets does not prevent it, because it
+    stops assets flowing to CONSUMERS of a project, not into the declaring project's own output.
+    A Condition is the only thing that actually keeps it out.
+
+    The consequence: a Release build has no runtime compiler, so Release loads adapters generated
+    ahead of time by the Wolverine "codegen write" command and committed under
+    src/Api/Internal/Generated, with TypeLoadMode.Static. Measured for this package specifically:
+    a Release publish is 17MB without it and 50MB with it. See the "Wolverine codegen" section of
+    the root CLAUDE.md and ADR 0005. WolverineCodegenTests fails in the Debug suite if the
+    generated code stops matching its handlers, which neither the compiler nor a Debug run can see.
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.33.0" />
   </ItemGroup>
 
 </Project>
