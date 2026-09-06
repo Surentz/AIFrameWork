@@ -1,51 +1,67 @@
-/*
- * Enough shell styling that the orders screens do not look broken next to the login page - a
- * header bar and a centred column. The screens themselves are still unstyled markup, and
- * restyling them is not this change's job.
- */
-
 .shell {
   min-height: 100dvh;
+  background-color: var(--color-canvas);
 }
 
-.shell__header {
+.shell__bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-3) var(--space-5);
-  max-width: 64rem;
-  margin: 0 auto;
-  padding: var(--space-5) var(--space-5) var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border-block-end: 1px solid var(--color-border);
+  background-color: var(--color-surface);
 }
 
-.shell__title {
-  margin: 0;
-  font-size: var(--text-xl);
+.shell__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text);
+  font-size: var(--text-base);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+/* Only the tile is accent-coloured; the wordmark stays body text so the pair does not read as
+   one long purple link. */
+.shell__brand svg {
+  color: var(--color-accent);
 }
 
 .shell__nav {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-1);
   font-size: var(--text-sm);
 }
 
 .shell__nav a {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
   color: var(--color-text-muted);
   text-decoration: none;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
 }
 
 .shell__nav a:hover {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
+/* NavLink adds `active` itself; styling it here keeps the component free of className callbacks. */
+.shell__nav a.active {
+  background-color: var(--color-accent-soft);
   color: var(--color-accent);
-  text-decoration: underline;
+  font-weight: 600;
 }
 
 .shell__content {
   max-width: 64rem;
   margin: 0 auto;
-  padding: var(--space-5);
+  padding: var(--space-6) var(--space-5) var(--space-8);
 }

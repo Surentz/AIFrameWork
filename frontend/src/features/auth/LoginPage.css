@@ -1,3 +1,6 @@
+/* Layout and the brand panel only - fields, buttons, alerts and the spinner come from
+   styles/controls.css. */
+
 .login {
   display: grid;
   grid-template-columns: 1fr;
@@ -163,66 +166,13 @@
   gap: var(--space-5);
 }
 
-.login__field {
-  display: grid;
-}
-
-.login__label {
-  margin-block-end: var(--space-2);
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-
-.login__input {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background-color: var(--color-surface);
-  color: var(--color-text);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  transition:
-    border-color var(--transition),
-    box-shadow var(--transition);
-}
-
-.login__input::placeholder {
-  color: var(--color-text-subtle);
-}
-
-/* The ring is drawn with box-shadow rather than the global outline so it can be tinted red on
-   an invalid field; :focus-visible would give every field the same accent ring. */
-.login__input:focus {
-  border-color: var(--color-accent);
-  outline: none;
-  box-shadow: 0 0 0 4px var(--color-accent-ring);
-}
-
-.login__input[aria-invalid='true'] {
-  border-color: var(--color-danger);
-}
-
-.login__input[aria-invalid='true']:focus {
-  box-shadow: 0 0 0 4px var(--color-danger-ring);
-}
-
-/* box-shadow is not painted in forced-colors mode, so the rings above vanish there and the
-   suppressed outline has to come back. */
-@media (forced-colors: active) {
-  .login__input:focus {
-    outline: 2px solid;
-    outline-offset: 1px;
-  }
-}
-
 .login__password {
   position: relative;
   display: flex;
 }
 
 /* Room for the toggle, so a long password never runs underneath it. */
-.login__password .login__input {
+.login__password .input {
   padding-inline-end: 4.25rem;
 }
 
@@ -243,27 +193,6 @@
 
 .login__reveal:hover {
   color: var(--color-accent-hover);
-}
-
-/*
- * Left in the accessibility tree when empty instead of being display: none'd. An aria-live
- * region inserted at the same moment as its text is frequently not announced, so it has to
- * already be there - which is also why the margin is on :not(:empty) rather than a gap on the
- * field: an empty grid row is zero-height, but a gap around it would not be.
- */
-.login__errors {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.login__errors:not(:empty) {
-  margin-block-start: var(--space-2);
-}
-
-.login__errors p {
-  margin: 0;
-  color: var(--color-danger-text);
-  font-size: var(--text-sm);
 }
 
 .login__meta {
@@ -298,66 +227,6 @@
 
 .login__link:hover {
   text-decoration: underline;
-}
-
-.login__submit {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-height: 2.75rem;
-  padding: var(--space-3) var(--space-4);
-  border: none;
-  border-radius: var(--radius-md);
-  background-color: var(--color-accent);
-  box-shadow: var(--shadow-sm);
-  color: var(--color-accent-contrast);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    transform var(--transition);
-}
-
-.login__submit:hover:not(:disabled) {
-  background-color: var(--color-accent-hover);
-}
-
-.login__submit:active:not(:disabled) {
-  background-color: var(--color-accent-active);
-  transform: translateY(1px);
-}
-
-.login__submit:disabled {
-  cursor: progress;
-  opacity: 0.7;
-}
-
-.login__spinner {
-  width: 0.9rem;
-  height: 0.9rem;
-  border: 2px solid currentcolor;
-  border-block-start-color: transparent;
-  border-radius: var(--radius-full);
-  animation: login-spin 600ms linear infinite;
-}
-
-@keyframes login-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.login__alert {
-  margin: 0;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-danger-border);
-  border-radius: var(--radius-md);
-  background-color: var(--color-danger-soft);
-  color: var(--color-danger-text);
-  font-size: var(--text-sm);
 }
 
 .login__footer {

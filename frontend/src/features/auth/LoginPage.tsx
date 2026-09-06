@@ -1,23 +1,9 @@
 import { useId, useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Mark } from '../../components/Mark';
 import { useLogin } from './queries';
 import './LoginPage.css';
-
-function Mark({ size }: { size: number }): React.JSX.Element {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <rect width="32" height="32" rx="9" fill="currentColor" />
-      {/* The glyph is knocked out of the tile, so its colour has to be whatever the tile is
-          sitting on. --mark-ink lets the brand panel override it: there the tile is white and
-          the default (--color-surface) would be white on white. */}
-      <path
-        d="M16 8.5 22.5 23h-3.4l-1.2-2.9h-3.8L12.9 23H9.5L16 8.5Zm0 5.9-1.1 2.8h2.2L16 14.4Z"
-        fill="var(--mark-ink, var(--color-surface))"
-      />
-    </svg>
-  );
-}
 
 function Tick(): React.JSX.Element {
   return (
@@ -77,12 +63,12 @@ export function LoginPage(): React.JSX.Element {
           <p className="login__subtitle">Sign in to your AI Framework account.</p>
 
           <form className="login__form" onSubmit={handleSubmit} noValidate>
-            <div className="login__field">
-              <label className="login__label" htmlFor={emailId}>
+            <div className="field">
+              <label className="field__label" htmlFor={emailId}>
                 Email
               </label>
               <input
-                className="login__input"
+                className="input"
                 id={emailId}
                 type="email"
                 autoComplete="email"
@@ -96,20 +82,20 @@ export function LoginPage(): React.JSX.Element {
               />
               {/* Rendered unconditionally: a live region inserted together with its text may
                   not be announced, so it has to already exist when the error arrives. */}
-              <div className="login__errors" id={emailErrorId} aria-live="polite">
+              <div className="field__errors" id={emailErrorId} aria-live="polite">
                 {emailErrors.map((message) => (
                   <p key={message}>{message}</p>
                 ))}
               </div>
             </div>
 
-            <div className="login__field">
-              <label className="login__label" htmlFor={passwordId}>
+            <div className="field">
+              <label className="field__label" htmlFor={passwordId}>
                 Password
               </label>
               <div className="login__password">
                 <input
-                  className="login__input"
+                  className="input"
                   id={passwordId}
                   type={passwordVisible ? 'text' : 'password'}
                   autoComplete="current-password"
@@ -134,7 +120,7 @@ export function LoginPage(): React.JSX.Element {
               </div>
               {/* Rendered unconditionally: a live region inserted together with its text may
                   not be announced, so it has to already exist when the error arrives. */}
-              <div className="login__errors" id={passwordErrorId} aria-live="polite">
+              <div className="field__errors" id={passwordErrorId} aria-live="polite">
                 {passwordErrors.map((message) => (
                   <p key={message}>{message}</p>
                 ))}
@@ -157,13 +143,17 @@ export function LoginPage(): React.JSX.Element {
               </Link>
             </div>
 
-            <button className="login__submit" type="submit" disabled={mutation.isPending}>
-              {mutation.isPending && <span className="login__spinner" aria-hidden="true" />}
+            <button
+              className="btn btn--primary btn--block"
+              type="submit"
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending && <span className="spinner" aria-hidden="true" />}
               {mutation.isPending ? 'Signing in' : 'Sign in'}
             </button>
 
             {mutation.error && Object.keys(fieldErrors).length === 0 && (
-              <p className="login__alert" role="alert">
+              <p className="alert" role="alert">
                 {mutation.error.message}
               </p>
             )}

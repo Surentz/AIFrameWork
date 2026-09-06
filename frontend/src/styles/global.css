@@ -1,9 +1,10 @@
 @import './tokens.css';
+@import './controls.css';
 
 /*
- * Deliberately a reset and page-level defaults only - no styling of buttons, inputs or links.
- * The orders screens are still unstyled markup, and a global control style would half-restyle
- * them into something that looks broken rather than plain. Components own their own looks.
+ * Deliberately a reset and page-level defaults only - no element selectors for buttons, inputs
+ * or links. The shared control looks live in controls.css as opt-in classes, so markup that has
+ * not been designed yet stays plain rather than half-styled.
  */
 
 *,
