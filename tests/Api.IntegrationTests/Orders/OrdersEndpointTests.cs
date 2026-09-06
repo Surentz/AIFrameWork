@@ -149,5 +149,21 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
         root.GetProperty("detail").GetString().Should().Be("An error occurred.");
     }
 
+    [Fact]
+    public async Task GetOrder_WhenItBelongsToAnotherUser_Returns404()
+    {
+        using var owner = await factory.CreateAuthenticatedClientAsync();
+        using var stranger = await factory.CreateAuthenticatedClientAsync();
+        var created = await owner.PostAsJsonAsync(
+            "/api/orders", new { Sku = "SKU-PRIVATE", Quantity = 1 });
+        var id = await created.Content.ReadFromJsonAsync<Guid>();
+
+        var response = await stranger.GetAsync($"/api/orders/{id}");
+
+        response.StatusCode.Should().Be(
+            HttpStatusCode.NotFound,
+            "another user's order id must be indistinguishable from one that was never issued");
+    }
+
     public sealed record OrderResponseDto(Guid Id, string Sku, int Quantity, DateTimeOffset PlacedAt);
 }

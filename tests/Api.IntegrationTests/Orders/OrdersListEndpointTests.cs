@@ -102,6 +102,22 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
             .Should().Be("orders.malformed_cursor");
     }
 
+    [Fact]
+    public async Task GetOrders_DoesNotReturnAnotherUsersOrders()
+    {
+        using var owner = await factory.CreateAuthenticatedClientAsync();
+        using var stranger = await factory.CreateAuthenticatedClientAsync();
+        var created = await owner.PostAsJsonAsync(
+            "/api/orders", new { Sku = "SKU-LIST-PRIVATE", Quantity = 1 });
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+        var id = await created.Content.ReadFromJsonAsync<Guid>();
+
+        var page = await stranger.GetFromJsonAsync<OrderPageDto>("/api/orders?limit=100");
+
+        page.Should().NotBeNull();
+        page.Items.Should().NotContain(i => i.Id == id);
+    }
+
     public sealed record OrderPageDto(IReadOnlyList<OrderListItemDto> Items, string? NextCursor);
 
     public sealed record OrderListItemDto(Guid Id, string Sku, int Quantity, DateTimeOffset PlacedAt);
