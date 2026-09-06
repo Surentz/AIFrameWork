@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
+import type { Session } from '../features/auth/types';
 import type { Order } from '../features/orders/types';
 
 // Typed against the generated schema, not loose. An untyped fixture is how a renamed backend
@@ -12,7 +13,14 @@ export const anOrder: Order = {
   placedAt: '2026-09-02T10:00:00+00:00',
 };
 
+export const aSession: Session = {
+  userId: '33333333-3333-3333-3333-333333333333',
+  email: 'ada@example.com',
+  displayName: 'Ada Lovelace',
+};
+
 export const handlers = [
+  http.post('/api/auth/login', () => HttpResponse.json(aSession)),
   http.get('/api/orders', () =>
     HttpResponse.json({
       items: [anOrder, { ...anOrder, id: '22222222-2222-2222-2222-222222222222', sku: 'SKU-2' }],
