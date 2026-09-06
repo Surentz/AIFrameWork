@@ -50,9 +50,12 @@ exactly one place in the whole codebase.
 two `BackgroundService` pumps and `OrderPlacedAuditHandler` resolve DI scopes with no HTTP context
 at all, so a non-nullable `Id` would have to throw there, and a thrown exception out of a handler
 becomes a 500 through the global `IExceptionHandler`. Instead every handler starts with the same
-guard already established for `ChangePasswordHandler`'s equivalent condition — `if (currentUser.Id
-is not { } userId)` returning `ErrorKind.Unauthorized` — so a caller whose session has gone stale
-gets a 401, not a crash.
+guard — `if (currentUser.Id is not { } userId)` returning `ErrorKind.Unauthorized` — so a caller
+whose session has gone stale gets a 401, not a crash. The error code and message are the ones
+`ChangePasswordHandler` already uses for its own stale-session case (`auth.failed`, "That session
+is no longer valid."), even though that handler reaches the check by a different route: it takes
+`UserId` as a field on the command and fails when `IUserRepository.GetAsync` returns null, rather
+than reading `ICurrentUser`.
 
 **The migration deletes the existing rows rather than backfilling them.** The dev database on
 55433 held three orders with no owner, and nothing in this repo is deployed, so there was nothing
