@@ -14,13 +14,20 @@ public sealed record GetOrders(int Limit, string? Cursor) : IQuery<OrderPage>;
 /// Validates its own inputs, because QueryDispatcher does not run the validation behavior —
 /// that is command-only. A malformed cursor is a 400, never a 500.
 /// </summary>
-public sealed class GetOrdersHandler(IOrderRepository orders) : IQueryHandler<GetOrders, OrderPage>
+public sealed class GetOrdersHandler(IOrderRepository orders, ICurrentUser currentUser)
+    : IQueryHandler<GetOrders, OrderPage>
 {
     private const int MaxLimit = 100;
 
     public async Task<Result<OrderPage>> HandleAsync(GetOrders query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+
+        if (currentUser.Id is not { } userId)
+        {
+            return Result.Failure<OrderPage>(new Error(
+                ErrorKind.Unauthorized, "auth.failed", "That session is no longer valid."));
+        }
 
         if (query.Limit is < 1 or > MaxLimit)
         {
@@ -44,7 +51,7 @@ public sealed class GetOrdersHandler(IOrderRepository orders) : IQueryHandler<Ge
 
         // One more than asked for, so "is there a next page" needs no second COUNT.
         var rows = await orders
-            .ListAsync(query.Limit + 1, after, cancellationToken)
+            .ListAsync(userId, query.Limit + 1, after, cancellationToken)
             .ConfigureAwait(false);
 
         var hasMore = rows.Count > query.Limit;

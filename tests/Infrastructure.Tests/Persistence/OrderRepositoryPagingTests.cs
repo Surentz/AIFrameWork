@@ -27,10 +27,10 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     private static readonly Guid High = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
 
     /// <summary>
-    /// One owner for the whole class. This only tags every row this class writes with a single
-    /// user - ListAsync has no UserId predicate yet (that's a later change), so it contributes
-    /// no isolation of its own. The per-test TopOf(...) windows above remain the sole mechanism
-    /// keeping these tests from seeing each other's rows.
+    /// One owner for the whole class. ListAsync now filters by UserId, so this scopes every
+    /// read this class makes to rows this class itself seeded - no other test class's rows can
+    /// leak in. Within that one owner, the per-test TopOf(...) windows above are what keep these
+    /// tests from seeing each other's rows.
     /// </summary>
     private static readonly Guid Owner = Guid.NewGuid();
 
@@ -57,7 +57,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
 
         await using var context = fixture.CreateContext();
         var rows = await new OrderRepository(context)
-            .ListAsync(2, TopOf(10), CancellationToken.None);
+            .ListAsync(Owner, 2, TopOf(10), CancellationToken.None);
 
         rows.Select(o => o.Id).Should().Equal(newer, older);
     }
@@ -71,7 +71,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
 
         await using var context = fixture.CreateContext();
         var rows = await new OrderRepository(context)
-            .ListAsync(2, TopOf(20), CancellationToken.None);
+            .ListAsync(Owner, 2, TopOf(20), CancellationToken.None);
 
         // HaveCount(2) alone passes against any broken ListAsync, since the shared container
         // always holds more than two rows regardless of ordering, cursor handling or tie-break.
@@ -94,7 +94,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
         await using var context = fixture.CreateContext();
         var repository = new OrderRepository(context);
 
-        var pageOne = await repository.ListAsync(1, TopOf(30), CancellationToken.None);
+        var pageOne = await repository.ListAsync(Owner, 1, TopOf(30), CancellationToken.None);
         pageOne.Select(o => o.Id).Should().Equal(first);
 
         // A newer order arrives while the caller sits on page 1, inside this test's window.
@@ -103,7 +103,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
 
         var cursorRow = pageOne[^1];
         var pageTwo = await repository.ListAsync(
-            2, (cursorRow.PlacedAt, cursorRow.Id), CancellationToken.None);
+            Owner, 2, (cursorRow.PlacedAt, cursorRow.Id), CancellationToken.None);
 
         pageTwo.Select(o => o.Id).Should().Equal(second, third);
         pageTwo.Should().NotContain(o => o.Id == first);
@@ -121,7 +121,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
         await using var context = fixture.CreateContext();
         var repository = new OrderRepository(context);
 
-        var pageOne = await repository.ListAsync(1, TopOf(40), CancellationToken.None);
+        var pageOne = await repository.ListAsync(Owner, 1, TopOf(40), CancellationToken.None);
         // Order matters, not just membership: BeEquivalentTo would still pass with the tie-break
         // implemented backwards (ascending instead of descending on Id), since both rows would
         // still show up somewhere across the two pages either way. High comes first because
@@ -130,7 +130,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
 
         var cursorRow = pageOne[0];
         var pageTwo = await repository.ListAsync(
-            1, (cursorRow.PlacedAt, cursorRow.Id), CancellationToken.None);
+            Owner, 1, (cursorRow.PlacedAt, cursorRow.Id), CancellationToken.None);
 
         pageTwo.Select(o => o.Id).Should().Equal(a);
     }
@@ -152,8 +152,38 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
 
         await using var context = fixture.CreateContext();
         var rows = await new OrderRepository(context)
-            .ListAsync(2, after: null, CancellationToken.None);
+            .ListAsync(Owner, 2, after: null, CancellationToken.None);
 
         rows.Select(o => o.Id).Should().Equal(newer, older);
+    }
+
+    /// <summary>
+    /// Interleaved in time, not merely present: a stranger's rows sitting BETWEEN the owner's
+    /// mean a missing filter would not just add rows, it would change which rows land on which
+    /// page and where the cursor points. A test that seeds the stranger's rows outside the
+    /// owner's window would pass against a broken filter.
+    /// </summary>
+    [Fact]
+    public async Task ListAsync_WithAnotherUsersOrdersInterleaved_ReturnsOnlyTheOwners()
+    {
+        var owner = Guid.NewGuid();
+        var stranger = Guid.NewGuid();
+        var third = await SeedAsync(owner, "SKU-OWN-3", Base.AddMinutes(61), Guid.NewGuid());
+        await SeedAsync(stranger, "SKU-STR-A", Base.AddMinutes(62), Guid.NewGuid());
+        var second = await SeedAsync(owner, "SKU-OWN-2", Base.AddMinutes(63), Guid.NewGuid());
+        await SeedAsync(stranger, "SKU-STR-B", Base.AddMinutes(64), Guid.NewGuid());
+        var first = await SeedAsync(owner, "SKU-OWN-1", Base.AddMinutes(65), Guid.NewGuid());
+
+        await using var context = fixture.CreateContext();
+        var repository = new OrderRepository(context);
+
+        var pageOne = await repository.ListAsync(owner, 2, TopOf(70), CancellationToken.None);
+        pageOne.Select(o => o.Id).Should().Equal(first, second);
+
+        var cursorRow = pageOne[^1];
+        var pageTwo = await repository.ListAsync(
+            owner, 2, (cursorRow.PlacedAt, cursorRow.Id), CancellationToken.None);
+
+        pageTwo.Select(o => o.Id).Should().Equal(third);
     }
 }

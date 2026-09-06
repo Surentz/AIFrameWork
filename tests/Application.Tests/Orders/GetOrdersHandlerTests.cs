@@ -9,15 +9,19 @@ namespace AiFramework.Application.Tests.Orders;
 public sealed class GetOrdersHandlerTests
 {
     private static readonly DateTimeOffset PlacedAt = new(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
+    private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     private readonly IOrderRepository _repository = Substitute.For<IOrderRepository>();
+    private readonly ICurrentUser _currentUser = Substitute.For<ICurrentUser>();
+
+    public GetOrdersHandlerTests() => _currentUser.Id.Returns(UserId);
 
     [Fact]
     public async Task HandleAsync_WithFewerRowsThanTheLimit_ReturnsNoNextCursor()
     {
-        _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
+        _repository.ListAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns([Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-1", 1, PlacedAt)]);
-        var handler = new GetOrdersHandler(_repository);
+        var handler = new GetOrdersHandler(_repository, _currentUser);
 
         var result = await handler.HandleAsync(new GetOrders(20, null), CancellationToken.None);
 
@@ -31,9 +35,9 @@ public sealed class GetOrdersHandlerTests
         var orders = Enumerable.Range(0, 3)
             .Select(i => Order.Place(Guid.NewGuid(), Guid.NewGuid(), $"SKU-{i}", 1, PlacedAt.AddMinutes(-i)))
             .ToArray();
-        _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
+        _repository.ListAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns(orders);
-        var handler = new GetOrdersHandler(_repository);
+        var handler = new GetOrdersHandler(_repository, _currentUser);
 
         var result = await handler.HandleAsync(new GetOrders(2, null), CancellationToken.None);
 
@@ -44,13 +48,13 @@ public sealed class GetOrdersHandlerTests
     [Fact]
     public async Task HandleAsync_WhenQueried_AsksTheRepositoryForOneMoreRowThanTheLimit()
     {
-        _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
+        _repository.ListAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns([]);
-        var handler = new GetOrdersHandler(_repository);
+        var handler = new GetOrdersHandler(_repository, _currentUser);
 
         await handler.HandleAsync(new GetOrders(20, null), CancellationToken.None);
 
-        await _repository.Received(1).ListAsync(21, null, Arg.Any<CancellationToken>());
+        await _repository.Received(1).ListAsync(UserId, 21, null, Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -59,7 +63,7 @@ public sealed class GetOrdersHandlerTests
     [InlineData(-1)]
     public async Task HandleAsync_WithAnOutOfRangeLimit_ReturnsValidationFailure(int limit)
     {
-        var handler = new GetOrdersHandler(_repository);
+        var handler = new GetOrdersHandler(_repository, _currentUser);
 
         var result = await handler.HandleAsync(new GetOrders(limit, null), CancellationToken.None);
 
@@ -70,7 +74,7 @@ public sealed class GetOrdersHandlerTests
     [Fact]
     public async Task HandleAsync_WithAMalformedCursor_ReturnsValidationFailureNotAnException()
     {
-        var handler = new GetOrdersHandler(_repository);
+        var handler = new GetOrdersHandler(_repository, _currentUser);
 
         var result = await handler.HandleAsync(
             new GetOrders(20, "not-base64-at-all!!"), CancellationToken.None);
@@ -88,12 +92,12 @@ public sealed class GetOrdersHandlerTests
         // correctly no next page - so first.Value.NextCursor is null and the second assertion
         // below can never see a non-null cursor. Two rows make "there is a next page" true.
         var head = Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-1", 1, PlacedAt);
-        _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
+        _repository.ListAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns([
                 head,
                 Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-2", 1, PlacedAt.AddMinutes(-1)),
             ]);
-        var handler = new GetOrdersHandler(_repository);
+        var handler = new GetOrdersHandler(_repository, _currentUser);
 
         var first = await handler.HandleAsync(new GetOrders(1, null), CancellationToken.None);
         _repository.ClearReceivedCalls();
@@ -103,6 +107,7 @@ public sealed class GetOrdersHandlerTests
         // the wrong position, or swaps the two fields, pass silently - it is the exact
         // (PlacedAt, Id) of the last row on page one that must reach the repository.
         await _repository.Received(1).ListAsync(
+            UserId,
             2,
             Arg.Is<(DateTimeOffset PlacedAt, Guid Id)?>(a => a!.Value.PlacedAt == head.PlacedAt && a.Value.Id == head.Id),
             Arg.Any<CancellationToken>());
@@ -121,20 +126,33 @@ public sealed class GetOrdersHandlerTests
     {
         var precise = new DateTimeOffset(2026, 8, 31, 12, 0, 0, 123, TimeSpan.Zero).AddTicks(4567);
         var head = Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-1", 1, precise);
-        _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
+        _repository.ListAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns([
                 head,
                 Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-2", 1, precise.AddMinutes(-1)),
             ]);
-        var handler = new GetOrdersHandler(_repository);
+        var handler = new GetOrdersHandler(_repository, _currentUser);
 
         var first = await handler.HandleAsync(new GetOrders(1, null), CancellationToken.None);
         _repository.ClearReceivedCalls();
         await handler.HandleAsync(new GetOrders(1, first.Value.NextCursor), CancellationToken.None);
 
         await _repository.Received(1).ListAsync(
+            UserId,
             2,
             Arg.Is<(DateTimeOffset PlacedAt, Guid Id)?>(a => a!.Value.PlacedAt == precise && a.Value.Id == head.Id),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithNoCurrentUser_ReturnsUnauthorized()
+    {
+        _currentUser.Id.Returns((Guid?)null);
+        var handler = new GetOrdersHandler(_repository, _currentUser);
+
+        var result = await handler.HandleAsync(new GetOrders(20, null), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Kind.Should().Be(ErrorKind.Unauthorized);
     }
 }

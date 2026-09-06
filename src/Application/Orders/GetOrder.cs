@@ -6,14 +6,23 @@ public sealed record OrderView(Guid Id, string Sku, int Quantity, DateTimeOffset
 
 public sealed record GetOrder(Guid Id) : IQuery<OrderView>;
 
-public sealed class GetOrderHandler(IOrderRepository orders) : IQueryHandler<GetOrder, OrderView>
+public sealed class GetOrderHandler(IOrderRepository orders, ICurrentUser currentUser)
+    : IQueryHandler<GetOrder, OrderView>
 {
     public async Task<Result<OrderView>> HandleAsync(GetOrder query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var order = await orders.GetAsync(query.Id, cancellationToken).ConfigureAwait(false);
+        if (currentUser.Id is not { } userId)
+        {
+            return Result.Failure<OrderView>(new Error(
+                ErrorKind.Unauthorized, "auth.failed", "That session is no longer valid."));
+        }
 
+        var order = await orders.GetAsync(query.Id, userId, cancellationToken).ConfigureAwait(false);
+
+        // No ownership branch: the repository cannot return another user's order, so someone
+        // else's id lands on the same not-found failure as an id that was never issued.
         return order is null
             ? Result.Failure<OrderView>(new Error(
                 ErrorKind.NotFound, "order.not_found", $"No order with id '{query.Id}'."))
