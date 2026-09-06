@@ -27,9 +27,10 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     private static readonly Guid High = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
 
     /// <summary>
-    /// One owner for the whole class. Rows written by other test classes now belong to other
-    /// users and are filtered out by ListAsync, but the per-test TopOf(...) windows still do
-    /// the work of keeping these tests from seeing each other's rows.
+    /// One owner for the whole class. This only tags every row this class writes with a single
+    /// user - ListAsync has no UserId predicate yet (that's a later change), so it contributes
+    /// no isolation of its own. The per-test TopOf(...) windows above remain the sole mechanism
+    /// keeping these tests from seeing each other's rows.
     /// </summary>
     private static readonly Guid Owner = Guid.NewGuid();
 
