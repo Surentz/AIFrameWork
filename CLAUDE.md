@@ -65,7 +65,10 @@ or `System.ComponentModel.DataAnnotations`.
   CA1031 is an error everywhere except one file-scoped exemption in `.editorconfig`, for the
   outbox's `BackgroundService` pumps, which have no such parameter and must not die mid-loop.
   `throw;`, never `throw ex;`.
-- **Never hand-edit an applied EF migration.** Add a new one.
+- **Never hand-edit an applied EF migration.** Add a new one. `.claude/hooks/protect-migrations.ps1`
+  enforces this, keying on git history rather than on the file existing: a migration you have
+  just generated and not yet committed is still yours to adjust, and one that is in `HEAD` is
+  refused even if you delete the file first.
 - **No secrets in `appsettings*.json`.** Use `dotnet user-secrets` or environment variables.
 
 ## Commands
