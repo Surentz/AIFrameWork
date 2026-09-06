@@ -1,11 +1,13 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
+using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Messaging;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
+using AiFramework.Infrastructure.Security;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +43,15 @@ public static class InfrastructureRegistration
         services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
         services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
 
+        services.AddCommand<RegisterUser, SessionView, RegisterUserHandler>();
+        services.AddCommand<SignIn, SessionView, SignInHandler>();
+        services.AddCommand<ChangePassword, bool, ChangePasswordHandler>();
+        services.AddQuery<GetUser, SessionView, GetUserHandler>();
+
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
+        services.AddScoped<IValidator<RegisterUser>, RegisterUserValidator>();
+        services.AddScoped<IValidator<SignIn>, SignInValidator>();
+        services.AddScoped<IValidator<ChangePassword>, ChangePasswordValidator>();
 
         services.AddDomainEvent<OrderPlaced>("order.placed");
         services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedAuditHandler>();
@@ -63,7 +73,11 @@ public static class InfrastructureRegistration
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
+        services.AddScoped<IUserRepository, UserRepository>();
         services.AddSingleton<IClock, SystemClock>();
+        // Singleton: PasswordHasher<T> is stateless and thread-safe, and the object it wraps
+        // holds only the work-factor settings.
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         services.AddOutbox();
 

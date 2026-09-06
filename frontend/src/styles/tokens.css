@@ -1,0 +1,113 @@
+/*
+ * Every colour, space, radius, shadow and duration used anywhere in the app resolves to a token
+ * declared here. Components never hard-code a hex value, which is what makes the dark theme
+ * below a re-declaration of this one block rather than an edit to every stylesheet.
+ */
+:root {
+  /* Tells the browser to render its own controls (scrollbars, date pickers, the checkbox in
+     the login form) in the matching theme. Without it those stay light on a dark page. */
+  color-scheme: light dark;
+
+  --color-canvas: #f4f5f8;
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f8f9fb;
+  --color-border: #e4e7ec;
+  --color-border-strong: #cfd4dd;
+
+  --color-text: #12151c;
+  --color-text-muted: #59616f;
+  --color-text-subtle: #878e9b;
+
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-accent-active: #3730a3;
+  --color-accent-contrast: #ffffff;
+  --color-accent-soft: #eef1ff;
+  --color-accent-ring: rgb(79 70 229 / 30%);
+
+  --color-danger: #b42318;
+  --color-danger-text: #912018;
+  --color-danger-soft: #fef4f3;
+  --color-danger-border: #f2c9c4;
+  /* Translucent, unlike --color-danger-soft: a focus ring has to read against whatever surface
+     it lands on, and an opaque near-surface tint disappears in the dark theme. */
+  --color-danger-ring: rgb(180 35 24 / 25%);
+
+  --color-success-text: #0f6b3f;
+  --color-success-soft: #f0fdf5;
+  --color-success-border: #bbe8cd;
+
+  /* The brand panel keeps its own scale because it is a dark surface in both themes - reusing
+     --color-text there would make it unreadable in light mode. */
+  --color-brand-from: #3b2fa8;
+  --color-brand-to: #6d3ec4;
+  --color-brand-text: #ffffff;
+  --color-brand-text-muted: rgb(255 255 255 / 72%);
+  --color-brand-hairline: rgb(255 255 255 / 16%);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
+  --shadow-md: 0 4px 12px rgb(16 24 40 / 8%);
+  --shadow-lg: 0 24px 48px -12px rgb(16 24 40 / 18%);
+
+  --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #0c0e14;
+    --color-surface: #14171f;
+    --color-surface-sunken: #10131a;
+    --color-border: #262b36;
+    --color-border-strong: #363c4a;
+
+    --color-text: #f2f4f8;
+    --color-text-muted: #a2aab8;
+    --color-text-subtle: #757d8b;
+
+    --color-accent: #8b83f5;
+    --color-accent-hover: #a49df8;
+    --color-accent-active: #b8b2fa;
+    --color-accent-contrast: #14171f;
+    --color-accent-soft: #1d1f35;
+    --color-accent-ring: rgb(139 131 245 / 35%);
+
+    --color-danger: #f97066;
+    --color-danger-text: #fda29b;
+    --color-danger-soft: #2a1614;
+    --color-danger-border: #5b2b26;
+    --color-danger-ring: rgb(249 112 102 / 30%);
+
+    --color-success-text: #6ee7a8;
+    --color-success-soft: #10231a;
+    --color-success-border: #24513a;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 45%);
+    --shadow-lg: 0 24px 48px -12px rgb(0 0 0 / 60%);
+  }
+}

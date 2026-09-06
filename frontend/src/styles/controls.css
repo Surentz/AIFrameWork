@@ -1,0 +1,187 @@
+/*
+ * The shared primitives - cards, buttons, form fields, alerts. These exist as classes rather
+ * than element selectors so that global.css can stay a pure reset: a screen opts in by naming
+ * the class, and markup that has not been designed yet stays plain instead of half-styled.
+ */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.btn--primary {
+  background-color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-accent-contrast);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background-color: var(--color-accent-hover);
+}
+
+.btn--primary:active:not(:disabled) {
+  background-color: var(--color-accent-active);
+}
+
+.btn--secondary {
+  border-color: var(--color-border-strong);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid currentcolor;
+  border-block-start-color: transparent;
+  border-radius: var(--radius-full);
+  animation: spin 600ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------- form fields */
+
+.field {
+  display: grid;
+}
+
+.field__label {
+  margin-block-end: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+/* The ring is a box-shadow rather than the global outline so it can be tinted red on an invalid
+   field; :focus-visible would give every field the same accent ring. */
+.input:focus {
+  border-color: var(--color-accent);
+  outline: none;
+  box-shadow: 0 0 0 4px var(--color-accent-ring);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.input[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 4px var(--color-danger-ring);
+}
+
+/* box-shadow is not painted in forced-colors mode, so the rings above vanish there and the
+   suppressed outline has to come back. */
+@media (forced-colors: active) {
+  .input:focus {
+    outline: 2px solid;
+    outline-offset: 1px;
+  }
+}
+
+/*
+ * Left in the accessibility tree when empty rather than display: none'd. An aria-live region
+ * inserted at the same moment as its text is frequently not announced, so it has to already be
+ * there - which is also why the margin is on :not(:empty) rather than a gap on .field: an empty
+ * grid row is zero-height, but a gap around it would not be.
+ */
+.field__errors {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field__errors:not(:empty) {
+  margin-block-start: var(--space-2);
+}
+
+.field__errors p {
+  margin: 0;
+  color: var(--color-danger-text);
+  font-size: var(--text-sm);
+}
+
+.alert {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-danger-soft);
+  color: var(--color-danger-text);
+  font-size: var(--text-sm);
+}
+
+/* The success counterpart to .alert. Same shape, so a form's two outcomes do not jump about. */
+.alert--success {
+  border-color: var(--color-success-border);
+  background-color: var(--color-success-soft);
+  color: var(--color-success-text);
+}

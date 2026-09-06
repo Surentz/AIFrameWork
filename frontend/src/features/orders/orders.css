@@ -1,0 +1,184 @@
+/* Shared by the three orders screens - list, detail and the place-order form. */
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-block-end: var(--space-5);
+}
+
+.page-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.page-back:hover {
+  color: var(--color-accent);
+}
+
+/* ---------------------------------------------------------------- the list */
+
+/*
+ * overflow-x on the card, not on the page: a narrow viewport scrolls the table sideways inside
+ * its own container rather than making the whole layout pan.
+ */
+.orders__card {
+  overflow-x: auto;
+}
+
+.orders__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.orders__table th {
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--color-border);
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: start;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.orders__table td {
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.orders__table tbody tr:last-child td {
+  border-block-end: none;
+}
+
+.orders__table tbody tr {
+  transition: background-color var(--transition);
+}
+
+.orders__table tbody tr:hover {
+  background-color: var(--color-surface-sunken);
+}
+
+.orders__sku {
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.orders__sku:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+/* Both selectors name the element: `.orders__table th` already sets text-align, and a bare
+   `.orders__num` loses to it on specificity, which left the header start-aligned above
+   end-aligned numbers. tabular-nums keeps the column aligned digit-for-digit down the rows. */
+.orders__table th.orders__num,
+.orders__table td.orders__num {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.orders__when {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.orders__state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+}
+
+.orders__state p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.orders__empty-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.orders__more {
+  display: flex;
+  justify-content: center;
+  margin-block-start: var(--space-5);
+}
+
+.orders__error {
+  margin-block-start: var(--space-4);
+}
+
+/* ---------------------------------------------------------------- the detail */
+
+.order-facts {
+  display: grid;
+  gap: var(--space-5);
+  margin: 0;
+  padding: var(--space-5);
+}
+
+@media (min-width: 40rem) {
+  .order-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.order-facts dt {
+  margin-block-end: var(--space-1);
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.order-facts dd {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.order-facts__id {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- the form */
+
+.order-form {
+  max-width: 32rem;
+  padding: var(--space-5);
+}
+
+.order-form__fields {
+  display: grid;
+  gap: var(--space-5);
+}

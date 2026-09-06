@@ -1,4 +1,5 @@
 using AiFramework.Domain.Orders;
+using AiFramework.Domain.Users;
 using AiFramework.Infrastructure.Outbox;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
     public DbSet<OrderAudit> OrderAudits => Set<OrderAudit>();
+
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -21,6 +21,13 @@
     -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+    <!--
+      For PasswordHasher<T> alone (Security/PasswordHasher.cs). This is the plain hashing
+      primitive - PBKDF2, versioned format, constant-time compare - not the ASP.NET Core Identity
+      stack: no UserManager, no EF stores, no eight tables. The User aggregate stays hand-rolled
+      in Domain, which is what keeps EF Core and DataAnnotations out of that layer (ADR 0006).
+    -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.11" />
     <!-- BackgroundService/IHostedService for the outbox pumps (OutboxHostedServices.cs). -->
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />

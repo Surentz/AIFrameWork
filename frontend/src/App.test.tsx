@@ -4,7 +4,9 @@ import { withQueryClient } from './test/withQueryClient';
 import { App } from './App';
 
 describe('App', () => {
-  it('renders the application heading', () => {
+  // findBy, not getBy: RequireAuth checks the session before the shell renders anything, so the
+  // heading arrives a tick later than it used to.
+  it('renders the application heading once the session resolves', async () => {
     render(
       <MemoryRouter>
         <App />
@@ -12,6 +14,6 @@ describe('App', () => {
       { wrapper: withQueryClient() },
     );
 
-    expect(screen.getByRole('heading', { name: 'Orders' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Orders' })).toBeInTheDocument();
   });
 });

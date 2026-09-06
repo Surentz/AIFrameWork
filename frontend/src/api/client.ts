@@ -18,7 +18,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function send(path: string, init?: RequestInit): Promise<Response> {
   // Seed the default, then let anything the caller passed overwrite it - Headers.set()
   // always wins over what's already there, so the default has to go in first.
   const headers = new Headers({ 'Content-Type': 'application/json' });
@@ -26,6 +26,9 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set(key, value);
   });
 
+  // No `credentials` option: fetch defaults to 'same-origin', and the session cookie is
+  // same-origin because vite.config.ts proxies /api. Setting 'include' would be the change
+  // needed if the API ever moved to its own origin.
   const response = await fetch(path, { ...init, headers });
 
   if (!response.ok) {
@@ -34,5 +37,17 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(response.status, problem);
   }
 
-  return (await response.json()) as T;
+  return response;
+}
+
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await (await send(path, init)).json()) as T;
+}
+
+/**
+ * For the endpoints that answer 204. Same error handling as `request`, but no body to parse -
+ * calling `request` for one of these throws on an empty body after a perfectly good response.
+ */
+export async function requestVoid(path: string, init?: RequestInit): Promise<void> {
+  await send(path, init);
 }

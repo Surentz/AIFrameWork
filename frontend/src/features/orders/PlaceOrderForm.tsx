@@ -1,7 +1,8 @@
 import { useId, useState } from 'react';
 import type { SubmitEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { usePlaceOrder } from './queries';
+import './orders.css';
 
 export function PlaceOrderForm(): React.JSX.Element {
   const [sku, setSku] = useState('');
@@ -17,59 +18,90 @@ export function PlaceOrderForm(): React.JSX.Element {
   const fieldErrors = mutation.error?.fieldErrors ?? {};
   const skuErrors = fieldErrors.Sku ?? [];
   const quantityErrors = fieldErrors.Quantity ?? [];
-  // useId, not literals: two mounted forms would emit duplicate ids and aria-describedby
-  // would resolve to the wrong one.
+  // useId, not literals: two mounted forms would emit duplicate ids, and both htmlFor and
+  // aria-describedby would resolve to the first form's inputs.
+  const skuId = useId();
+  const quantityId = useId();
   const skuErrorId = useId();
   const quantityErrorId = useId();
 
   return (
-    <form onSubmit={handleSubmit}>
-      <h2>Place an order</h2>
+    <>
+      <Link className="page-back" to="/orders">
+        ← All orders
+      </Link>
 
-      <label htmlFor="sku">Sku</label>
-      <input
-        id="sku"
-        value={sku}
-        aria-invalid={skuErrors.length > 0}
-        aria-describedby={skuErrors.length > 0 ? skuErrorId : undefined}
-        onChange={(e) => {
-          setSku(e.target.value);
-        }}
-      />
-      {/* Rendered unconditionally: a live region inserted together with its text may
-          not be announced, so it has to already exist when the error arrives. */}
-      <div id={skuErrorId} aria-live="polite">
-        {skuErrors.map((message) => (
-          <p key={message}>{message}</p>
-        ))}
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Place an order</h1>
+          <p className="page-subtitle">A sku and how many of it you want.</p>
+        </div>
       </div>
 
-      <label htmlFor="quantity">Quantity</label>
-      <input
-        id="quantity"
-        type="number"
-        value={quantity}
-        aria-invalid={quantityErrors.length > 0}
-        aria-describedby={quantityErrors.length > 0 ? quantityErrorId : undefined}
-        onChange={(e) => {
-          setQuantity(Number(e.target.value));
-        }}
-      />
-      {/* Rendered unconditionally: a live region inserted together with its text may
-          not be announced, so it has to already exist when the error arrives. */}
-      <div id={quantityErrorId} aria-live="polite">
-        {quantityErrors.map((message) => (
-          <p key={message}>{message}</p>
-        ))}
-      </div>
+      <form className="card order-form" onSubmit={handleSubmit}>
+        <div className="order-form__fields">
+          <div className="field">
+            <label className="field__label" htmlFor={skuId}>
+              Sku
+            </label>
+            <input
+              className="input"
+              id={skuId}
+              placeholder="SKU-1"
+              value={sku}
+              aria-invalid={skuErrors.length > 0}
+              aria-describedby={skuErrors.length > 0 ? skuErrorId : undefined}
+              onChange={(e) => {
+                setSku(e.target.value);
+              }}
+            />
+            {/* Rendered unconditionally: a live region inserted together with its text may
+                not be announced, so it has to already exist when the error arrives. */}
+            <div className="field__errors" id={skuErrorId} aria-live="polite">
+              {skuErrors.map((message) => (
+                <p key={message}>{message}</p>
+              ))}
+            </div>
+          </div>
 
-      <button type="submit" disabled={mutation.isPending}>
-        Place order
-      </button>
+          <div className="field">
+            <label className="field__label" htmlFor={quantityId}>
+              Quantity
+            </label>
+            <input
+              className="input"
+              id={quantityId}
+              type="number"
+              value={quantity}
+              aria-invalid={quantityErrors.length > 0}
+              aria-describedby={quantityErrors.length > 0 ? quantityErrorId : undefined}
+              onChange={(e) => {
+                setQuantity(Number(e.target.value));
+              }}
+            />
+            {/* Rendered unconditionally: a live region inserted together with its text may
+                not be announced, so it has to already exist when the error arrives. */}
+            <div className="field__errors" id={quantityErrorId} aria-live="polite">
+              {quantityErrors.map((message) => (
+                <p key={message}>{message}</p>
+              ))}
+            </div>
+          </div>
 
-      {mutation.error && Object.keys(fieldErrors).length === 0 && (
-        <p role="alert">{mutation.error.message}</p>
-      )}
-    </form>
+          <div>
+            <button className="btn btn--primary" type="submit" disabled={mutation.isPending}>
+              {mutation.isPending && <span className="spinner" aria-hidden="true" />}
+              Place order
+            </button>
+          </div>
+
+          {mutation.error && Object.keys(fieldErrors).length === 0 && (
+            <p className="alert" role="alert">
+              {mutation.error.message}
+            </p>
+          )}
+        </div>
+      </form>
+    </>
   );
 }

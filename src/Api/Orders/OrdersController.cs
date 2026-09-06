@@ -1,11 +1,13 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiFramework.Api.Orders;
 
 [ApiController]
 [Route("api/orders")]
+[Authorize]
 public sealed class OrdersController(
     ICommandDispatcher commands, IQueryDispatcher queries) : ControllerBase
 {
