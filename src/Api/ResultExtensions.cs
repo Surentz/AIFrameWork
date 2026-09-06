@@ -17,6 +17,7 @@ public static class ResultExtensions
             ErrorKind.Validation => StatusCodes.Status400BadRequest,
             ErrorKind.NotFound => StatusCodes.Status404NotFound,
             ErrorKind.Conflict => StatusCodes.Status409Conflict,
+            ErrorKind.Unauthorized => StatusCodes.Status401Unauthorized,
             _ => StatusCodes.Status500InternalServerError,
         };
 

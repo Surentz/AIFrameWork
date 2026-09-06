@@ -45,6 +45,7 @@ maps `Result.Error.Kind` to a status code:
 | `ErrorKind` | Status |
 |---|---|
 | `Validation` | 400 |
+| `Unauthorized` | 401 |
 | `NotFound` | 404 |
 | `Conflict` | 409 |
 | anything else | 500 |

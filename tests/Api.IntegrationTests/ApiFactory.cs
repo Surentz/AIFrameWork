@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using AiFramework.Api.IntegrationTests.Diagnostics;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
@@ -92,6 +93,34 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.TryAddEnumerable(
                 ServiceDescriptor.Singleton<IStartupFilter, TestEndpointsStartupFilter>());
         });
+    }
+
+    /// <summary>
+    /// A client that has registered a fresh user and is carrying its session cookie, for the
+    /// endpoints that now require one. <see cref="WebApplicationFactory{TEntryPoint}.CreateClient()"/>
+    /// handles cookies by default, so every later request on the returned client is signed in.
+    /// </summary>
+    /// <remarks>
+    /// A fresh user per client rather than one shared account: these tests all share one database
+    /// through ApiFactoryCollection, and a shared user would let a password change in one test
+    /// invalidate another's session.
+    /// </remarks>
+    public async Task<HttpClient> CreateAuthenticatedClientAsync()
+    {
+        var client = CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new
+            {
+                Username = $"u{Guid.NewGuid():N}"[..32],
+                Password = "a long enough test password",
+                DisplayName = "Test User",
+            });
+
+        response.EnsureSuccessStatusCode();
+
+        return client;
     }
 
     /// <summary>

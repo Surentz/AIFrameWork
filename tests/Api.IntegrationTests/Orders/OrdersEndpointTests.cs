@@ -9,9 +9,30 @@ namespace AiFramework.Api.IntegrationTests.Orders;
 public sealed class OrdersEndpointTests(ApiFactory factory)
 {
     [Fact]
-    public async Task PostOrders_WithAValidRequest_Returns201()
+    public async Task GetOrders_WhenAnonymous_Returns401()
     {
         using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/orders");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task PostOrders_WhenAnonymous_Returns401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/orders", new { Sku = "SKU-1", Quantity = 2 });
+
+        response.StatusCode.Should().Be(
+            HttpStatusCode.Unauthorized, "an anonymous write must be refused before it validates");
+    }
+
+    [Fact]
+    public async Task PostOrders_WithAValidRequest_Returns201()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = "SKU-1", Quantity = 2 });
@@ -22,7 +43,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PostOrders_ThenGet_ReturnsTheOrder()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var created = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = "SKU-2", Quantity = 7 });
         var id = await created.Content.ReadFromJsonAsync<Guid>();
@@ -37,7 +58,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PostOrders_WithZeroQuantity_Returns400()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = "SKU-3", Quantity = 0 });
@@ -62,7 +83,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PostOrders_WithMissingQuantity_Returns400()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         // Quantity is a non-nullable required int with no DataAnnotation; omitting it from the
         // JSON body fails during model binding, before the controller action - and therefore
@@ -82,7 +103,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     [Fact]
     public async Task GetOrders_WithAnUnknownId_Returns404()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.GetAsync($"/api/orders/{Guid.NewGuid()}");
 
@@ -92,7 +113,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     [Fact]
     public async Task Throw_WithADomainException_Returns400WithTheMessageAsDetail()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.GetAsync("/api/test/throw/domain");
 
@@ -109,7 +130,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     [Fact]
     public async Task Throw_WithAnUnexpectedException_Returns500WithoutLeakingTheMessage()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.GetAsync("/api/test/throw/unexpected");
 

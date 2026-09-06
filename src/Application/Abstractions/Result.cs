@@ -6,6 +6,13 @@ public enum ErrorKind
     Validation,
     NotFound,
     Conflict,
+
+    /// <summary>
+    /// The caller is not who they claim to be — bad credentials, or no session at all. Distinct
+    /// from Validation because a rejected sign-in is not a malformed request, and mapping it to
+    /// 400 would tell a client to fix its input when the input was well-formed.
+    /// </summary>
+    Unauthorized,
 }
 
 /// <summary>An expected failure. Exceptions are for genuinely exceptional conditions.</summary>

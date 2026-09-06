@@ -179,10 +179,304 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/auth/register": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Creates an account and signs it in. */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["RegisterRequest"];
+                    readonly "text/json": components["schemas"]["RegisterRequest"];
+                    readonly "application/*+json": components["schemas"]["RegisterRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["SessionResponse"];
+                        readonly "application/json": components["schemas"]["SessionResponse"];
+                        readonly "text/json": components["schemas"]["SessionResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/auth/login": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Signs in with a username and password. */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["LoginRequest"];
+                    readonly "text/json": components["schemas"]["LoginRequest"];
+                    readonly "application/*+json": components["schemas"]["LoginRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["SessionResponse"];
+                        readonly "application/json": components["schemas"]["SessionResponse"];
+                        readonly "text/json": components["schemas"]["SessionResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/auth/logout": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Signs out, clearing the session cookie.
+         * @description Anonymous deliberately: signing out when the cookie has already expired is the caller
+         *     getting what they asked for, not an error worth a 401.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/auth/me": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Returns the signed-in user. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["SessionResponse"];
+                        readonly "application/json": components["schemas"]["SessionResponse"];
+                        readonly "text/json": components["schemas"]["SessionResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/auth/change-password": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Changes the signed-in user's own password. */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["ChangePasswordRequest"];
+                    readonly "text/json": components["schemas"]["ChangePasswordRequest"];
+                    readonly "application/*+json": components["schemas"]["ChangePasswordRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        readonly ChangePasswordRequest: {
+            readonly currentPassword: string;
+            readonly newPassword: string;
+        };
+        readonly LoginRequest: {
+            readonly username: string;
+            readonly password: string;
+            /**
+             * @description Whether the session cookie outlives the browser session. Maps to the auth cookie's
+             *     IsPersistent, which is the whole of what "remember me" means under cookie authentication.
+             */
+            readonly rememberMe: boolean;
+        };
         readonly OrderListItemResponse: {
             /** Format: uuid */
             readonly id: string;
@@ -222,6 +516,22 @@ export interface components {
             readonly status?: null | number | string;
             readonly detail?: null | string;
             readonly instance?: null | string;
+        };
+        /**
+         * @description Business-rule validation (length, charset, password policy) is owned by the validators in
+         *     `src/Application/Users`, not duplicated here as DataAnnotations. See `src/Api/CLAUDE.md`.
+         */
+        readonly RegisterRequest: {
+            readonly username: string;
+            readonly password: string;
+            readonly displayName: string;
+        };
+        /** @description Who the caller is. Carries no password material, by construction. */
+        readonly SessionResponse: {
+            /** Format: uuid */
+            readonly userId: string;
+            readonly username: string;
+            readonly displayName: string;
         };
     };
     responses: never;

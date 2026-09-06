@@ -24,7 +24,7 @@ public sealed class ProblemDetailsContractTests(ApiFactory factory)
     [Fact]
     public async Task AValidationFailure_CarriesTheFieldsTheFrontendReads()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = "SKU-PROBLEM", Quantity = 0 });
@@ -46,7 +46,7 @@ public sealed class ProblemDetailsContractTests(ApiFactory factory)
     [Fact]
     public async Task ANotFound_CarriesTheSameShape()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.GetAsync($"/api/orders/{Guid.NewGuid()}");
 

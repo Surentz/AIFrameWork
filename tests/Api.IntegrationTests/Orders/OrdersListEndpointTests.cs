@@ -11,7 +11,7 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     [Fact]
     public async Task GetOrders_AfterPlacingAnOrder_ReturnsItInTheList()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         var created = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = "SKU-LIST-1", Quantity = 3 });
         created.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -26,7 +26,7 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     [Fact]
     public async Task GetOrders_WithALimitOfOne_ReturnsOneItemAndACursor()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
         await client.PostAsJsonAsync("/api/orders", new { Sku = "SKU-LIST-2", Quantity = 1 });
         await client.PostAsJsonAsync("/api/orders", new { Sku = "SKU-LIST-3", Quantity = 1 });
 
@@ -40,7 +40,7 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     [Fact]
     public async Task GetOrders_WhenFollowingTheCursorAfterANewOrderArrives_NeitherRepeatsNorSkipsARow()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         // Unique per run, not "SKU-LIST-N": this shared database also holds rows from every
         // other test in ApiFactoryCollection, so the ids returned - not the row count - are
@@ -76,7 +76,7 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     [Fact]
     public async Task GetOrders_WithAnOutOfRangeLimit_Returns400()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.GetAsync(new Uri("/api/orders?limit=0", UriKind.Relative));
 
@@ -90,7 +90,7 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     [Fact]
     public async Task GetOrders_WithAMalformedCursor_Returns400NotAServerError()
     {
-        using var client = factory.CreateClient();
+        using var client = await factory.CreateAuthenticatedClientAsync();
 
         var response = await client.GetAsync(
             new Uri("/api/orders?cursor=not-a-cursor", UriKind.Relative));

@@ -2,6 +2,7 @@ using AiFramework.Api;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.EventPath;
 using JasperFx;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,6 +18,49 @@ if (string.IsNullOrWhiteSpace(connectionString))
 }
 
 builder.Services.AddControllers();
+
+// Cookie, not a bearer token: the SPA is served same-origin (vite.config.ts proxies /api), so
+// the browser attaches this by itself and no JavaScript ever holds the session - an XSS bug has
+// nothing to steal. It also means no signing key, which this repo could not put in
+// appsettings.json anyway: the no-secrets hook blocks a bare "Key" for exactly that reason.
+// ADR 0006.
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "aiframework.session";
+        options.Cookie.HttpOnly = true;
+
+        // Lax is the CSRF defence: it withholds the cookie on a cross-site POST, and every
+        // endpoint here binds JSON, which a cross-site HTML form cannot send. No antiforgery
+        // token is issued on top of that.
+        options.Cookie.SameSite = SameSiteMode.Lax;
+
+        // SameAsRequest in Development only: the dev API is plain HTTP on 5234, and a Secure
+        // cookie there would be set by some browsers and silently dropped by others.
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
+
+        options.ExpireTimeSpan = TimeSpan.FromDays(7);
+        options.SlidingExpiration = true;
+
+        // This is an API, not a server-rendered app. Left alone, the cookie handler answers an
+        // unauthenticated request with a 302 to a login page that does not exist here, so a
+        // fetch() would see a 404 of HTML instead of a 401 and the client could not tell "signed
+        // out" from "broken".
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+
+builder.Services.AddAuthorization();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
@@ -38,7 +82,12 @@ builder.Host.AddWolverineEventPath(
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
+
+// No fallback authorization policy is registered, so this stays anonymous without an attribute -
+// a readiness probe that needs credentials is not a readiness probe.
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 // Development only, deliberately: a deployed instance must not publish its endpoint surface.
