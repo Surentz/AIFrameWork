@@ -11,8 +11,9 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     // never from the global newest row. Infrastructure.Tests shares one Postgres container by
     // policy (tests/CLAUDE.md: one container per collection, never per class), so a test that
     // assumes it owns the newest rows is wrong by construction - the other tests in this very
-    // class seed higher timestamps. Rows from other classes sort far below and are trimmed by
-    // the limit.
+    // class seed higher timestamps. Rows from other classes are excluded by owner, not by sort
+    // position - ListAsync now filters by UserId, so another class's rows never enter the result
+    // set regardless of where they sort.
     private static readonly DateTimeOffset Base = new(2099, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>A cursor positioned above everything this test seeded, and below nothing else.</summary>
@@ -27,10 +28,12 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     private static readonly Guid High = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
 
     /// <summary>
-    /// One owner for the whole class. ListAsync now filters by UserId, so this scopes every
-    /// read this class makes to rows this class itself seeded - no other test class's rows can
-    /// leak in. Within that one owner, the per-test TopOf(...) windows above are what keep these
-    /// tests from seeing each other's rows.
+    /// One owner for every test in this class except
+    /// <see cref="ListAsync_WithAnotherUsersOrdersInterleaved_ReturnsOnlyTheOwners"/>, which
+    /// brings its own local owner/stranger pair instead. ListAsync now filters by UserId, so this
+    /// scopes every read the other tests make to rows they themselves seeded - no other test
+    /// class's rows can leak in. Within that one owner, the per-test TopOf(...) windows above are
+    /// what keep those tests from seeing each other's rows.
     /// </summary>
     private static readonly Guid Owner = Guid.NewGuid();
 
@@ -142,11 +145,14 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
         // ct) is what the handler calls on every FIRST page - the most-exercised production
         // path - yet had no repository-level coverage at all.
         //
-        // Two rows, seeded at the highest window this class uses (minutes 50-51, above every
-        // other test's window): asserting on a single seeded row would pass vacuously, since
-        // BeInDescendingOrder is trivially true on a one-element (or empty) result. With two
-        // known rows at the very top of the whole shared table, ListAsync(2, null, ...) must
+        // Two rows, seeded at the highest window this class seeds for Owner (minutes 50-51,
+        // above every other test's window for Owner): asserting on a single seeded row would
+        // pass vacuously, since BeInDescendingOrder is trivially true on a one-element (or empty)
+        // result. With two known rows at the top of Owner's rows, ListAsync(2, null, ...) must
         // return exactly [newer, older] - it cannot pass under a broken or inverted ordering.
+        // (The interleaving test below seeds higher windows still, minutes 61-65, but those rows
+        // belong to other owners and are excluded from Owner's results by the UserId filter, not
+        // by sort position - do not seed Owner above minute 51.)
         var older = await SeedAsync("SKU-HEAD-OLD", Base.AddMinutes(50));
         var newer = await SeedAsync("SKU-HEAD-NEW", Base.AddMinutes(51));
 

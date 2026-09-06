@@ -115,7 +115,9 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
         var page = await stranger.GetFromJsonAsync<OrderPageDto>("/api/orders?limit=100");
 
         page.Should().NotBeNull();
-        page.Items.Should().NotContain(i => i.Id == id);
+        page.Items.Should().NotContain(
+            i => i.Id == id,
+            "another user's orders must never appear in this caller's page");
     }
 
     public sealed record OrderPageDto(IReadOnlyList<OrderListItemDto> Items, string? NextCursor);

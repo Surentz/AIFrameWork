@@ -61,10 +61,19 @@ try {
 
                 try {
                     $tracked = & git -C $gitDirectory ls-tree HEAD --name-only -- $leafName
-                    $inHistory = -not [string]::IsNullOrWhiteSpace(($tracked -join ''))
+
+                    if ($LASTEXITCODE -ne 0) {
+                        # git could not answer - not a checkout, unborn HEAD, path outside the repo.
+                        # Refuse rather than wave through: an unverifiable migration edit is the case
+                        # this guard exists for.
+                        $inHistory = $true
+                    }
+                    else {
+                        $inHistory = -not [string]::IsNullOrWhiteSpace(($tracked -join ''))
+                    }
                 }
                 catch {
-                    # git missing, or not a checkout. Fail closed: an unverifiable
+                    # git missing entirely (command not found). Fail closed: an unverifiable
                     # migration edit is refused rather than waved through.
                     $inHistory = $true
                 }
