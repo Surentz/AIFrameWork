@@ -26,14 +26,24 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     private static readonly Guid Low = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid High = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
 
+    /// <summary>
+    /// One owner for the whole class. Rows written by other test classes now belong to other
+    /// users and are filtered out by ListAsync, but the per-test TopOf(...) windows still do
+    /// the work of keeping these tests from seeing each other's rows.
+    /// </summary>
+    private static readonly Guid Owner = Guid.NewGuid();
+
     private Task<Guid> SeedAsync(string sku, DateTimeOffset placedAt) =>
         SeedAsync(sku, placedAt, Guid.NewGuid());
 
-    private async Task<Guid> SeedAsync(string sku, DateTimeOffset placedAt, Guid id)
+    private Task<Guid> SeedAsync(string sku, DateTimeOffset placedAt, Guid id) =>
+        SeedAsync(Owner, sku, placedAt, id);
+
+    private async Task<Guid> SeedAsync(Guid owner, string sku, DateTimeOffset placedAt, Guid id)
     {
         await using var context = fixture.CreateContext();
         await new OrderRepository(context).AddAsync(
-            Order.Place(id, sku, 1, placedAt), CancellationToken.None);
+            Order.Place(id, owner, sku, 1, placedAt), CancellationToken.None);
         await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         return id;
     }

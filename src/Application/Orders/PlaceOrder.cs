@@ -15,14 +15,22 @@ public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrder>
     }
 }
 
-public sealed class PlaceOrderHandler(IOrderRepository orders, IClock clock)
+public sealed class PlaceOrderHandler(
+    IOrderRepository orders, IClock clock, ICurrentUser currentUser)
     : ICommandHandler<PlaceOrder, Guid>
 {
     public async Task<Result<Guid>> HandleAsync(PlaceOrder command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var order = Order.Place(Guid.NewGuid(), command.Sku, command.Quantity, clock.UtcNow);
+        if (currentUser.Id is not { } userId)
+        {
+            return Result.Failure<Guid>(new Error(
+                ErrorKind.Unauthorized, "auth.failed", "That session is no longer valid."));
+        }
+
+        var order = Order.Place(
+            Guid.NewGuid(), userId, command.Sku, command.Quantity, clock.UtcNow);
 
         await orders.AddAsync(order, cancellationToken).ConfigureAwait(false);
 

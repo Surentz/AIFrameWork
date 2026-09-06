@@ -4,9 +4,10 @@ namespace AiFramework.Domain.Orders;
 
 public sealed class Order : Entity
 {
-    private Order(Guid id, string sku, int quantity, DateTimeOffset placedAt)
+    private Order(Guid id, Guid userId, string sku, int quantity, DateTimeOffset placedAt)
     {
         Id = id;
+        UserId = userId;
         Sku = sku;
         Quantity = quantity;
         PlacedAt = placedAt;
@@ -14,14 +15,23 @@ public sealed class Order : Entity
 
     public Guid Id { get; private set; }
 
+    /// <summary>The user who placed it. Set once; an order is never reassigned.</summary>
+    public Guid UserId { get; private set; }
+
     public string Sku { get; private set; }
 
     public int Quantity { get; private set; }
 
     public DateTimeOffset PlacedAt { get; private set; }
 
-    public static Order Place(Guid id, string sku, int quantity, DateTimeOffset placedAt)
+    public static Order Place(
+        Guid id, Guid userId, string sku, int quantity, DateTimeOffset placedAt)
     {
+        if (userId == Guid.Empty)
+        {
+            throw new DomainException("An order needs a user.");
+        }
+
         if (string.IsNullOrWhiteSpace(sku))
         {
             throw new DomainException("An order needs a sku.");
@@ -32,7 +42,7 @@ public sealed class Order : Entity
             throw new DomainException("An order needs a positive quantity.");
         }
 
-        var order = new Order(id, sku, quantity, placedAt);
+        var order = new Order(id, userId, sku, quantity, placedAt);
         order.Raise(new OrderPlaced(id, sku, quantity));
         return order;
     }

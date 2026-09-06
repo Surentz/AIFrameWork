@@ -12,6 +12,7 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 
         builder.ToTable("orders");
         builder.HasKey(o => o.Id);
+        builder.Property(o => o.UserId).IsRequired();
         builder.Property(o => o.Sku).IsRequired().HasMaxLength(64);
         builder.Property(o => o.Quantity).IsRequired();
         builder.Property(o => o.PlacedAt).IsRequired();
@@ -21,10 +22,11 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         // model fails to build at first use.
         builder.Ignore(o => o.DomainEvents);
 
-        // The list endpoint orders by (PlacedAt DESC, Id DESC); without a matching index every
-        // page sorts the whole table.
-        builder.HasIndex(o => new { o.PlacedAt, o.Id })
-            .IsDescending(true, true)
-            .HasDatabaseName("IX_Orders_PlacedAt_Id_Desc");
+        // The list endpoint filters by owner and orders by (PlacedAt DESC, Id DESC). The owner
+        // is the leading column because it is an equality predicate; the previous
+        // IX_Orders_PlacedAt_Id_Desc cannot serve this query and is dropped.
+        builder.HasIndex(o => new { o.UserId, o.PlacedAt, o.Id })
+            .IsDescending(false, true, true)
+            .HasDatabaseName("IX_Orders_UserId_PlacedAt_Id_Desc");
     }
 }

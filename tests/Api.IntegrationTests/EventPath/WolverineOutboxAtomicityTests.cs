@@ -65,7 +65,7 @@ public sealed class WolverineOutboxAtomicityTests(ApiFactory factory)
             var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
 
             context.Set<Order>().Add(
-                Order.Place(orderId, "SKU-ATOMIC-COMMIT", 2, DateTimeOffset.UtcNow));
+                Order.Place(orderId, Guid.NewGuid(), "SKU-ATOMIC-COMMIT", 2, DateTimeOffset.UtcNow));
 
             await outbox.PublishAsync(new OrderPlacedNotification(orderId, "SKU-ATOMIC-COMMIT", 2));
 

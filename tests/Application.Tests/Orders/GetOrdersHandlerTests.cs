@@ -16,7 +16,7 @@ public sealed class GetOrdersHandlerTests
     public async Task HandleAsync_WithFewerRowsThanTheLimit_ReturnsNoNextCursor()
     {
         _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
-            .Returns([Order.Place(Guid.NewGuid(), "SKU-1", 1, PlacedAt)]);
+            .Returns([Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-1", 1, PlacedAt)]);
         var handler = new GetOrdersHandler(_repository);
 
         var result = await handler.HandleAsync(new GetOrders(20, null), CancellationToken.None);
@@ -29,7 +29,7 @@ public sealed class GetOrdersHandlerTests
     public async Task HandleAsync_WithMoreRowsThanTheLimit_TrimsToTheLimit()
     {
         var orders = Enumerable.Range(0, 3)
-            .Select(i => Order.Place(Guid.NewGuid(), $"SKU-{i}", 1, PlacedAt.AddMinutes(-i)))
+            .Select(i => Order.Place(Guid.NewGuid(), Guid.NewGuid(), $"SKU-{i}", 1, PlacedAt.AddMinutes(-i)))
             .ToArray();
         _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns(orders);
@@ -87,11 +87,11 @@ public sealed class GetOrdersHandlerTests
         // makes the first HandleAsync(limit: 1) call receive exactly 1 row for a limit of 1 -
         // correctly no next page - so first.Value.NextCursor is null and the second assertion
         // below can never see a non-null cursor. Two rows make "there is a next page" true.
-        var head = Order.Place(Guid.NewGuid(), "SKU-1", 1, PlacedAt);
+        var head = Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-1", 1, PlacedAt);
         _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns([
                 head,
-                Order.Place(Guid.NewGuid(), "SKU-2", 1, PlacedAt.AddMinutes(-1)),
+                Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-2", 1, PlacedAt.AddMinutes(-1)),
             ]);
         var handler = new GetOrdersHandler(_repository);
 
@@ -120,11 +120,11 @@ public sealed class GetOrdersHandlerTests
     public async Task HandleAsync_WithACursorFromASubSecondPlacedAt_RoundTripsTheExactInstant()
     {
         var precise = new DateTimeOffset(2026, 8, 31, 12, 0, 0, 123, TimeSpan.Zero).AddTicks(4567);
-        var head = Order.Place(Guid.NewGuid(), "SKU-1", 1, precise);
+        var head = Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-1", 1, precise);
         _repository.ListAsync(Arg.Any<int>(), Arg.Any<(DateTimeOffset, Guid)?>(), Arg.Any<CancellationToken>())
             .Returns([
                 head,
-                Order.Place(Guid.NewGuid(), "SKU-2", 1, precise.AddMinutes(-1)),
+                Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-2", 1, precise.AddMinutes(-1)),
             ]);
         var handler = new GetOrdersHandler(_repository);
 
