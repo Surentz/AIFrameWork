@@ -1,4 +1,6 @@
 using AiFramework.Api;
+using AiFramework.Api.Auth;
+using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.EventPath;
 using JasperFx;
@@ -61,6 +63,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 builder.Services.AddAuthorization();
+
+// The caller, as an Application port. HttpContextAccessor is what makes the claims reachable
+// from a handler; scoped because "who is calling" is per-request.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();

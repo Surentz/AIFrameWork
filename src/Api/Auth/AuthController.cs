@@ -13,7 +13,7 @@ namespace AiFramework.Api.Auth;
 [Route("api/auth")]
 [Authorize]
 public sealed class AuthController(
-    ICommandDispatcher commands, IQueryDispatcher queries) : ControllerBase
+    ICommandDispatcher commands, IQueryDispatcher queries, ICurrentUser currentUser) : ControllerBase
 {
     /// <summary>Creates an account and signs it in.</summary>
     [HttpPost("register")]
@@ -85,7 +85,7 @@ public sealed class AuthController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> Me(CancellationToken cancellationToken)
     {
-        if (CurrentUserId() is not { } userId)
+        if (currentUser.Id is not { } userId)
         {
             return Unauthorized();
         }
@@ -106,7 +106,7 @@ public sealed class AuthController(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (CurrentUserId() is not { } userId)
+        if (currentUser.Id is not { } userId)
         {
             return Unauthorized();
         }
@@ -127,7 +127,7 @@ public sealed class AuthController(
 
     /// <summary>
     /// The only place a session is minted. The claims are the whole session: NameIdentifier is
-    /// what <see cref="CurrentUserId"/> reads back on later requests, so nothing else has to be
+    /// what <see cref="ICurrentUser.Id"/> reads back on later requests, so nothing else has to be
     /// looked up to know who is calling.
     /// </summary>
     private Task IssueCookieAsync(SessionView session, bool persistent)
@@ -146,7 +146,4 @@ public sealed class AuthController(
             new ClaimsPrincipal(identity),
             new AuthenticationProperties { IsPersistent = persistent });
     }
-
-    private Guid? CurrentUserId() =>
-        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 }
