@@ -1,18 +1,15 @@
+import type { components } from '../../api/schema';
+
 /*
- * Hand-written, unlike features/orders/types.ts, which aliases the generated schema. There is no
- * auth endpoint in the backend yet, so nothing about this shape reaches openapi/AiFramework.Api.json
- * and there is nothing to alias. When the endpoint lands, these two interfaces become aliases over
- * the generated types the same way Order did, and the compiler starts catching backend renames here.
+ * Aliases over the generated schema, like features/orders/types.ts. These were hand-written
+ * while the backend had no auth endpoint and there was nothing to alias; now that
+ * POST /api/auth/login exists, a backend rename breaks this build instead of breaking at runtime.
  */
 
-export interface Credentials {
-  readonly email: string;
-  readonly password: string;
-  readonly rememberMe: boolean;
-}
+export type Credentials = components['schemas']['LoginRequest'];
 
-export interface Session {
-  readonly userId: string;
-  readonly email: string;
-  readonly displayName: string;
-}
+export type Registration = components['schemas']['RegisterRequest'];
+
+export type PasswordChange = components['schemas']['ChangePasswordRequest'];
+
+export type Session = components['schemas']['SessionResponse'];

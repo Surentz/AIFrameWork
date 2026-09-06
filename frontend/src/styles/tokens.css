@@ -33,6 +33,10 @@
      it lands on, and an opaque near-surface tint disappears in the dark theme. */
   --color-danger-ring: rgb(180 35 24 / 25%);
 
+  --color-success-text: #0f6b3f;
+  --color-success-soft: #f0fdf5;
+  --color-success-border: #bbe8cd;
+
   /* The brand panel keeps its own scale because it is a dark surface in both themes - reusing
      --color-text there would make it unreadable in light mode. */
   --color-brand-from: #3b2fa8;
@@ -97,6 +101,10 @@
     --color-danger-soft: #2a1614;
     --color-danger-border: #5b2b26;
     --color-danger-ring: rgb(249 112 102 / 30%);
+
+    --color-success-text: #6ee7a8;
+    --color-success-soft: #10231a;
+    --color-success-border: #24513a;
 
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
     --shadow-md: 0 4px 12px rgb(0 0 0 / 45%);

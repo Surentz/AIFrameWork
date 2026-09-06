@@ -178,3 +178,10 @@
   color: var(--color-danger-text);
   font-size: var(--text-sm);
 }
+
+/* The success counterpart to .alert. Same shape, so a form's two outcomes do not jump about. */
+.alert--success {
+  border-color: var(--color-success-border);
+  background-color: var(--color-success-soft);
+  color: var(--color-success-text);
+}

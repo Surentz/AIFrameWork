@@ -2,43 +2,47 @@ import { useId, useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthShell } from './AuthShell';
-import { useLogin } from './queries';
+import { useRegister } from './queries';
 
-export function LoginPage(): React.JSX.Element {
+/** Mirrors PasswordPolicy.MinimumLength in src/Application/Users; the server is the authority. */
+const MinimumPasswordLength = 12;
+
+export function RegisterPage(): React.JSX.Element {
   const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
-  const [passwordVisible, setPasswordVisible] = useState(false);
   const navigate = useNavigate();
-  const mutation = useLogin();
+  const mutation = useRegister();
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
     mutation.mutate(
-      { username, password, rememberMe },
+      { username, password, displayName },
       { onSuccess: () => void navigate('/orders') },
     );
   }
 
   const fieldErrors = mutation.error?.fieldErrors ?? {};
   const usernameErrors = fieldErrors.Username ?? [];
+  const displayNameErrors = fieldErrors.DisplayName ?? [];
   const passwordErrors = fieldErrors.Password ?? [];
-  // useId, not literals: two mounted forms would emit duplicate ids, and both htmlFor and
-  // aria-describedby would resolve to the first form's inputs.
   const usernameId = useId();
+  const displayNameId = useId();
   const passwordId = useId();
   const usernameErrorId = useId();
+  const displayNameErrorId = useId();
   const passwordErrorId = useId();
+  const passwordHintId = useId();
 
   return (
     <AuthShell
-      title="Welcome back"
-      subtitle="Sign in to your AI Framework account."
+      title="Create an account"
+      subtitle="Pick a username and a password."
       footer={
         <>
-          New here?{' '}
-          <Link className="login__link" to="/register">
-            Create an account
+          Already have one?{' '}
+          <Link className="login__link" to="/login">
+            Sign in
           </Link>
         </>
       }
@@ -71,34 +75,53 @@ export function LoginPage(): React.JSX.Element {
         </div>
 
         <div className="field">
+          <label className="field__label" htmlFor={displayNameId}>
+            Display name
+          </label>
+          <input
+            className="input"
+            id={displayNameId}
+            type="text"
+            autoComplete="name"
+            placeholder="Ada Lovelace"
+            value={displayName}
+            aria-invalid={displayNameErrors.length > 0}
+            aria-describedby={displayNameErrors.length > 0 ? displayNameErrorId : undefined}
+            onChange={(e) => {
+              setDisplayName(e.target.value);
+            }}
+          />
+          {/* Rendered unconditionally: a live region inserted together with its text may
+              not be announced, so it has to already exist when the error arrives. */}
+          <div className="field__errors" id={displayNameErrorId} aria-live="polite">
+            {displayNameErrors.map((message) => (
+              <p key={message}>{message}</p>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
           <label className="field__label" htmlFor={passwordId}>
             Password
           </label>
-          <div className="login__password">
-            <input
-              className="input"
-              id={passwordId}
-              type={passwordVisible ? 'text' : 'password'}
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              value={password}
-              aria-invalid={passwordErrors.length > 0}
-              aria-describedby={passwordErrors.length > 0 ? passwordErrorId : undefined}
-              onChange={(e) => {
-                setPassword(e.target.value);
-              }}
-            />
-            <button
-              className="login__reveal"
-              type="button"
-              aria-label={passwordVisible ? 'Hide password' : 'Show password'}
-              onClick={() => {
-                setPasswordVisible((visible) => !visible);
-              }}
-            >
-              {passwordVisible ? 'Hide' : 'Show'}
-            </button>
-          </div>
+          <input
+            className="input"
+            id={passwordId}
+            type="password"
+            autoComplete="new-password"
+            placeholder={`At least ${String(MinimumPasswordLength)} characters`}
+            value={password}
+            aria-invalid={passwordErrors.length > 0}
+            aria-describedby={
+              passwordErrors.length > 0 ? `${passwordHintId} ${passwordErrorId}` : passwordHintId
+            }
+            onChange={(e) => {
+              setPassword(e.target.value);
+            }}
+          />
+          <p className="login__hint" id={passwordHintId}>
+            {`At least ${String(MinimumPasswordLength)} characters. Length is the only rule.`}
+          </p>
           {/* Rendered unconditionally: a live region inserted together with its text may
               not be announced, so it has to already exist when the error arrives. */}
           <div className="field__errors" id={passwordErrorId} aria-live="polite">
@@ -108,22 +131,9 @@ export function LoginPage(): React.JSX.Element {
           </div>
         </div>
 
-        <div className="login__meta">
-          <label className="login__remember">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => {
-                setRememberMe(e.target.checked);
-              }}
-            />
-            Remember me
-          </label>
-        </div>
-
         <button className="btn btn--primary btn--block" type="submit" disabled={mutation.isPending}>
           {mutation.isPending && <span className="spinner" aria-hidden="true" />}
-          {mutation.isPending ? 'Signing in' : 'Sign in'}
+          {mutation.isPending ? 'Creating account' : 'Create account'}
         </button>
 
         {mutation.error && Object.keys(fieldErrors).length === 0 && (

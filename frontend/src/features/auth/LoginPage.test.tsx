@@ -47,21 +47,21 @@ describe('LoginPage', () => {
         body = await request.json();
         return HttpResponse.json({
           userId: '33333333-3333-3333-3333-333333333333',
-          email: 'ada@example.com',
+          username: 'ada',
           displayName: 'Ada Lovelace',
         });
       }),
     );
     renderPageWithRoutes();
 
-    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com');
+    await userEvent.type(screen.getByLabelText('Username'), 'ada');
     await userEvent.type(screen.getByLabelText('Password'), 'correct horse');
     await userEvent.click(screen.getByLabelText('Remember me'));
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(await screen.findByRole('link', { name: 'SKU-1' })).toBeInTheDocument();
     expect(body).toEqual({
-      email: 'ada@example.com',
+      username: 'ada',
       password: 'correct horse',
       rememberMe: true,
     });
@@ -73,8 +73,8 @@ describe('LoginPage', () => {
         HttpResponse.json(
           {
             title: 'validation.failed',
-            detail: 'Enter a valid email address.',
-            errors: { Email: ['Enter a valid email address.'] },
+            detail: 'Enter a username.',
+            errors: { Username: ['Enter a username.'] },
           },
           { status: 400 },
         ),
@@ -82,21 +82,21 @@ describe('LoginPage', () => {
     );
     renderPage();
 
-    await userEvent.type(screen.getByLabelText('Email'), 'not-an-email');
+    await userEvent.type(screen.getByLabelText('Username'), 'nobody');
     await userEvent.type(screen.getByLabelText('Password'), 'correct horse');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    await screen.findByText('Enter a valid email address.');
+    await screen.findByText('Enter a username.');
 
-    const emailInput = screen.getByLabelText('Email');
-    expect(emailInput).toHaveAttribute('aria-invalid', 'true');
+    const usernameInput = screen.getByLabelText('Username');
+    expect(usernameInput).toHaveAttribute('aria-invalid', 'true');
 
-    const describedBy = emailInput.getAttribute('aria-describedby');
+    const describedBy = usernameInput.getAttribute('aria-describedby');
     if (describedBy === null) {
-      throw new Error('expected the email input to have aria-describedby set');
+      throw new Error('expected the username input to have aria-describedby set');
     }
     const errorRegion = requireElementById(describedBy);
-    expect(within(errorRegion).getByText('Enter a valid email address.')).toBeInTheDocument();
+    expect(within(errorRegion).getByText('Enter a username.')).toBeInTheDocument();
 
     // Pins the field-level placement: the generic role="alert" banner branch must not also be
     // rendering, or a bug that routes field errors to the banner would pass this test too.
@@ -107,19 +107,19 @@ describe('LoginPage', () => {
     server.use(
       http.post('/api/auth/login', () =>
         HttpResponse.json(
-          { title: 'auth.failed', detail: 'That email and password do not match.' },
+          { title: 'auth.failed', detail: 'That username and password do not match.' },
           { status: 401 },
         ),
       ),
     );
     renderPage();
 
-    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com');
+    await userEvent.type(screen.getByLabelText('Username'), 'ada');
     await userEvent.type(screen.getByLabelText('Password'), 'wrong');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'That email and password do not match.',
+      'That username and password do not match.',
     );
   });
 
