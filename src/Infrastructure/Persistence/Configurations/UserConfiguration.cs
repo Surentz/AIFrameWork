@@ -22,6 +22,12 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.DisplayName).IsRequired().HasMaxLength(User.MaxDisplayNameLength);
         builder.Property(u => u.RegisteredAt).IsRequired();
 
+        builder.Property(u => u.FailedSignInAttempts).IsRequired();
+
+        // Nullable by design: null means "not locked", which is a different state from "locked
+        // until a time in the past" and avoids a sentinel date.
+        builder.Property(u => u.LockedOutUntil);
+
         // DomainEvents is transient state the interceptor drains before save; it is not
         // persisted. Without this, EF tries to map IDomainEvent as an entity type and the
         // model fails to build at first use.

@@ -10,6 +10,15 @@ public sealed class User : Entity
     /// <summary>The longest display name <see cref="Register"/> accepts, mirrored by the EF mapping.</summary>
     public const int MaxDisplayNameLength = 64;
 
+    /// <summary>
+    /// Consecutive failed sign-ins that trigger a lockout. A business rule about what counts as
+    /// an attack, so it lives here rather than in configuration.
+    /// </summary>
+    public const int MaxFailedSignInAttempts = 5;
+
+    /// <summary>How long a lockout lasts. Fixed, never sliding — see RegisterFailedSignIn.</summary>
+    public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+
     private User(
         Guid id,
         string username,
@@ -42,6 +51,12 @@ public sealed class User : Entity
     public string DisplayName { get; private set; }
 
     public DateTimeOffset RegisteredAt { get; private set; }
+
+    /// <summary>Consecutive failures since the last successful sign-in.</summary>
+    public int FailedSignInAttempts { get; private set; }
+
+    /// <summary>When the current lockout expires, or null when the account is not locked.</summary>
+    public DateTimeOffset? LockedOutUntil { get; private set; }
 
     /// <summary>
     /// The one way a username becomes a lookup key. Callers that search by username must go
@@ -101,5 +116,39 @@ public sealed class User : Entity
         }
 
         PasswordHash = newPasswordHash;
+    }
+
+    public bool IsLockedOut(DateTimeOffset now) => LockedOutUntil is { } until && until > now;
+
+    /// <summary>
+    /// Records a failed attempt, locking the account on the threshold failure. Handed the time
+    /// rather than reading a clock, the same reason <see cref="Orders.Order.Place"/> is handed
+    /// a timestamp.
+    /// </summary>
+    public void RegisterFailedSignIn(DateTimeOffset now)
+    {
+        // Serving out a lockout earns a fresh set of attempts. Without this reset the count
+        // would still stand at MaxFailedSignInAttempts when the window lapsed, so the very next
+        // failure would reach the threshold again and re-lock — and every failure after it would
+        // too. That is a sliding window arriving through the back door: it would let an attacker
+        // hold an account locked indefinitely at one guess per window.
+        if (LockedOutUntil is not null && !IsLockedOut(now))
+        {
+            FailedSignInAttempts = 0;
+            LockedOutUntil = null;
+        }
+
+        FailedSignInAttempts++;
+
+        if (FailedSignInAttempts >= MaxFailedSignInAttempts)
+        {
+            LockedOutUntil = now + LockoutDuration;
+        }
+    }
+
+    public void RegisterSuccessfulSignIn()
+    {
+        FailedSignInAttempts = 0;
+        LockedOutUntil = null;
     }
 }
