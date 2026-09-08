@@ -21,4 +21,18 @@ public sealed class UserRepository(AiFrameworkDbContext context) : IUserReposito
         string usernameNormalized, CancellationToken cancellationToken) =>
         context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.UsernameNormalized == usernameNormalized, cancellationToken);
+
+    /// <summary>
+    /// ExecuteUpdateAsync, not a tracked mutation: it issues its own UPDATE straight away, so it
+    /// does not depend on the unit of work committing. See the port's documentation.
+    /// </summary>
+    public Task RecordSignInOutcomeAsync(
+        Guid userId, int attempts, DateTimeOffset? lockedOutUntil, CancellationToken cancellationToken) =>
+        context.Users
+            .Where(u => u.Id == userId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(u => u.FailedSignInAttempts, attempts)
+                    .SetProperty(u => u.LockedOutUntil, lockedOutUntil),
+                cancellationToken);
 }

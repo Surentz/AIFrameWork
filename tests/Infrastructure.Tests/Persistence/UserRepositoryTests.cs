@@ -118,4 +118,66 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         // An AsNoTracking read here would leave the new hash unsaved, silently and with no error.
         reloaded!.PasswordHash.Should().Be("new-hash");
     }
+
+    /// <summary>
+    /// The property that makes the whole lockout work: this writes WITHOUT a SaveChanges call.
+    /// SignIn's failure path returns a failed Result, and Behaviors.CommitAsync does not commit
+    /// those — a tracked mutation there would be discarded silently, and the counter would read
+    /// zero forever.
+    /// </summary>
+    [Fact]
+    public async Task RecordSignInOutcomeAsync_PersistsWithoutSaveChanges()
+    {
+        var id = Guid.NewGuid();
+        var lockedUntil = new DateTimeOffset(2026, 9, 8, 10, 0, 0, TimeSpan.Zero);
+        await using (var seed = fixture.CreateContext())
+        {
+            await new UserRepository(seed).AddAsync(
+                User.Register(id, $"u{id:N}"[..32], "hash", "Ada Lovelace", RegisteredAt),
+                CancellationToken.None);
+            await new UnitOfWork(seed).SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using (var write = fixture.CreateContext())
+        {
+            await new UserRepository(write).RecordSignInOutcomeAsync(
+                id, attempts: 5, lockedOutUntil: lockedUntil, CancellationToken.None);
+            // Deliberately no SaveChangesAsync here.
+        }
+
+        await using var verify = fixture.CreateContext();
+        var found = await new UserRepository(verify).GetAsync(id, CancellationToken.None);
+
+        found.Should().NotBeNull();
+        found.FailedSignInAttempts.Should().Be(5);
+        found.LockedOutUntil.Should().Be(lockedUntil);
+    }
+
+    [Fact]
+    public async Task RecordSignInOutcomeAsync_CanClearALockout()
+    {
+        var id = Guid.NewGuid();
+        await using (var seed = fixture.CreateContext())
+        {
+            await new UserRepository(seed).AddAsync(
+                User.Register(id, $"u{id:N}"[..32], "hash", "Ada Lovelace", RegisteredAt),
+                CancellationToken.None);
+            await new UnitOfWork(seed).SaveChangesAsync(CancellationToken.None);
+        }
+
+        await using (var write = fixture.CreateContext())
+        {
+            var repository = new UserRepository(write);
+            await repository.RecordSignInOutcomeAsync(
+                id, 5, new DateTimeOffset(2026, 9, 8, 10, 0, 0, TimeSpan.Zero), CancellationToken.None);
+            await repository.RecordSignInOutcomeAsync(id, 0, null, CancellationToken.None);
+        }
+
+        await using var verify = fixture.CreateContext();
+        var found = await new UserRepository(verify).GetAsync(id, CancellationToken.None);
+
+        found.Should().NotBeNull();
+        found.FailedSignInAttempts.Should().Be(0);
+        found.LockedOutUntil.Should().BeNull();
+    }
 }
