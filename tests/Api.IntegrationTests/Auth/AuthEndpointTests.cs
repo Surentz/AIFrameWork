@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AiFramework.Domain.Users;
 using FluentAssertions;
 
 namespace AiFramework.Api.IntegrationTests.Auth;
@@ -150,6 +151,68 @@ public sealed class AuthEndpointTests(ApiFactory factory)
         // Any difference here turns the endpoint into a way to find out which usernames exist.
         unknownUser.StatusCode.Should().Be(wrongPassword.StatusCode);
         (await StripTraceIdAsync(unknownUser))
+            .Should().Be(await StripTraceIdAsync(wrongPassword), "traceId aside, the bodies must match");
+    }
+
+    /// <summary>
+    /// The proof the whole slice exists for: after the threshold, even the right password is
+    /// refused. A test that only checked wrong passwords keep failing would pass without a
+    /// lockout at all.
+    /// </summary>
+    [Fact]
+    public async Task PostLogin_AfterTheThresholdOfWrongPasswords_RefusesEvenTheCorrectOne()
+    {
+        var username = AUsername();
+        using var client = factory.CreateClient();
+        (await client.PostAsJsonAsync("/api/auth/register", ARegistration(username)))
+            .EnsureSuccessStatusCode();
+
+        for (var attempt = 0; attempt < User.MaxFailedSignInAttempts; attempt++)
+        {
+            var failed = await client.PostAsJsonAsync(
+                "/api/auth/login",
+                new { Username = username, Password = "not the password", RememberMe = false });
+            failed.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        var withTheCorrectPassword = await client.PostAsJsonAsync(
+            "/api/auth/login", new { Username = username, Password = APassword, RememberMe = false });
+
+        withTheCorrectPassword.StatusCode.Should().Be(
+            HttpStatusCode.Unauthorized,
+            "the lockout outranks a correct password, or it would not be a lockout");
+    }
+
+    [Fact]
+    public async Task PostLogin_WhenLockedOut_IsIndistinguishableFromAWrongPassword()
+    {
+        var lockedOutUser = AUsername();
+        using var client = factory.CreateClient();
+        (await client.PostAsJsonAsync("/api/auth/register", ARegistration(lockedOutUser)))
+            .EnsureSuccessStatusCode();
+
+        for (var attempt = 0; attempt < User.MaxFailedSignInAttempts; attempt++)
+        {
+            await client.PostAsJsonAsync(
+                "/api/auth/login",
+                new { Username = lockedOutUser, Password = "not the password", RememberMe = false });
+        }
+
+        var lockedOut = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { Username = lockedOutUser, Password = "not the password", RememberMe = false });
+
+        var otherUser = AUsername();
+        (await client.PostAsJsonAsync("/api/auth/register", ARegistration(otherUser)))
+            .EnsureSuccessStatusCode();
+        var wrongPassword = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { Username = otherUser, Password = "not the password", RememberMe = false });
+
+        // A distinguishable lockout response would say "this account exists and I am guarding
+        // it", undoing the uniform error and the dummy hash SignInHandler goes to trouble for.
+        lockedOut.StatusCode.Should().Be(wrongPassword.StatusCode);
+        (await StripTraceIdAsync(lockedOut))
             .Should().Be(await StripTraceIdAsync(wrongPassword), "traceId aside, the bodies must match");
     }
 
