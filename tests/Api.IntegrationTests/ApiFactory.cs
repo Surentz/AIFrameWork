@@ -49,6 +49,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // ConfigureServices below — otherwise the stricter guard throws first.
         builder.UseSetting("ConnectionStrings:Default", _container.GetConnectionString());
 
+        // CreateAuthenticatedClientAsync registers a fresh user for nearly every test in this
+        // project, all from one address. The production limit would exhaust itself partway
+        // through the run and fail tests that have nothing to do with rate limiting, so this
+        // host sets it out of the way. The limiter's own behaviour is covered by
+        // AuthRateLimitTests, which stands up its own host with a tiny limit.
+        builder.UseSetting("RateLimiting:Auth:PermitLimit", "1000000");
+
         builder.ConfigureServices(services =>
         {
             // No DbContextOptions<AiFrameworkDbContext> override here: UseSetting above already
