@@ -188,6 +188,40 @@ ordinary build stays ordinary, and only the two commands above and CI's `contrac
 the cost.
 
 
+## Caching
+
+Queries opt in by implementing `ICacheable` (`src/Application/Abstractions/Caching.cs`); commands
+opt in to eviction with `IInvalidatesCache`. `GetOrders` and `GetOrder` are cached at thirty
+seconds; `PlaceOrder` evicts both for the caller who placed the order. Nothing on the auth path is
+cached, deliberately and permanently — ADR 0008's lockout state must be read every time.
+
+Four things that will cost you time:
+
+- **The cache stores `TResponse`, not `Result<T>`.** `Result<T>.Error` throws when read on a
+  success, so `System.Text.Json` fails on a successful `Result` and the `internal` constructor
+  makes deserializing one impossible. The behavior rebuilds `Result.Success(value)` on a hit.
+- **`CacheKey` must NOT contain a user id.** The behavior prepends the query type and
+  `ICurrentUser.Id` via `CacheScope`, which is also what `IInvalidatesCache.Tags` is composed
+  with — the tag is the key's own prefix, and that is the whole eviction mechanism. An
+  `ICacheable` query dispatched with no current user throws rather than sharing one entry across
+  every caller.
+- **`ICurrentUser.Id` must stay stable once resolved.** `HybridCache` runs its cache-miss factory
+  without the ambient `HttpContext`, by design, so a *live* implementation reading the claim on
+  every access reports the caller unauthenticated inside the factory and every cache miss answers
+  401. `CurrentUser` memoizes the first non-null id for exactly this reason; a second
+  implementation of the port that re-reads its source reintroduces the bug silently.
+- **The cache is OFF under test.** `ApiFactory` sets `Cache:Enabled=false` and
+  `frontend/playwright.config.ts`'s `webServer` env sets `Cache__Enabled=false` — not
+  `docker-compose.e2e.yml`, which runs only Postgres. `Orders/OrderCachingTests` turns it back on
+  for itself — `WithWebHostBuilder` over the shared `ApiFactory`, so it keeps the one Postgres
+  container — the same split `AuthRateLimitTests` uses for the rate limiter.
+
+No test waits for a TTL to lapse; `HybridCache` expires on its own clock, which `IClock` cannot
+reach. The only TTL arithmetic is `CacheDuration.Clamp`, tested directly.
+
+See ADR 0009.
+
+
 ## CI
 
 `.github/workflows/ci.yml` runs what `/verify` runs, on every push to `main` and every pull

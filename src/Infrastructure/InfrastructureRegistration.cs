@@ -3,6 +3,7 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
+using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Messaging;
 using AiFramework.Infrastructure.Outbox;
@@ -78,6 +79,8 @@ public static class InfrastructureRegistration
         // Singleton: PasswordHasher<T> is stateless and thread-safe, and the object it wraps
         // holds only the work-factor settings.
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
+
+        services.AddCaching();
 
         services.AddOutbox();
 

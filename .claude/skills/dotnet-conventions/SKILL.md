@@ -95,9 +95,29 @@ else → 500, logged, message not leaked to the client.
 - Never `SaveChangesAsync` in a loop.
 - Migrations are append-only. Add a new one; the protect-migrations hook blocks edits.
 
+## Caching
+
+Two rules, and both prevent a bug rather than tidy anything.
+
+- **`ICacheable.CacheKey` never contains a user id.** The caching behavior prepends the query type
+  name and `ICurrentUser.Id` itself, so a key that repeats the caller duplicates it rather than
+  securing it — and a key the author *forgot* to scope is impossible, which is the point of
+  composing it in the behavior. `CacheKey` is the query's own arguments, nothing else.
+- **A query is cached only when it opts in, and nothing on the auth path ever opts in.** `GetUser`
+  is the query to leave alone, and any future one that reads account state: ADR 0008's lockout and
+  failed-attempt counters must come from the database every time, so serving them from memory is a
+  security bug rather than a stale read. (`SignIn`, `RegisterUser`, and `ChangePassword` are
+  commands and so are not cacheable at all — the caching behavior is on the query path only, and
+  `EveryCacheableType_IsARegisteredQuery` fails on an `ICacheable` that is not a query.)
+
+Commands opt into eviction with `IInvalidatesCache`, whose `Tags` name query types via
+`nameof(TheQuery)` — never a string literal. See ADR 0009 for the rest.
+
 ## Async
 
 - `CancellationToken` on every I/O method, and pass it down.
 - No `async void` outside event handlers. No `.Result`, no `.Wait()`.
-- Do not add `ConfigureAwait(false)` — ASP.NET Core has no synchronization context, and
-  CA2007 is deliberately off.
+- `ConfigureAwait(false)` is not enforced in either direction — CA2007 is deliberately off, and
+  ASP.NET Core has no synchronization context, so it changes nothing here. Existing code under
+  `src/` uses it throughout (including the messaging behaviors); match the file you are working
+  in rather than either adding or stripping it.

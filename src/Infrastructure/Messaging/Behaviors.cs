@@ -1,6 +1,9 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Infrastructure.Caching;
 using FluentValidation;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure.Messaging;
 
@@ -57,4 +60,132 @@ internal static class Behaviors
         var unitOfWork = sp.GetRequiredService<IUnitOfWork>();
         await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Resolves a query's handler and runs it. Extracted so the cached and uncached paths share
+    /// one definition of "run the handler" — AddQuery no longer resolves it directly.
+    /// </summary>
+    internal static Task<Result<TResponse>> Handle<TQuery, TResponse>(
+        IServiceProvider sp, TQuery query, CancellationToken ct)
+        where TQuery : IQuery<TResponse>
+    {
+        var handler = sp.GetRequiredService<IQueryHandler<TQuery, TResponse>>();
+        return handler.HandleAsync(query, ct);
+    }
+
+    /// <summary>
+    /// Serves a query from cache when it opts in with <see cref="ICacheable"/>, and otherwise
+    /// runs the handler directly. Caches the success VALUE, not the Result: Result&lt;T&gt;.Error
+    /// throws when read on a success, so serializing a successful Result fails, and its internal
+    /// constructor makes deserializing one impossible.
+    /// </summary>
+    internal static async Task<Result<TResponse>> CachedAsync<TQuery, TResponse>(
+        IServiceProvider sp, TQuery query, CancellationToken ct)
+        where TQuery : IQuery<TResponse>
+    {
+        // Not absence-tolerant, deliberately, unlike the validator above: an unregistered cache
+        // would leave every query silently uncached, the same class of quiet wrongness
+        // CommitAsync refuses to allow for a missing IUnitOfWork. AddInfrastructure wires
+        // AddCaching in, and CachingRegistrationTests asserts it.
+        var options = sp.GetRequiredService<IOptions<CacheOptions>>().Value;
+
+        if (!options.Enabled || query is not ICacheable cacheable)
+        {
+            return await Handle<TQuery, TResponse>(sp, query, ct).ConfigureAwait(false);
+        }
+
+        // A cached query with no caller would share one entry across every user. That is a data
+        // leak, so it fails loudly instead: a cacheable query is reachable only from an
+        // [Authorize]d endpoint, and its absence means the wiring is wrong.
+        var userId = sp.GetRequiredService<ICurrentUser>().Id
+            ?? throw new InvalidOperationException(
+                $"'{typeof(TQuery).Name}' is ICacheable but there is no current user to scope " +
+                "its key to. Cached queries must be reachable only from an authorized endpoint.");
+
+        var cache = sp.GetRequiredService<HybridCache>();
+        var name = typeof(TQuery).Name;
+
+        try
+        {
+            var value = await cache.GetOrCreateAsync(
+                CacheScope.Key(name, userId, cacheable.CacheKey),
+                (sp, query),
+                static async (state, token) =>
+                {
+                    var result = await Handle<TQuery, TResponse>(state.sp, state.query, token)
+                        .ConfigureAwait(false);
+
+                    // The sentinel is what keeps failures out of the cache: HybridCache stores
+                    // nothing when its factory throws. The alternative — caching a wrapper and
+                    // removing it afterwards — leaves a window in which a concurrent caller
+                    // reads the cached failure.
+                    return result.IsSuccess
+                        ? result.Value
+                        : throw new QueryFailedException(result.Error);
+                },
+                new HybridCacheEntryOptions
+                {
+                    Expiration = CacheDuration.Clamp(cacheable.Duration, options.MaximumDuration),
+                },
+                tags: [CacheScope.Tag(name, userId)],
+                cancellationToken: ct).ConfigureAwait(false);
+
+            return Result.Success(value);
+        }
+        catch (QueryFailedException failed)
+        {
+            return Result.Failure<TResponse>(failed.Error);
+        }
+    }
+
+    /// <summary>
+    /// Removes the caller's cached entries for the query types a command declares, after the
+    /// command has committed. Runs in-request, before the response returns, so a client that
+    /// refetches immediately after a 201 reads its own write.
+    /// </summary>
+    /// <remarks>
+    /// A failure here is deliberately not caught. With an L1-only HybridCache
+    /// RemoveByTagAsync has no realistic failure mode, and catching one would mean
+    /// catch (Exception) on a path with no IExceptionHandler parameter, which this repository
+    /// bans outside the outbox's exemption. The consequence — a committed write surfacing a 500
+    /// — becomes the wrong trade if an L2 tier is ever added. ADR 0009 records that.
+    /// </remarks>
+    internal static async Task EvictAsync<TCommand, TResponse>(
+        IServiceProvider sp, TCommand command, Result<TResponse> result, CancellationToken ct)
+    {
+        if (!result.IsSuccess || command is not IInvalidatesCache invalidates)
+        {
+            return;
+        }
+
+        if (!sp.GetRequiredService<IOptions<CacheOptions>>().Value.Enabled)
+        {
+            return;
+        }
+
+        var userId = sp.GetRequiredService<ICurrentUser>().Id
+            ?? throw new InvalidOperationException(
+                $"'{typeof(TCommand).Name}' invalidates cache tags but there is no current user " +
+                "to scope them to.");
+
+        var cache = sp.GetRequiredService<HybridCache>();
+
+        foreach (var tag in invalidates.Tags)
+        {
+            await cache.RemoveByTagAsync(CacheScope.Tag(tag, userId), ct).ConfigureAwait(false);
+        }
+    }
+
+    // CA1032 wants the standard exception constructor set; S3871 wants exception types public.
+    // Both are asking to widen a type whose entire purpose is to stay inside one method: it is
+    // thrown by the cache factory a dozen lines above and caught by name immediately after,
+    // never crosses this class's boundary, and no caller can construct or catch it. Note the
+    // catch above names this specific type rather than the base Exception type, so CA1031 is
+    // satisfied on its own terms.
+#pragma warning disable CA1032, S3871
+    private sealed class QueryFailedException(Error error) : Exception
+    {
+        public Error Error { get; } = error;
+    }
+#pragma warning restore CA1032, S3871
 }

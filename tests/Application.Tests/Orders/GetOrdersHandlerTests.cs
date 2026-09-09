@@ -155,4 +155,37 @@ public sealed class GetOrdersHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Unauthorized);
     }
+
+    /// <summary>
+    /// A null cursor takes the first-page path above; an empty-string cursor takes the
+    /// malformed-cursor 400 path. Those are different outcomes for the handler, so they must be
+    /// different cache keys too - a shared key would let a cached 200 page answer a request that
+    /// should have 400'd. Pins the fix directly on CacheKey rather than only through the
+    /// handler, since the two records never actually reach the same handler call in this suite.
+    /// </summary>
+    [Fact]
+    public void CacheKey_ForNullCursorVersusEmptyStringCursor_DoesNotCollide()
+    {
+        var withNullCursor = new GetOrders(20, null);
+        var withEmptyCursor = new GetOrders(20, string.Empty);
+
+        withNullCursor.CacheKey.Should().NotBe(withEmptyCursor.CacheKey);
+    }
+
+    /// <summary>
+    /// The regression an earlier fix introduced: coalescing null to a fixed literal ("-") only
+    /// moves the collision, because a client can send that literal as an ordinary, non-empty
+    /// cursor (`?cursor=-` survives MVC's ConvertEmptyStringToNull) and it must decode-and-fail
+    /// like any other malformed cursor rather than share a key with Cursor == null. "N" is
+    /// GetOrders.CacheKey's current discriminator for the null case - if that literal ever
+    /// changes, change it here too.
+    /// </summary>
+    [Fact]
+    public void CacheKey_ForNullCursorVersusALiteralCursorEqualToTheMarker_DoesNotCollide()
+    {
+        var withNullCursor = new GetOrders(20, null);
+        var withCursorEqualToTheMarker = new GetOrders(20, "N");
+
+        withNullCursor.CacheKey.Should().NotBe(withCursorEqualToTheMarker.CacheKey);
+    }
 }
