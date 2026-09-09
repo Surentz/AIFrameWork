@@ -73,8 +73,10 @@ At two replicas that stops being true, and the failure is specific enough to wri
    30-second TTL.
 
 That is precisely the read-your-own-writes guarantee ADR 0009's synchronous eviction path was
-built to provide, and with the ingress pooling and spreading connections across two pods, step
-1 and step 3 landing on different pods is close to a coin flip rather than a rare interleaving.
+built to provide. It is not a rare interleaving, either: the ingress pools upstream connections
+and spreads requests across two pods, so the write (step 2) landing on a pod different from the
+follow-up read (step 3) — which is what leaves the stale entry step 1 cached on pod A still
+standing for step 3 to hit — is close to a coin flip.
 
 The resolution is ingress session affinity, not Redis:
 
