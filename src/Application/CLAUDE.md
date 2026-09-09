@@ -20,6 +20,30 @@ Use-case handlers, `ICommand<T>` / `IQuery<T>` requests and their handlers, **po
 - `Result.Success(value)` infers `T` from the argument. `Result.Failure<T>(error)` needs
   the explicit type argument — an `Error` carries no type information to infer from.
 
+## Caching
+
+Two markers in `Abstractions/Caching.cs` declare intent; Infrastructure alone chooses the store.
+**No caching package may be referenced from this layer** — that is the point of the markers.
+
+- Opt a query in with `: IQuery<T>, ICacheable`. `CacheKey` is composed from the query's **own
+  arguments only**, and `Duration` is a literal on the record — the query is what knows how stale
+  its own result may be, and a record here has nothing to inject configuration through.
+- **Never put a user id in `CacheKey`.** The caching behavior prepends the query type name and
+  `ICurrentUser.Id`; adding one here duplicates it rather than securing anything. A cacheable
+  query dispatched with no current user throws rather than sharing one entry across callers.
+- `IInvalidatesCache.Tags` names query **types**, and uses `nameof(GetOrders)` rather than a string
+  literal, so renaming a query is a compile error here instead of an eviction that quietly stops
+  matching. The caller's id is prepended by the behavior, as with keys.
+- Nothing on the auth path is cacheable. `GetUser` is the query to leave alone, and so is any
+  future one reading account state: ADR 0008's lockout state served from a cache is a security bug,
+  not a stale read. `SignIn`, `RegisterUser`, and `ChangePassword` are commands, so the question
+  does not arise — the caching behavior wraps queries only.
+- A handler reached through the cache may run with no ambient `HttpContext`. Depend on
+  `ICurrentUser`, whose contract guarantees a stable id for the scope; never read a claim, an
+  `HttpContext`, or anything else ambient — this layer cannot reach them anyway.
+
+See ADR 0009.
+
 ## Never appears here
 
 - `Microsoft.EntityFrameworkCore` — this layer depends on the port, not on EF

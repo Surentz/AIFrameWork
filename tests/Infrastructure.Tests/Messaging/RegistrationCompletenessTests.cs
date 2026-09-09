@@ -38,6 +38,17 @@ public sealed class RegistrationCompletenessTests
             .Select(t => t.BaseType!.GetGenericArguments()[0])
             .ToArray();
 
+    /// <summary>
+    /// Every non-abstract Application type carrying a marker interface. ICacheable and
+    /// IInvalidatesCache are plain markers rather than open generics, so the Implementing()
+    /// scan above cannot reach them.
+    /// </summary>
+    private static Type[] Marked(Type marker) =>
+        ApplicationMarker.Assembly.GetTypes()
+            .Where(t => t is { IsAbstract: false, IsInterface: false }
+                && marker.IsAssignableFrom(t))
+            .ToArray();
+
     [Fact]
     public void AddMessaging_RegistersEveryCommandInTheApplicationAssembly()
     {
@@ -192,5 +203,86 @@ public sealed class RegistrationCompletenessTests
 
         multiple.Should().BeEmpty(
             "TResponse is inferred from the argument; two IQuery<> interfaces make it ambiguous");
+    }
+
+    [Fact]
+    public void EveryCacheableType_IsARegisteredQuery()
+    {
+        var services = new ServiceCollection();
+        services.AddMessaging();
+        var registered = services
+            .Select(d => d.ImplementationInstance)
+            .OfType<QueryDescriptor>()
+            .Select(d => d.QueryType)
+            .ToHashSet();
+
+        var cacheable = Marked(typeof(ICacheable));
+
+        cacheable.Should().NotBeEmpty(
+            "the scan must find at least GetOrders; an empty result means it is looking at the " +
+            "wrong assembly, not that nothing is cacheable");
+
+        var unregistered = cacheable.Where(t => !registered.Contains(t));
+
+        unregistered.Should().BeEmpty(
+            "an ICacheable type that is not a registered query is caching nothing - the marker " +
+            "only takes effect inside AddQuery's dispatch delegate");
+    }
+
+    /// <summary>
+    /// Behaviors.CachedAsync composes keys from typeof(TQuery).Name - the SIMPLE name, and
+    /// deliberately so: IInvalidatesCache.Tags is written as nameof(TheQuery), which also yields
+    /// the simple name, so switching the key prefix to FullName would stop it matching its own
+    /// tag and eviction would silently reach nothing. The price of keeping simple names is the
+    /// collision this test refuses to let anyone pay by accident.
+    /// </summary>
+    [Fact]
+    public void EveryCacheableType_HasAUniqueSimpleName()
+    {
+        var cacheable = Marked(typeof(ICacheable));
+
+        cacheable.Should().NotBeEmpty(
+            "the scan must find at least GetOrders; an empty result means it is looking at the " +
+            "wrong assembly, not that nothing is cacheable");
+
+        var colliding = cacheable
+            .GroupBy(t => t.Name, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key);
+
+        colliding.Should().BeEmpty(
+            "two ICacheable queries with the same simple name in different namespaces share a " +
+            "cache key prefix, because CacheScope.Key is composed from typeof(TQuery).Name - so " +
+            "with equal CacheKey values one query would be served a value of the other's " +
+            "TResponse. Simple names are kept on purpose: IInvalidatesCache.Tags is " +
+            "nameof(TheQuery), so a FullName key prefix would no longer match its tag and " +
+            "eviction would drift out of agreement with the read side, silently. Rename one of " +
+            "them rather than changing one side of that pair");
+    }
+
+    [Fact]
+    public void EveryInvalidatingCommand_DeclaresAtLeastOneTag()
+    {
+        var invalidating = Marked(typeof(IInvalidatesCache));
+
+        invalidating.Should().NotBeEmpty(
+            "the scan must find at least PlaceOrder; an empty result means it is looking at the " +
+            "wrong assembly");
+
+        // Every command here is a record with a primary constructor, so Activator would want its
+        // arguments. Reading the property off an uninitialized instance is enough, because Tags
+        // is a computed property that touches no constructor state in any current implementation
+        // - and if one ever does, this test says so by throwing rather than by passing wrongly.
+        foreach (var type in invalidating)
+        {
+            var instance = System.Runtime.CompilerServices.RuntimeHelpers
+                .GetUninitializedObject(type);
+
+            var tags = ((IInvalidatesCache)instance).Tags;
+
+            tags.Should().NotBeEmpty(
+                $"'{type.Name}' implements IInvalidatesCache but evicts nothing, which is a "
+                + "no-op that reads as protection");
+        }
     }
 }

@@ -27,8 +27,44 @@ in `InfrastructureRegistration.cs` is the entry point.
   standing in for the compile-time safety this trade gives up, and it must never be deleted.
 - Validators are registered explicitly (`services.AddScoped<IValidator<T>, ...>()`), not by
   assembly scanning, to keep the same greppable posture as command/query registration.
-- Only commands get behaviors — validation, then unit-of-work commit. Queries get neither.
-  A query that needs a transaction is a command.
+- Commands get validation, then the handler, then unit-of-work commit, then cache eviction.
+  Queries get exactly one behavior — the cache — and no transaction and no validation: a query
+  that needs a transaction is a command, and a query that needs validation validates its own
+  inputs inside its handler (`GetOrdersHandler` is the example).
+
+## Caching
+
+`Caching/` holds the store and its options; the two behaviors live in `Messaging/Behaviors.cs`
+beside the command ones. Off by configuration everywhere it is not the subject — see root
+`CLAUDE.md` and ADR 0009.
+
+- `Behaviors.CachedAsync` is the whole query pipeline: `AddQuery`'s `static` local function
+  delegates to it instead of resolving the handler itself, and handler resolution moved into
+  `Behaviors.Handle` so the cached and uncached paths share one definition. `Behaviors.EvictAsync`
+  is one line in `AddCommand`, immediately after `CommitAsync`, so eviction happens in-request and
+  only after a transaction that succeeded.
+- **`CacheScope` is the single source of key and tag composition, and must stay so.** The tag is
+  the key's own prefix by construction, which is the entire eviction mechanism. Compose either
+  string anywhere else and the two sides drift: eviction simply stops matching, with no exception
+  and no log, while every other test stays green.
+- Keys use `typeof(TQuery).Name` — the **simple** name — because `IInvalidatesCache.Tags` is
+  `nameof(TheQuery)`, which is also simple. Do not "improve" one side to `FullName`; that breaks
+  the match. A completeness test keeps the simple names unique so the collision that choice allows
+  cannot arrive unnoticed.
+- The cache stores the success **value**, never `Result<T>`: `Result<T>.Error` throws on a success,
+  so serializing one fails, and its `internal` constructor makes deserializing one impossible.
+- A failed `Result` throws a file-private sentinel out of the cache factory, so `HybridCache`
+  stores nothing. Do not replace it with a cached wrapper plus a removal — that leaves a window in
+  which a concurrent caller reads the failure.
+- `CacheOptions` is bound in `Program.cs`, not in `AddCaching`. Binding here would make
+  `IOptions<CacheOptions>` depend on an `IConfiguration` being registered, which a bare
+  `ServiceCollection` in a unit test does not have — and `CachedAsync` resolves those options on
+  every query, so that would break every unit test that dispatches one.
+- The cache factory runs **without the caller's ambient `HttpContext`** — `HybridCache` shares one
+  factory's work across concurrent callers, so it must not depend on any one caller's context.
+  Anything resolved inside it must therefore be safe to read off the request's execution context;
+  `ICurrentUser` is, because `CurrentUser` memoizes. Do not add a behavior or a handler dependency
+  that reads ambient state.
 
 ## Outbox
 
