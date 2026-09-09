@@ -1,4 +1,5 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.Messaging;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,13 +20,25 @@ public sealed class EchoHandler : IQueryHandler<Echo, int>
 
 public sealed class QueryDispatcherTests
 {
+    // AddCaching and AddLogging are what CachedAsync needs to resolve: it reads
+    // IOptions<CacheOptions> on every query, and HybridCache's default implementation takes an
+    // ILogger. Echo is not ICacheable, so nothing here is actually cached — these registrations
+    // exist so the pipeline can run at all.
+    private static ServiceCollection Services()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddCaching();
+        services.AddSingleton<QueryRegistry>();
+        services.AddScoped<IQueryDispatcher, QueryDispatcher>();
+        return services;
+    }
+
     [Fact]
     public async Task SendAsync_WithARegisteredQuery_InvokesItsHandler()
     {
-        var services = new ServiceCollection();
+        var services = Services();
         services.AddQuery<Echo, int, EchoHandler>();
-        services.AddSingleton<QueryRegistry>();
-        services.AddScoped<IQueryDispatcher, QueryDispatcher>();
         await using var provider = services.BuildServiceProvider();
         var dispatcher = provider.GetRequiredService<IQueryDispatcher>();
 
@@ -37,9 +50,7 @@ public sealed class QueryDispatcherTests
     [Fact]
     public async Task SendAsync_WithAnUnregisteredQuery_Throws()
     {
-        var services = new ServiceCollection();
-        services.AddSingleton<QueryRegistry>();
-        services.AddScoped<IQueryDispatcher, QueryDispatcher>();
+        var services = Services();
         await using var provider = services.BuildServiceProvider();
         var dispatcher = provider.GetRequiredService<IQueryDispatcher>();
 
@@ -51,11 +62,9 @@ public sealed class QueryDispatcherTests
     [Fact]
     public void Construction_WithAQueryRegisteredTwice_ThrowsNamingTheQuery()
     {
-        var services = new ServiceCollection();
+        var services = Services();
         services.AddQuery<Echo, int, EchoHandler>();
         services.AddQuery<Echo, int, EchoHandler>();
-        services.AddSingleton<QueryRegistry>();
-        services.AddScoped<IQueryDispatcher, QueryDispatcher>();
         using var provider = services.BuildServiceProvider();
 
         var act = () => provider.GetRequiredService<IQueryDispatcher>();

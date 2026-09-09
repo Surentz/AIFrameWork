@@ -46,7 +46,9 @@ public static class MessagingRegistration
     /// <summary>
     /// Registers a query, its handler, and a dispatch delegate that closes over TQuery and
     /// TResponse at compile time. Same reflection-free mechanism as <see cref="AddCommand"/>,
-    /// via <see cref="QueryDispatcher"/>.
+    /// via <see cref="QueryDispatcher"/>. Unlike the command path this runs no validation —
+    /// query handlers validate their own inputs — but it does run the caching behavior, which
+    /// is a no-op for a query that has not opted in with ICacheable.
     /// </summary>
     public static IServiceCollection AddQuery<TQuery, TResponse, THandler>(
         this IServiceCollection services)
@@ -56,11 +58,9 @@ public static class MessagingRegistration
         ArgumentNullException.ThrowIfNull(services);
 
         static async Task<object?> InvokeAsync(
-            IServiceProvider sp, object query, CancellationToken ct)
-        {
-            var handler = sp.GetRequiredService<IQueryHandler<TQuery, TResponse>>();
-            return await handler.HandleAsync((TQuery)query, ct).ConfigureAwait(false);
-        }
+            IServiceProvider sp, object query, CancellationToken ct) =>
+            await Behaviors.CachedAsync<TQuery, TResponse>(sp, (TQuery)query, ct)
+                .ConfigureAwait(false);
 
         services.AddScoped<IQueryHandler<TQuery, TResponse>, THandler>();
         return services.AddSingleton(new QueryDescriptor(typeof(TQuery), InvokeAsync));
