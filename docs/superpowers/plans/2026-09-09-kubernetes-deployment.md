@@ -827,15 +827,35 @@ git commit -m "feat(k8s): kind cluster, namespace, postgres, and local config"
 - Consumes: image `aiframework-migrator:local` (Task 4), Secret `app-secrets` (Task 6).
 - Produces: Job `migrate`. Task 10's script waits on its completion before applying the API.
 
-> **Wolverine finding from Task 1 (verified 2026-09-09):** two `dotnet run` hosts were launched
-> in the same instant against a database with no `wolverine` schema present, ports 5301 and
-> 5302, `ConnectionStrings__Default` pointed at the same Postgres. Both reached "Application
-> started" with no DDL collision: no `duplicate`, `already exists`, `deadlock`, `42P07`, or
-> `42710` in either log. `wolverine.wolverine_nodes` shows both nodes registered 0.35s apart
-> (node 30 at 19:11:02.777731+00, node 31 at 19:11:03.12241+00, one log showing "Node 30
-> ... successfully assumed leadership"), confirming the race was genuine and Wolverine's own
-> coordination absorbed it. Wolverine auto-migration is verified safe at 2 replicas — leave
-> `Wolverine__Durable: 'true'` as-is and make no further change here.
+> **Wolverine finding from Task 1 (verified 2026-09-09 against a freshly created empty
+> database, `wolverine` schema absent beforehand and present after):** an earlier pass of this
+> probe ran against the persistent dev database and was a false negative — its named volume
+> survives `docker compose down`, and Wolverine's storage had already existed there since local
+> development began, so that run never exercised the creation DDL at all. Re-run against a
+> throwaway `wolverine_probe` database created fresh for this check: confirmed via `\dn` and
+> `pg_namespace` that no `wolverine` schema existed before the race. Two `dotnet run` hosts were
+> then launched in the same instant (ports 5301/5302, same `ConnectionStrings__Default`
+> `Database=wolverine_probe`). Both reached "Application started". Host A's log shows `Applied
+> database migration for Wolverine Envelope Storage` (the actual `CREATE SCHEMA` /
+> `CREATE TABLE IF NOT EXISTS` DDL); host B's log has no such line at all — it found the
+> storage host A had just created and skipped re-running it, rather than racing Postgres
+> directly. The only grep hit for `duplicate|already exists|deadlock|42P07|42710` is the
+> literal text `WHEN duplicate_schema THEN NULL;` inside host A's own logged migration
+> script — a defensive exception clause Wolverine's DDL carries for exactly this scenario, not
+> a thrown/caught error; no `fail:`, `Unhandled exception`, or `Npgsql.PostgresException` tied
+> to the `wolverine` schema appears in either log. Afterward, `\dn` against `wolverine_probe`
+> showed the `wolverine` schema present with all 8 tables, proving the DDL actually ran.
+> `wolverine.wolverine_nodes` shows both nodes registered 0.34s apart (node 1 at
+> 19:15:18.77952+00, node 2 at 19:15:19.115072+00), confirming the race was genuine.
+> Wolverine auto-migration is verified safe at 2 replicas — leave `Wolverine__Durable: 'true'`
+> as-is and make no further change here.
+>
+> One unrelated failure mode showed up in both logs and does not bear on this finding:
+> `wolverine_probe` had no application schema either (no `dotnet ef database update` was run
+> against it), so `OutboxPollerService` logged repeating `42P01: relation "outbox" does not
+> exist` on its poll cycle in both hosts. That is a background poller hitting a missing
+> application table, unrelated to Wolverine's own envelope storage, and both hosts still
+> reached "Application started" and completed Wolverine's storage bootstrap regardless.
 
 - [ ] **Step 1: Create `k8s/base/migrate-job.yaml`**
 
