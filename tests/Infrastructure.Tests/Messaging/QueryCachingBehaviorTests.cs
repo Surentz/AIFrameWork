@@ -120,11 +120,19 @@ public sealed class QueryCachingBehaviorTests
     {
         CountingLookupHandler.Calls = 0;
         var currentUser = Substitute.For<ICurrentUser>();
-        currentUser.Id.Returns(Alice, Bob);
+
+        // A lazy callback keyed on a mutable local, not a positional Returns(Alice, Bob)
+        // sequence: nothing guarantees CachedAsync reads ICurrentUser.Id exactly once per
+        // dispatch, so the caller for a given dispatch must be fixed for the whole dispatch
+        // rather than keyed to a call count. See CacheEvictionBehaviorTests for the fuller
+        // rationale.
+        Guid? currentUserId = Alice;
+        currentUser.Id.Returns(_ => currentUserId);
         await using var provider = Build<CountingLookupHandler>(currentUser);
         var dispatcher = provider.GetRequiredService<IQueryDispatcher>();
 
         await dispatcher.SendAsync(new Lookup(1), CancellationToken.None);
+        currentUserId = Bob;
         await dispatcher.SendAsync(new Lookup(1), CancellationToken.None);
 
         CountingLookupHandler.Calls.Should().Be(

@@ -167,14 +167,23 @@ public sealed class CacheEvictionBehaviorTests
         CountingLookupHandler.Calls = 0;
         var currentUser = Substitute.For<ICurrentUser>();
 
-        // Alice reads, Bob writes, Alice reads again.
-        currentUser.Id.Returns(Alice, Bob, Alice);
+        // A lazy callback keyed on a mutable local, not a positional Returns(Alice, Bob, Alice)
+        // sequence: nothing guarantees ICurrentUser.Id is read exactly once per dispatch — an
+        // audit behavior reading it inside ValidateAsync, say, would slide a positional sequence
+        // by one and either fail this test for the wrong reason or, worse, pass it coincidentally
+        // while no longer proving caller isolation. Fixing the id per dispatch instead makes the
+        // stub correct no matter how many times production code reads it within one dispatch.
+        Guid? currentUserId = Alice;
+        currentUser.Id.Returns(_ => currentUserId);
         await using var provider = Build<TouchHandler>(currentUser);
         var queries = provider.GetRequiredService<IQueryDispatcher>();
         var commands = provider.GetRequiredService<ICommandDispatcher>();
 
+        // Alice reads, Bob writes, Alice reads again.
         await queries.SendAsync(new Lookup(1), CancellationToken.None);
+        currentUserId = Bob;
         await commands.SendAsync(new Touch(1), CancellationToken.None);
+        currentUserId = Alice;
         await queries.SendAsync(new Lookup(1), CancellationToken.None);
 
         CountingLookupHandler.Calls.Should().Be(
