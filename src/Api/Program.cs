@@ -7,8 +7,10 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.Persistence;
 using JasperFx;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
@@ -137,6 +139,16 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(connectionString);
+
+// The key ring goes to Postgres, not to each host's memory. Two replicas with separate
+// rings reject each other's session cookies, which surfaces as an intermittent 401 rather
+// than an obvious failure. SetApplicationName is load-bearing, not decoration: the purpose
+// string derives from it, so pods that disagree on the name share a ring and still refuse
+// each other's cookies. Keys are unencrypted at rest - acceptable for a local cluster with
+// throwaway credentials, and the condition ADR 0010 places on a cloud target.
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<AiFrameworkDbContext>()
+    .SetApplicationName("AiFramework");
 
 // Bound here rather than inside AddCaching, which must stay resolvable from a bare
 // ServiceCollection in unit tests. Same shape as Wolverine:Durable and RateLimiting:Auth above:

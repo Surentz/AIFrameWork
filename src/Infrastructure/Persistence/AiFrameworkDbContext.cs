@@ -1,12 +1,13 @@
 using AiFramework.Domain.Orders;
 using AiFramework.Domain.Users;
 using AiFramework.Infrastructure.Outbox;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace AiFramework.Infrastructure.Persistence;
 
 public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> options)
-    : DbContext(options)
+    : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<Order> Orders => Set<Order>();
 
@@ -15,6 +16,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     public DbSet<OrderAudit> OrderAudits => Set<OrderAudit>();
 
     public DbSet<User> Users => Set<User>();
+
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

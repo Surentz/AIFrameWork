@@ -5,6 +5,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The Data Protection key ring, persisted to the application database. Two API replicas
+      that each hold an in-memory ring reject each other's session cookies; with no store
+      configured the framework falls back to a per-machine filesystem ring, which does not
+      exist across containers. See ADR 0010.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
