@@ -57,9 +57,20 @@ dotnet add package Microsoft.Extensions.Caching.Hybrid --project src/Infrastruct
 ```
 
 Then open `src/Infrastructure/AiFramework.Infrastructure.csproj` and confirm the added
-`<PackageReference>` carries an explicit `Version` attribute on the `10.0.x` line, matching how
-every other reference in that file is hand-pinned. **If the resolved version is not `10.0.x`,
-stop and report it** — a different major line means the API surface below may not match.
+`<PackageReference>` carries an explicit `Version` attribute. **Pin `10.9.0`.**
+
+This package does **not** track the shared framework's patch line. Its published versions are
+`9.3.0 … 9.10.0`, then `10.0.0 … 10.9.0` — an independent release counter where the minor digit
+advances per release, so there is no `10.0.11` to match the other `Microsoft.Extensions.*`
+references. `10.0.0` is merely its first .NET 10 release; `10.9.0` is the current one.
+
+The API surface this plan depends on was verified against `10.9.0` by compile probe:
+`AddHybridCache(o => o.MaximumPayloadBytes = …)`, the six-argument
+`GetOrCreateAsync(key, state, factory, options, tags:, cancellationToken:)` taking a tuple state
+and a `static async` factory that throws, `HybridCacheEntryOptions { Expiration = … }`, and
+`RemoveByTagAsync(tag, ct)` returning `ValueTask` — all present, compiling clean. **If
+`dotnet add package` resolves anything other than `10.9.0`, set the version to `10.9.0`
+explicitly.** If `10.9.0` itself fails to build here, fall back to `10.0.0` and report it.
 
 Move the new reference into alphabetical position among the existing `Microsoft.Extensions.*`
 entries, and add this comment above it:
@@ -71,7 +82,7 @@ entries, and add this comment above it:
   concurrent misses collapse to one load), RemoveByTagAsync for per-caller invalidation, and an
   L2 tier that can be added later without touching a call site. L1 only today. See ADR 0009.
 -->
-<PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.0.11" />
+<PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.9.0" />
 ```
 
 Adjust the `Version` to whatever `dotnet add package` actually pinned.
@@ -1962,11 +1973,15 @@ you Step 8's pass exercises the caching path rather than an accidentally-uncache
 Step 2's completeness tests are green on arrival for the same reason every completeness test in
 this repository is.
 
-**The package version is the one thing this plan cannot pin.**
-`Microsoft.Extensions.Caching.Hybrid` is not in the local NuGet cache, so Task 1 Step 1 resolves
-it and records what it got. If it lands outside `10.0.x`, stop and report rather than adapting the
-code — the `GetOrCreateAsync` overload used in Task 2 Step 5 takes `(key, state, factory, options,
-tags, cancellationToken)`, and a different major line may not have it.
+**The package version is pinned to `10.9.0`, and the reason is not obvious.**
+`Microsoft.Extensions.Caching.Hybrid` versions on its own release counter — `9.3.0 … 9.10.0`,
+then `10.0.0 … 10.9.0` — rather than tracking the shared framework's patch line, so it does not
+and cannot match the `10.0.11` on the other `Microsoft.Extensions.*` references. An earlier draft
+of this plan told the executor to stop if the version was not `10.0.x`; that condition was
+checking the wrong thing and has been replaced. What mattered was the API surface, and it was
+verified by compile probe against `10.9.0`: the six-argument `GetOrCreateAsync` used in Task 2
+Step 5, `HybridCacheEntryOptions.Expiration`, `AddHybridCache`'s options callback, and
+`RemoveByTagAsync` returning `ValueTask`.
 
 **If `AddHybridCache` turns out not to need `ILogger`,** the `services.AddLogging()` calls in the
 test helpers are harmless and should stay: they cost nothing and they stop the tests depending on
