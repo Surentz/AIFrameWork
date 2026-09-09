@@ -827,7 +827,15 @@ git commit -m "feat(k8s): kind cluster, namespace, postgres, and local config"
 - Consumes: image `aiframework-migrator:local` (Task 4), Secret `app-secrets` (Task 6).
 - Produces: Job `migrate`. Task 10's script waits on its completion before applying the API.
 
-> Wolverine finding from Task 1 goes here. If the race was observed, add `Wolverine__AutoBuildMessageStorageOnStartup: 'false'` to `k8s/overlays/local/config.yaml` and add a second container to this Job that runs Wolverine's storage creation once.
+> **Wolverine finding from Task 1 (verified 2026-09-09):** two `dotnet run` hosts were launched
+> in the same instant against a database with no `wolverine` schema present, ports 5301 and
+> 5302, `ConnectionStrings__Default` pointed at the same Postgres. Both reached "Application
+> started" with no DDL collision: no `duplicate`, `already exists`, `deadlock`, `42P07`, or
+> `42710` in either log. `wolverine.wolverine_nodes` shows both nodes registered 0.35s apart
+> (node 30 at 19:11:02.777731+00, node 31 at 19:11:03.12241+00, one log showing "Node 30
+> ... successfully assumed leadership"), confirming the race was genuine and Wolverine's own
+> coordination absorbed it. Wolverine auto-migration is verified safe at 2 replicas — leave
+> `Wolverine__Durable: 'true'` as-is and make no further change here.
 
 - [ ] **Step 1: Create `k8s/base/migrate-job.yaml`**
 
