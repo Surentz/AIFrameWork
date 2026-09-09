@@ -5,8 +5,9 @@ namespace AiFramework.Infrastructure.Caching;
 public static class CachingRegistration
 {
     /// <summary>
-    /// The cache store and its options. Called from AddInfrastructure, beside AddOutbox, so Api
-    /// still reaches Infrastructure through exactly one entry point.
+    /// The cache store and its options. Called from AddInfrastructure, beside AddOutbox, so the
+    /// store and its options are wired by AddInfrastructure; the only thing Api names directly is
+    /// CacheOptions itself, to bind the section.
     /// </summary>
     /// <remarks>
     /// Deliberately does not bind configuration itself. Binding here would make

@@ -1,7 +1,10 @@
 using System.Net.Http.Json;
 using AiFramework.Api.Orders;
+using AiFramework.Infrastructure.Caching;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace AiFramework.Api.IntegrationTests.Orders;
 
@@ -77,6 +80,25 @@ public sealed class OrderCachingTests : IDisposable
             "CACHE-SECOND",
             "a client that refetches straight after a 201 must read its own write; this is the " +
             "whole reason eviction is synchronous rather than riding the outbox");
+
+        // A second list of the same page is a cache HIT, and that is the point of asserting it:
+        // nothing else in the suite ever reads a cached OrderPage back out, so without this the
+        // deserialization half of the round-trip ADR 0009 rests on is never executed at all.
+        var served = await ListAsync(client);
+        served.Items.Should().BeEquivalentTo(page.Items);
+    }
+
+    [Fact]
+    public void TheLayeredHost_ActuallyHasCachingEnabled()
+    {
+        // Every assertion above only means something if this host really has the cache on.
+        // ApiFactory sets Cache:Enabled=false, and the constructor above layers
+        // Cache:Enabled=true on top via WithWebHostBuilder, relying on last-write-wins over
+        // ApiFactory.ConfigureWebHost's own settings — a method that was refactored on this
+        // very branch. If that precedence ever inverts, every test in this class would go on
+        // passing while testing nothing, with no failure anywhere. This is that tripwire.
+        _cached.Services.GetRequiredService<IOptions<CacheOptions>>().Value.Enabled
+            .Should().BeTrue("every assertion in this class is vacuous with the cache off");
     }
 
     [Fact]

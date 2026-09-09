@@ -114,8 +114,9 @@ discriminates by prefix instead — a bare marker for the null case, and every n
 prefixed with a different character — so no client-supplied string can collide with the null case
 at all.
 
-**`HybridCache`, with L1 only for now.** `Microsoft.Extensions.Caching.Hybrid` has been in-box
-since .NET 9 and is chosen over a bare `IMemoryCache` for three things that would otherwise be
+**`HybridCache`, with L1 only for now.** `Microsoft.Extensions.Caching.Hybrid` ships out-of-band,
+supported on .NET 9 and later, and is chosen over a bare `IMemoryCache` for three things that would
+otherwise be
 hand-rolled: stampede protection, so ten concurrent misses on one key collapse into a single load
 instead of ten trips to Postgres; `RemoveByTagAsync`, which is exactly the per-caller invalidation
 `PlaceOrder` needs, where the `IMemoryCache` equivalent is a `CancellationChangeToken` per user id
@@ -197,10 +198,12 @@ carrying the `Error` when the `Result` failed; `CachedAsync` catches that specif
 `Result.Failure<TResponse>`. `HybridCache` stores nothing when its factory throws, so a 404 is not
 retained for the full duration, no removal round-trip is needed, and there is no window in which a
 concurrent caller reads a cached failure. Caching a wrapper and removing it afterwards would leave
-exactly that window. The sentinel carries this branch's only new suppression — a `#pragma warning
-disable CA1032, S3871` pair, because both rules ask to widen a type whose entire purpose is to stay
-inside one method, and the `catch` names that type rather than `Exception`, so CA1031 is satisfied
-on its own terms.
+exactly that window. The sentinel carries this branch's only new suppression in `src/` — a
+`#pragma warning disable CA1032, S3871` pair, because both rules ask to widen a type whose entire
+purpose is to stay inside one method, and the `catch` names that type rather than `Exception`, so
+CA1031 is satisfied on its own terms. The branch adds one further suppression, in the test
+projects: a `CA1711` on the `CacheBehaviorCollection` marker, which is the established xUnit
+collection-definition idiom already suppressed the same way in `ApiFactory` and `PostgresFixture`.
 
 ### The defect the design shipped with: `HybridCache` runs its factory without the `HttpContext`
 
@@ -306,7 +309,15 @@ parameter — banned everywhere outside the outbox's file-scoped exemption. So i
 committed write would surface a 500 to a caller whose order was in fact saved. That is an
 acceptable trade only while the cache is in-process. **It becomes the wrong trade the day an L2
 tier is added**, because a network hop has an entirely realistic failure mode; revisit it alongside
-that change rather than after it.
+that change rather than after it. There is a second, likelier trigger for the same
+post-commit-500 today, with no L2 needed: `EvictAsync`'s own fail-loud `throw` fires *after*
+`CommitAsync` has already succeeded, for exactly the same reason `ICacheable` refuses to fall back
+to an anonymous bucket — an `IInvalidatesCache` command with no current user is a wiring error, not
+something to tolerate. It is unreachable today only because `PlaceOrderHandler` returns
+`Unauthorized` when there is no caller, so the `Result` is already unsuccessful and `EvictAsync`
+returns before it ever reaches that throw. A future `IInvalidatesCache` command that legitimately
+succeeds with no `ICurrentUser` — one dispatched from the outbox, say — would commit and then 500
+on the way out, by this path rather than `RemoveByTagAsync`'s.
 
 **A joined stampede caller can be handed an `ObjectDisposedException`.** The factory runs the
 handler on request-scoped dependencies, and `HybridCache` may share one factory's result across

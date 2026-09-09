@@ -117,5 +117,7 @@ Commands opt into eviction with `IInvalidatesCache`, whose `Tags` name query typ
 
 - `CancellationToken` on every I/O method, and pass it down.
 - No `async void` outside event handlers. No `.Result`, no `.Wait()`.
-- Do not add `ConfigureAwait(false)` — ASP.NET Core has no synchronization context, and
-  CA2007 is deliberately off.
+- `ConfigureAwait(false)` is not enforced in either direction — CA2007 is deliberately off, and
+  ASP.NET Core has no synchronization context, so it changes nothing here. Existing code under
+  `src/` uses it throughout (including the messaging behaviors); match the file you are working
+  in rather than either adding or stripping it.

@@ -59,8 +59,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // Off for every test in this project, for the same reason the rate limit is raised above:
         // these tests were written against uncached reads, and a hit would make an unrelated
         // assertion fail as though the endpoint were broken. The cache's own behaviour is covered
-        // by Orders/OrderCachingTests, which stands up its own host with it switched on — the
-        // same split AuthRateLimitTests uses for the limiter.
+        // by Orders/OrderCachingTests, which stays in ApiFactoryCollection and layers
+        // WithWebHostBuilder over this factory with it switched on, rather than standing up its
+        // own host — the same split AuthRateLimitTests uses for the limiter, but keeping the one
+        // shared Postgres container.
         builder.UseSetting("Cache:Enabled", "false");
 
         // Split out to a method of its own so ConfigureWebHost stays under MA0051's line limit

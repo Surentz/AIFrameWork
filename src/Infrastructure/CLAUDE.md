@@ -53,7 +53,7 @@ beside the command ones. Off by configuration everywhere it is not the subject â
   cannot arrive unnoticed.
 - The cache stores the success **value**, never `Result<T>`: `Result<T>.Error` throws on a success,
   so serializing one fails, and its `internal` constructor makes deserializing one impossible.
-- A failed `Result` throws a file-private sentinel out of the cache factory, so `HybridCache`
+- A failed `Result` throws a private nested sentinel out of the cache factory, so `HybridCache`
   stores nothing. Do not replace it with a cached wrapper plus a removal â€” that leaves a window in
   which a concurrent caller reads the failure.
 - `CacheOptions` is bound in `Program.cs`, not in `AddCaching`. Binding here would make
@@ -65,6 +65,9 @@ beside the command ones. Off by configuration everywhere it is not the subject â
   Anything resolved inside it must therefore be safe to read off the request's execution context;
   `ICurrentUser` is, because `CurrentUser` memoizes. Do not add a behavior or a handler dependency
   that reads ambient state.
+- A cached query's handler runs on the **originating** caller's request scope, which may be
+  disposed before the work completes if that request aborts. Do not opt in a query whose handler
+  holds resources across the await, and do not assume the scope outlives the factory.
 
 ## Outbox
 
