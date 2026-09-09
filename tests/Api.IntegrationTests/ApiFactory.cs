@@ -66,10 +66,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // Split out to a method of its own so ConfigureWebHost stays under MA0051's line limit
         // now that it also carries the Cache:Enabled setting above — the split is purely
         // mechanical, the ConfigureServices callback itself is unchanged.
-        builder.ConfigureServices(ConfigureTestServices);
+        builder.ConfigureServices(ConfigureServicesForTests);
     }
 
-    private static void ConfigureTestServices(IServiceCollection services)
+    private static void ConfigureServicesForTests(IServiceCollection services)
     {
         // No DbContextOptions<AiFrameworkDbContext> override here: UseSetting above already
         // points Program.cs's own AddInfrastructure(connectionString) call at the container

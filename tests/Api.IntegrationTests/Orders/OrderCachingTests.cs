@@ -108,7 +108,11 @@ public sealed class OrderCachingTests : IDisposable
         first.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
         second.StatusCode.Should().Be(
             System.Net.HttpStatusCode.NotFound,
-            "a failure is never cached, so the second request re-runs the handler rather than " +
-            "being served a stored 404");
+            "the caching behavior's sentinel throws instead of returning Result.Value on a " +
+            "failed Result, so a broken conversion back to a failed Result would already surface " +
+            "as a 500 on the FIRST call, not just the second - this pins that conversion, not " +
+            "retention. Whether a failure is actually kept out of the cache is proven separately, " +
+            "at the Infrastructure level, by SendAsync_TwiceForTheSameUserAndArguments_" +
+            "RunsTheHandlerOnce (Task 2) - a served 404 and a re-run 404 look identical over HTTP");
     }
 }

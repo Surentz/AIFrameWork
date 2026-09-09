@@ -11,6 +11,13 @@ public interface IClock
 /// the outbox pumps resolve scopes with no HTTP context at all, and a handler that returns
 /// ErrorKind.Unauthorized produces a 401 where a throw would produce a 500.
 /// </summary>
+/// <remarks>
+/// Once <see cref="Id"/> resolves to a non-null value within a scope, it must keep returning
+/// that same value for the rest of the scope — a cacheable query's handler may run later, in
+/// that same scope, from a context where re-deriving the caller from scratch is not possible.
+/// An implementation that re-reads its source on every access breaks that for any consumer
+/// reached through the caching behavior.
+/// </remarks>
 public interface ICurrentUser
 {
     public Guid? Id { get; }

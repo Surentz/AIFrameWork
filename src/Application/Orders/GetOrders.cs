@@ -12,7 +12,15 @@ public sealed record GetOrders(int Limit, string? Cursor) : IQuery<OrderPage>, I
 {
     // The user scope is NOT here — the caching behavior prepends the query type and the caller's
     // id. Putting a user id in this string would duplicate it, not secure it.
-    public string CacheKey => $"{Limit}:{Cursor}";
+    //
+    // Cursor ?? "-", not Cursor directly: null and "" are not the same request — the handler
+    // below branches on `Cursor is not null`, so null takes the first-page path and "" takes the
+    // malformed-cursor 400 path — but interpolating a null string and an empty string both
+    // produce the same text, so the two would otherwise collide on one cache key and let a
+    // cached 200 page answer a request that should 400. "-" is never a value Encode() produces
+    // (it only ever emits standard base64: A-Z, a-z, 0-9, +, /, =), so it cannot collide with a
+    // real cursor either.
+    public string CacheKey => $"{Limit}:{Cursor ?? "-"}";
 
     // Thirty seconds: long enough that a refocus-driven refetch is a hit, short enough that a
     // write from another device shows up without anyone waiting on it. Clamped by

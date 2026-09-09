@@ -24,6 +24,16 @@ public sealed class CurrentUser(IHttpContextAccessor accessor) : ICurrentUser
     // This also relies on cache keys being user-scoped: a joined stampede caller is served a
     // value computed under the originating caller's request scope, which is safe only because
     // every such caller is, by construction, the same user.
+    //
+    // Deliberately unsynchronized. Guid? is a 20-byte struct, so a racing write is not atomic —
+    // a torn read could observe HasValue == true over a half-written Guid, fabricating a user id
+    // rather than merely returning a stale null, and that fabricated id is exactly what a cache
+    // key would then be built from. This is safe today only because nothing in this codebase
+    // dispatches queries in parallel within one request scope (grep for Task.WhenAll, Parallel.,
+    // and Task.Run across src/Api, src/Application, and src/Infrastructure: the only hits are the
+    // outbox pumps, which own their own scopes and never see an HttpContext). Interlocked or
+    // Lazy<T> would be unjustified machinery against a race this codebase cannot currently
+    // trigger — if that ever changes, this comment is where to notice.
     private Guid? _id;
 
     public Guid? Id =>
