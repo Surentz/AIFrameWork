@@ -8,7 +8,17 @@ public sealed record OrderListItem(Guid Id, string Sku, int Quantity, DateTimeOf
 
 public sealed record OrderPage(IReadOnlyList<OrderListItem> Items, string? NextCursor);
 
-public sealed record GetOrders(int Limit, string? Cursor) : IQuery<OrderPage>;
+public sealed record GetOrders(int Limit, string? Cursor) : IQuery<OrderPage>, ICacheable
+{
+    // The user scope is NOT here — the caching behavior prepends the query type and the caller's
+    // id. Putting a user id in this string would duplicate it, not secure it.
+    public string CacheKey => $"{Limit}:{Cursor}";
+
+    // Thirty seconds: long enough that a refocus-driven refetch is a hit, short enough that a
+    // write from another device shows up without anyone waiting on it. Clamped by
+    // CacheOptions.MaximumDuration.
+    public TimeSpan Duration => TimeSpan.FromSeconds(30);
+}
 
 /// <summary>
 /// Validates its own inputs, because QueryDispatcher does not run the validation behavior —

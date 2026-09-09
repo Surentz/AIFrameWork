@@ -56,50 +56,62 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // AuthRateLimitTests, which stands up its own host with a tiny limit.
         builder.UseSetting("RateLimiting:Auth:PermitLimit", "1000000");
 
-        builder.ConfigureServices(services =>
+        // Off for every test in this project, for the same reason the rate limit is raised above:
+        // these tests were written against uncached reads, and a hit would make an unrelated
+        // assertion fail as though the endpoint were broken. The cache's own behaviour is covered
+        // by Orders/OrderCachingTests, which stands up its own host with it switched on — the
+        // same split AuthRateLimitTests uses for the limiter.
+        builder.UseSetting("Cache:Enabled", "false");
+
+        // Split out to a method of its own so ConfigureWebHost stays under MA0051's line limit
+        // now that it also carries the Cache:Enabled setting above — the split is purely
+        // mechanical, the ConfigureServices callback itself is unchanged.
+        builder.ConfigureServices(ConfigureTestServices);
+    }
+
+    private static void ConfigureTestServices(IServiceCollection services)
+    {
+        // No DbContextOptions<AiFrameworkDbContext> override here: UseSetting above already
+        // points Program.cs's own AddInfrastructure(connectionString) call at the container
+        // before the host is built, so production's registration — including
+        // AddInterceptors(DomainEventsInterceptor) — already targets the test database.
+        // Removing and re-registering it here (as an earlier version of this file did) is not
+        // just redundant: EF Core composes DbContext configuration across every AddDbContext
+        // call for a type (via IDbContextOptionsConfiguration<TContext>) rather than having
+        // the later call fully replace the earlier one, so a second bare AddDbContext call
+        // does not even drop the interceptor added by the first — it just re-set the same
+        // connection string. Confirmed empirically: OutboxDeliveryTests.
+        // PostOrders_WritesAPendingOutboxRow passes against this factory either way.
+
+        // The outbox pumps are removed here deliberately. They would compete with
+        // DrainOutboxUntilEmptyAsync for the same rows and make outbox tests timing-dependent.
+        // The drain helper below invokes the same OutboxPoller and OutboxWorkItemProcessor
+        // the pumps use, so the wiring under test is still the real one.
+        //
+        // This must be a narrowed removal, not a blanket one keyed only on the
+        // IHostedService service type: the generic host appends its own hosted service for
+        // GenericWebHostService — the piece that actually starts the server and builds the
+        // request pipeline — after user ConfigureServices callbacks run. Removing every
+        // IHostedService descriptor here would delete that one too; it only happens to work
+        // today because of that registration order, and moving this removal to a later hook
+        // (e.g. ConfigureTestServices) would silently stop the test host from serving
+        // requests. Filtering by ImplementationType keeps this immune to that ordering
+        // accident.
+        var outboxHostedServices = services
+            .Where(descriptor => descriptor.ServiceType == typeof(IHostedService)
+                && (descriptor.ImplementationType == typeof(OutboxPollerService)
+                    || descriptor.ImplementationType == typeof(OutboxWorkerService)))
+            .ToList();
+        foreach (var descriptor in outboxHostedServices)
         {
-            // No DbContextOptions<AiFrameworkDbContext> override here: UseSetting above already
-            // points Program.cs's own AddInfrastructure(connectionString) call at the container
-            // before the host is built, so production's registration — including
-            // AddInterceptors(DomainEventsInterceptor) — already targets the test database.
-            // Removing and re-registering it here (as an earlier version of this file did) is not
-            // just redundant: EF Core composes DbContext configuration across every AddDbContext
-            // call for a type (via IDbContextOptionsConfiguration<TContext>) rather than having
-            // the later call fully replace the earlier one, so a second bare AddDbContext call
-            // does not even drop the interceptor added by the first — it just re-set the same
-            // connection string. Confirmed empirically: OutboxDeliveryTests.
-            // PostOrders_WritesAPendingOutboxRow passes against this factory either way.
+            services.Remove(descriptor);
+        }
 
-            // The outbox pumps are removed here deliberately. They would compete with
-            // DrainOutboxUntilEmptyAsync for the same rows and make outbox tests timing-dependent.
-            // The drain helper below invokes the same OutboxPoller and OutboxWorkItemProcessor
-            // the pumps use, so the wiring under test is still the real one.
-            //
-            // This must be a narrowed removal, not a blanket one keyed only on the
-            // IHostedService service type: the generic host appends its own hosted service for
-            // GenericWebHostService — the piece that actually starts the server and builds the
-            // request pipeline — after user ConfigureServices callbacks run. Removing every
-            // IHostedService descriptor here would delete that one too; it only happens to work
-            // today because of that registration order, and moving this removal to a later hook
-            // (e.g. ConfigureTestServices) would silently stop the test host from serving
-            // requests. Filtering by ImplementationType keeps this immune to that ordering
-            // accident.
-            var outboxHostedServices = services
-                .Where(descriptor => descriptor.ServiceType == typeof(IHostedService)
-                    && (descriptor.ImplementationType == typeof(OutboxPollerService)
-                        || descriptor.ImplementationType == typeof(OutboxWorkerService)))
-                .ToList();
-            foreach (var descriptor in outboxHostedServices)
-            {
-                services.Remove(descriptor);
-            }
-
-            // Test-only endpoints that throw on demand, exercising GlobalExceptionHandler's
-            // two branches over real HTTP. See TestEndpointsStartupFilter for why this is an
-            // IStartupFilter rather than a controller.
-            services.TryAddEnumerable(
-                ServiceDescriptor.Singleton<IStartupFilter, TestEndpointsStartupFilter>());
-        });
+        // Test-only endpoints that throw on demand, exercising GlobalExceptionHandler's
+        // two branches over real HTTP. See TestEndpointsStartupFilter for why this is an
+        // IStartupFilter rather than a controller.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IStartupFilter, TestEndpointsStartupFilter>());
     }
 
     /// <summary>

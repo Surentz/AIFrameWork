@@ -4,7 +4,12 @@ namespace AiFramework.Application.Orders;
 
 public sealed record OrderView(Guid Id, string Sku, int Quantity, DateTimeOffset PlacedAt);
 
-public sealed record GetOrder(Guid Id) : IQuery<OrderView>;
+public sealed record GetOrder(Guid Id) : IQuery<OrderView>, ICacheable
+{
+    public string CacheKey => Id.ToString();
+
+    public TimeSpan Duration => TimeSpan.FromSeconds(30);
+}
 
 public sealed class GetOrderHandler(IOrderRepository orders, ICurrentUser currentUser)
     : IQueryHandler<GetOrder, OrderView>

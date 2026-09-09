@@ -33,6 +33,11 @@ export default defineConfig({
         // sign-up.ts's waitForURL timing out: indistinguishable from a flake, and not
         // reproducible when re-running the one spec.
         RateLimiting__Auth__PermitLimit: '1000000',
+        // The same move ApiFactory makes. The order specs place an order and then assert the
+        // list contains it; a cached page would turn the eviction path into a source of
+        // intermittent failures in a suite that is not testing the cache. Backend integration
+        // tests cover it instead, with the cache deliberately on.
+        Cache__Enabled: 'false',
       },
     },
     {

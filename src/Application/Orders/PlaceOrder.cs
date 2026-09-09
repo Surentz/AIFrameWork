@@ -4,7 +4,13 @@ using FluentValidation;
 
 namespace AiFramework.Application.Orders;
 
-public sealed record PlaceOrder(string Sku, int Quantity) : ICommand<Guid>;
+public sealed record PlaceOrder(string Sku, int Quantity) : ICommand<Guid>, IInvalidatesCache
+{
+    // Both order reads, because a new order changes the list and nothing else. nameof rather
+    // than a literal, so renaming a query type is a compile error here instead of a silent
+    // eviction that stops matching anything.
+    public IReadOnlyList<string> Tags => [nameof(GetOrders), nameof(GetOrder)];
+}
 
 public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrder>
 {

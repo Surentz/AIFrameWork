@@ -5,6 +5,7 @@ using AiFramework.Api;
 using AiFramework.Api.Auth;
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure;
+using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using JasperFx;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -136,6 +137,11 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(connectionString);
+
+// Bound here rather than inside AddCaching, which must stay resolvable from a bare
+// ServiceCollection in unit tests. Same shape as Wolverine:Durable and RateLimiting:Auth above:
+// Api reads its own configuration and hands the values to Infrastructure.
+builder.Services.Configure<CacheOptions>(builder.Configuration.GetSection("Cache"));
 
 // ADR 0005 spike: Wolverine's durable event path, alongside the existing outbox rather than
 // replacing it. UseWolverine hooks the host builder, so this cannot go through AddInfrastructure.
