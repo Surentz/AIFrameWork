@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Threading.RateLimiting;
 using AiFramework.Api;
 using AiFramework.Api.Auth;
 using AiFramework.Application.Abstractions;
@@ -5,6 +8,8 @@ using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.EventPath;
 using JasperFx;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -69,6 +74,64 @@ builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
+// Volume defence on the credential endpoints, alongside the per-account lockout in
+// SignInHandler. Partitioned by remote address, not by username: the limiter runs before model
+// binding, so a username in the JSON body is not reachable without buffering and rewinding the
+// request body. Counting clients rather than accounts also means this 429 distinguishes nothing
+// about which accounts exist - which is why the lockout itself stays silent. ADR 0008.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    var permitLimit = builder.Configuration.GetValue("RateLimiting:Auth:PermitLimit", defaultValue: 10);
+    var windowSeconds = builder.Configuration.GetValue("RateLimiting:Auth:WindowSeconds", defaultValue: 60);
+
+    options.AddPolicy(AuthRateLimiting.PolicyName, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            // Null for a request with no remote address (in-memory test hosts, some proxies).
+            // One shared "unknown" bucket is the safe direction: it over-restricts rather than
+            // handing every such caller its own unlimited partition.
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = permitLimit,
+                Window = TimeSpan.FromSeconds(windowSeconds),
+            }));
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            // Ceiling, not a cast: truncation turns the 0.4s left in a window into
+            // "Retry-After: 0", and a well-behaved client obeys it straight back into another 429.
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+        }
+
+        // The limiter short-circuits the pipeline, so nothing else gives this response a body:
+        // AddProblemDetails() only fills one in for an exception, and there is no
+        // UseStatusCodePages here. Without this the 429 goes out empty while the committed
+        // contract - openapi/AiFramework.Api.json and the schema.d.ts generated from it - says it
+        // returns ProblemDetails, and frontend/src/api/client.ts falls back to its own
+        // "Request failed with status 429." Shaped exactly like ResultExtensions.Problem's
+        // output, traceId included, so an error body from here is not a special case for a client.
+        var problemDetails = new ProblemDetails
+        {
+            Status = StatusCodes.Status429TooManyRequests,
+            Title = "rate.limited",
+            Detail = "Too many requests. Please wait a moment and try again.",
+        };
+        problemDetails.Extensions["traceId"] =
+            Activity.Current?.Id ?? context.HttpContext.TraceIdentifier;
+
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            problemDetails,
+            options: null,
+            contentType: "application/problem+json",
+            cancellationToken);
+    };
+});
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
@@ -92,6 +155,7 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 // No fallback authorization policy is registered, so this stays anonymous without an attribute -

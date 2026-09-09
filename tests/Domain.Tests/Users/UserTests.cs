@@ -128,4 +128,121 @@ public sealed class UserTests
     [InlineData("  AdA  ", "ADA")]
     public void Normalize_FoldsCaseAndTrims(string username, string expected) =>
         User.Normalize(username).Should().Be(expected);
+
+    private static readonly DateTimeOffset SignInAt = new(2026, 9, 8, 9, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void Register_StartsWithACleanSignInRecord()
+    {
+        var user = User.Register(
+            Guid.NewGuid(), "Ada", "hash", "Ada Lovelace", SignInAt);
+
+        user.FailedSignInAttempts.Should().Be(0);
+        user.LockedOutUntil.Should().BeNull();
+        user.IsLockedOut(SignInAt).Should().BeFalse();
+    }
+
+    [Fact]
+    public void RegisterFailedSignIn_BelowTheThreshold_CountsButDoesNotLock()
+    {
+        var user = User.Register(Guid.NewGuid(), "Ada", "hash", "Ada Lovelace", SignInAt);
+
+        for (var i = 0; i < User.MaxFailedSignInAttempts - 1; i++)
+        {
+            user.RegisterFailedSignIn(SignInAt);
+        }
+
+        user.FailedSignInAttempts.Should().Be(User.MaxFailedSignInAttempts - 1);
+        user.LockedOutUntil.Should().BeNull();
+        user.IsLockedOut(SignInAt).Should().BeFalse();
+    }
+
+    [Fact]
+    public void RegisterFailedSignIn_OnTheThresholdFailure_LocksForTheLockoutDuration()
+    {
+        var user = User.Register(Guid.NewGuid(), "Ada", "hash", "Ada Lovelace", SignInAt);
+
+        for (var i = 0; i < User.MaxFailedSignInAttempts; i++)
+        {
+            user.RegisterFailedSignIn(SignInAt);
+        }
+
+        user.LockedOutUntil.Should().Be(SignInAt + User.LockoutDuration);
+    }
+
+    [Fact]
+    public void IsLockedOut_IsTrueBeforeTheExpiryAndFalseAtIt()
+    {
+        var user = User.Register(Guid.NewGuid(), "Ada", "hash", "Ada Lovelace", SignInAt);
+        for (var i = 0; i < User.MaxFailedSignInAttempts; i++)
+        {
+            user.RegisterFailedSignIn(SignInAt);
+        }
+
+        var expiry = SignInAt + User.LockoutDuration;
+
+        user.IsLockedOut(expiry.AddTicks(-1)).Should().BeTrue();
+        user.IsLockedOut(expiry).Should().BeFalse("the window is closed at the instant it expires");
+        user.IsLockedOut(expiry.AddMinutes(1)).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The other half of the fixed window, guarded inside the type that owns the fields rather
+    /// than only in SignInHandler: an attempt made while the lockout is live must not count and
+    /// must not push the expiry forward, or an attacker who knows one username holds that account
+    /// locked indefinitely at one guess per window.
+    /// </summary>
+    [Fact]
+    public void RegisterFailedSignIn_DuringAnActiveLockout_ChangesNothing()
+    {
+        var user = User.Register(Guid.NewGuid(), "Ada", "hash", "Ada Lovelace", SignInAt);
+        for (var i = 0; i < User.MaxFailedSignInAttempts; i++)
+        {
+            user.RegisterFailedSignIn(SignInAt);
+        }
+
+        user.RegisterFailedSignIn(SignInAt + TimeSpan.FromMinutes(1));
+
+        user.FailedSignInAttempts.Should().Be(User.MaxFailedSignInAttempts);
+        user.LockedOutUntil.Should().Be(
+            SignInAt + User.LockoutDuration, "the window is fixed, not sliding");
+    }
+
+    [Fact]
+    public void RegisterSuccessfulSignIn_ClearsTheCounterAndTheLockout()
+    {
+        var user = User.Register(Guid.NewGuid(), "Ada", "hash", "Ada Lovelace", SignInAt);
+        for (var i = 0; i < User.MaxFailedSignInAttempts; i++)
+        {
+            user.RegisterFailedSignIn(SignInAt);
+        }
+
+        user.RegisterSuccessfulSignIn();
+
+        user.FailedSignInAttempts.Should().Be(0);
+        user.LockedOutUntil.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The test that guards the fixed-window decision. Without the reset, the count would still
+    /// stand at the threshold when the window lapsed, so the next single failure would re-lock —
+    /// and every failure after it would too, which is a sliding window arriving through the back
+    /// door and lets an attacker hold an account locked indefinitely at one guess per window.
+    /// </summary>
+    [Fact]
+    public void RegisterFailedSignIn_AfterAnExpiredLockout_StartsCountingFromOne()
+    {
+        var user = User.Register(Guid.NewGuid(), "Ada", "hash", "Ada Lovelace", SignInAt);
+        for (var i = 0; i < User.MaxFailedSignInAttempts; i++)
+        {
+            user.RegisterFailedSignIn(SignInAt);
+        }
+
+        var afterExpiry = SignInAt + User.LockoutDuration + TimeSpan.FromMinutes(1);
+        user.RegisterFailedSignIn(afterExpiry);
+
+        user.FailedSignInAttempts.Should().Be(1, "serving out a lockout earns a fresh set of attempts");
+        user.LockedOutUntil.Should().BeNull();
+        user.IsLockedOut(afterExpiry).Should().BeFalse();
+    }
 }

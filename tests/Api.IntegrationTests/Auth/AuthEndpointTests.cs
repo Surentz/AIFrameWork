@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AiFramework.Domain.Users;
 using FluentAssertions;
 
 namespace AiFramework.Api.IntegrationTests.Auth;
@@ -152,6 +153,84 @@ public sealed class AuthEndpointTests(ApiFactory factory)
         (await StripTraceIdAsync(unknownUser))
             .Should().Be(await StripTraceIdAsync(wrongPassword), "traceId aside, the bodies must match");
     }
+
+    /// <summary>
+    /// The proof the whole slice exists for: after the threshold, even the right password is
+    /// refused. A test that only checked wrong passwords keep failing would pass without a
+    /// lockout at all.
+    /// </summary>
+    [Fact]
+    public async Task PostLogin_AfterTheThresholdOfWrongPasswords_RefusesEvenTheCorrectOne()
+    {
+        var username = AUsername();
+        using var client = factory.CreateClient();
+        (await client.PostAsJsonAsync("/api/auth/register", ARegistration(username)))
+            .EnsureSuccessStatusCode();
+
+        for (var attempt = 0; attempt < User.MaxFailedSignInAttempts; attempt++)
+        {
+            var failed = await client.PostAsJsonAsync(
+                "/api/auth/login",
+                new { Username = username, Password = "not the password", RememberMe = false });
+            failed.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        var withTheCorrectPassword = await client.PostAsJsonAsync(
+            "/api/auth/login", new { Username = username, Password = APassword, RememberMe = false });
+
+        withTheCorrectPassword.StatusCode.Should().Be(
+            HttpStatusCode.Unauthorized,
+            "the lockout outranks a correct password, or it would not be a lockout");
+    }
+
+    [Fact]
+    public async Task PostLogin_WhenLockedOut_IsIndistinguishableFromAWrongPassword()
+    {
+        var lockedOutUser = AUsername();
+        using var client = factory.CreateClient();
+        (await client.PostAsJsonAsync("/api/auth/register", ARegistration(lockedOutUser)))
+            .EnsureSuccessStatusCode();
+
+        for (var attempt = 0; attempt < User.MaxFailedSignInAttempts; attempt++)
+        {
+            await client.PostAsJsonAsync(
+                "/api/auth/login",
+                new { Username = lockedOutUser, Password = "not the password", RememberMe = false });
+        }
+
+        var lockedOut = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { Username = lockedOutUser, Password = "not the password", RememberMe = false });
+
+        var otherUser = AUsername();
+        (await client.PostAsJsonAsync("/api/auth/register", ARegistration(otherUser)))
+            .EnsureSuccessStatusCode();
+        var wrongPassword = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { Username = otherUser, Password = "not the password", RememberMe = false });
+
+        // A distinguishable lockout response would say "this account exists and I am guarding
+        // it", undoing the uniform error and the dummy hash SignInHandler goes to trouble for.
+        lockedOut.StatusCode.Should().Be(wrongPassword.StatusCode);
+        (await StripTraceIdAsync(lockedOut))
+            .Should().Be(await StripTraceIdAsync(wrongPassword), "traceId aside, the bodies must match");
+
+        // Headers are the observable a unit test structurally cannot reach, and the one a future
+        // change is most likely to differ on without noticing - a Retry-After, a WWW-Authenticate,
+        // a cache directive set on one branch and not the other names the account just as loudly
+        // as a different status code would.
+        HeaderNames(lockedOut).Should().Equal(
+            HeaderNames(wrongPassword), "a header set on only one branch is an enumeration oracle too");
+    }
+
+    /// <summary>
+    /// Sorted, and Date excluded: it is a clock reading, not a property of the branch taken.
+    /// </summary>
+    private static IReadOnlyList<string> HeaderNames(HttpResponseMessage response) =>
+        [.. response.Headers.Concat(response.Content.Headers)
+            .Select(header => header.Key)
+            .Where(name => !string.Equals(name, "Date", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)];
 
     [Fact]
     public async Task GetMe_WhenSignedIn_ReturnsTheUser()

@@ -25,6 +25,14 @@ export default defineConfig({
         ConnectionStrings__Default: E2E_CONNECTION_STRING,
         ASPNETCORE_URLS: `http://localhost:${API_PORT}`,
         ASPNETCORE_ENVIRONMENT: 'Development',
+        // The same move ApiFactory makes, for the same reason. No appsettings file has a
+        // RateLimiting section, so this API would run on the 10-per-60-seconds default - and
+        // every spec reaches it through the preview proxy, so the limiter sees one address and
+        // one partition for the whole suite. auth.spec.ts alone spends 5 of those permits and
+        // orders.spec.ts adds 2 per test in beforeEach. Exhausting it would surface as
+        // sign-up.ts's waitForURL timing out: indistinguishable from a flake, and not
+        // reproducible when re-running the one spec.
+        RateLimiting__Auth__PermitLimit: '1000000',
       },
     },
     {

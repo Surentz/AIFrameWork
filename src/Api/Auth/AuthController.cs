@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AiFramework.Api.Auth;
 
@@ -18,9 +19,11 @@ public sealed class AuthController(
     /// <summary>Creates an account and signs it in.</summary>
     [HttpPost("register")]
     [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimiting.PolicyName)]
     [ProducesResponseType<SessionResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult> Register(
         RegisterRequest request, CancellationToken cancellationToken)
     {
@@ -43,9 +46,11 @@ public sealed class AuthController(
     /// <summary>Signs in with a username and password.</summary>
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimiting.PolicyName)]
     [ProducesResponseType<SessionResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
