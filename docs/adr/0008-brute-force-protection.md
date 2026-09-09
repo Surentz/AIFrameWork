@@ -44,6 +44,17 @@ denial-of-service delivered on the attacker's own behalf. Serving out a lockout 
 of attempts. A permanent lockout was not considered: there is no password-reset flow in this
 codebase, so a permanently locked account would have no way out at all.
 
+The fixed window is the weaker of those two claims, and worth stating honestly: it frees an
+account only if the guessing stops. An attacker who keeps spending five guesses per window —
+twenty requests an hour, far under the per-IP limit and cheap to sustain — holds the account
+locked continuously without ever tripping the rate limiter. Fixed rather than sliding narrows
+that from "locked forever on one guess per window" to "locked for as long as the attacker keeps
+paying five", which is a real improvement but not an escape. The escape is a password reset, and
+there is none here: an account under sustained attack has no self-service way back in until one
+exists. That is inherent to account lockout without a reset flow, not to this implementation of
+it, and it is the second reason — alongside the mistyped-password case below — that password
+reset is the next slice.
+
 **The lockout is silent: the identical 401 a wrong password produces.** `SignInHandler`
 (`src/Application/Users/SignIn.cs`) checks `user.IsLockedOut(clock.UtcNow)` after the unknown-user
 branch and before password verification, and on a lockout returns the same `Failed` error instance
@@ -62,7 +73,8 @@ measurably faster than a wrong-password one — the timing difference is exactly
 existence oracle the dummy hash exists to close. And the lockout check runs, deliberately, before
 any counter update: an attempt made during an active lockout is refused without touching
 `FailedSignInAttempts` or `LockedOutUntil`, which is what keeps the window fixed rather than
-extending on every retry.
+extending on every retry. `RegisterFailedSignIn` returns early on `IsLockedOut(now)` as well, so
+that invariant is held by the type owning the two fields and not only by its one caller.
 
 **The rate limiter partitions by IP address, not by username, and guards only login and
 register.** `Program.cs` registers a fixed-window policy named `AuthRateLimiting.PolicyName`
@@ -82,7 +94,16 @@ lets the test host raise the limit out of the way. `[EnableRateLimiting(AuthRate
 ten-per-minute cap would break ordinary use, and `/logout` is anonymous and harmless already.
 `app.UseRateLimiter()` runs after `UseAuthentication`/`UseAuthorization` and before
 `MapControllers()`, with `OnRejected` writing a `Retry-After` header whenever the limiter's lease
-carries that metadata.
+carries that metadata — rounded up, since truncating the remainder of a window emits
+`Retry-After: 0` and a client that obeys it comes straight back into another 429.
+
+`OnRejected` also writes the response body. A rejected request is short-circuited before the MVC
+pipeline, so nothing else would give it one: `AddProblemDetails()` fills in a body for a thrown
+exception, not for a status code set by middleware, and there is no `UseStatusCodePages` here.
+The body is built by hand to the same shape `ResultExtensions.Problem` produces — `title`,
+`detail`, `status`, and the `traceId` extension, served as `application/problem+json` — so a 429
+is not a differently-shaped error for a client to special-case, and so the committed contract's
+`429 → ProblemDetails` is true of the running application and not only of the document.
 
 **The counter needs a write path independent of the unit of work — the change that shapes the
 rest of the implementation.** `Behaviors.CommitAsync` (`src/Infrastructure/Messaging/
@@ -99,16 +120,34 @@ A failed sign-in returns a failed `Result`. A handler that just mutated the load
 the counter would never have that mutation persisted — invisibly, because a unit test that
 substitutes the repository and asserts the mutation happened would still pass; only production,
 reading a counter that stays zero forever, would show the lockout never firing. So `IUserRepository`
-gained `RecordSignInOutcomeAsync(userId, attempts, lockedOutUntil, cancellationToken)`, implemented
-in `UserRepository` with EF Core's `ExecuteUpdateAsync` against `context.Users` filtered by id.
-`ExecuteUpdateAsync` issues its own `UPDATE` immediately, outside the tracked change set, so it
-does not depend on `CommitAsync` running at all. `SignInHandler` calls it explicitly on both the
-failure branch (after `RegisterFailedSignIn`) and the success branch, and only on success when
-there was actually something to clear — `user.FailedSignInAttempts > 0 || user.LockedOutUntil is
-not null` — so an ordinary sign-in costs no extra `UPDATE`. This is safe against a double-write
-because `GetByNormalizedUsernameAsync`, which `SignInHandler` calls to load the user, is already
-`AsNoTracking` (unlike `GetAsync`, tracked because `ChangePassword` mutates what it loads), so
-mutating the in-memory `User` the handler holds enqueues nothing in the change tracker.
+gained two methods, both implemented in `UserRepository` with EF Core's `ExecuteUpdateAsync`
+against `context.Users`. `ExecuteUpdateAsync` issues its own `UPDATE` immediately, outside the
+tracked change set, so neither depends on `CommitAsync` running at all. This is safe against a
+double-write because `GetByNormalizedUsernameAsync`, which `SignInHandler` calls to load the user,
+is already `AsNoTracking` (unlike `GetAsync`, tracked because `ChangePassword` mutates what it
+loads), so mutating the in-memory `User` the handler holds enqueues nothing in the change tracker.
+
+**The failure write is conditional, because concurrent guesses on one account are the normal case
+during an attack, not a rare interleaving.** `TryRecordFailedSignInAsync(userId, expectedAttempts,
+attempts, lockedOutUntil, cancellationToken)` carries `FailedSignInAttempts == expectedAttempts`
+in its `Where` alongside the id, and returns whether the `UPDATE` matched a row. The handler reads
+the counter, then spends tens of milliseconds in PBKDF2 deciding what to write, so overlapping
+requests routinely read the same value: an unconditional write would let N simultaneous guesses
+all read `k` and all write `k+1`, advancing the counter by one per hash duration regardless of N
+and firing the lockout after roughly `5 × N` guesses rather than 5. The account counter is the
+only defence against an attacker spread across many addresses, and such an attacker is concurrent
+by construction, so this is the case it has to survive. On a refused write `SignInHandler`
+re-reads the user once and recomputes from the winner's value — one retry, not a loop, since a
+second lost race means the counter is moving anyway, and giving up silently is safe because the
+caller gets the same uniform failure either way. The threshold comparison and the increment stay
+in `User.RegisterFailedSignIn`, deliberately: pushing them into the `SetProperty` expression would
+put the lockout policy in Infrastructure, and it belongs in Domain with the constants.
+
+`ClearSignInFailuresAsync(userId, cancellationToken)` is the success counterpart and is
+unconditional on purpose — clearing is idempotent, and a successful sign-in should win over any
+concurrent failed one. `SignInHandler` calls it only when there is something to clear
+(`user.FailedSignInAttempts > 0 || user.LockedOutUntil is not null`), so an ordinary sign-in costs
+no extra `UPDATE`.
 
 ## Consequences
 
@@ -116,7 +155,12 @@ The limiter is in-memory and per-instance: a second instance behind a load balan
 effective limit, since each instance counts independently. Behind a reverse proxy,
 `RemoteIpAddress` is the proxy's own address unless `ForwardedHeaders` is configured, which would
 collapse every client into one partition — whatever eventually deploys this has to wire that up,
-and nothing in this repo does yet.
+and nothing in this repo does yet. A reverse proxy is only the extreme case of a more general
+one: the budget is per address, not per person, so everyone behind a single NAT — an office, a
+university, a mobile carrier's gateway — shares those ten requests a minute. Ten legitimate
+sign-ins a minute from one such network is not far-fetched, and the tenth one gets a 429 it did
+nothing to earn. That the per-account lockout is the layer doing the real work here is what makes
+a limit that blunt acceptable for now.
 
 A legitimate user who mistypes their password five times is locked out for fifteen minutes with no
 explanation in the response and no way to shorten it. That silence is the accepted cost of not
@@ -131,19 +175,48 @@ exhaust a realistic limit incidentally. The limiter's own behavior is proven sep
 `AuthRateLimitTests` (`tests/Api.IntegrationTests/Auth/AuthRateLimitTests.cs`), which stands up its
 own `WebApplicationFactory<Program>` outside `ApiFactoryCollection` with a deliberately tiny limit
 of 3 — the same pattern `HealthTests` already uses to stay off the shared container — and asserts
-both the 429 and the `Retry-After` header in one test, since a shared fixed window across two tests
-in one class would otherwise race.
+the 429, the `Retry-After` header (present, greater than zero, no longer than the window), and the
+`ProblemDetails` body all in one test, since a shared fixed window across two tests in one class
+would otherwise race.
+
+The Playwright API server sets `RateLimiting__Auth__PermitLimit` to the same 1,000,000, in
+`frontend/playwright.config.ts`'s `webServer.env`, for the same reason with a sharper edge: the
+e2e API runs on defaults, all browser traffic reaches it through the Vite preview proxy, so the
+limiter sees one address and one partition for the entire suite. `auth.spec.ts` spends five of
+the ten default permits and `orders.spec.ts` adds two per test in `beforeEach` — the next spec
+that signs up would walk into the wall, and the failure would surface as `sign-up.ts`'s
+`waitForURL('**/orders')` timing out: indistinguishable from a flake, and not reproducible when
+re-running the one spec.
+
+**This branch introduces a small timing asymmetry, and it is worth naming rather than leaving for
+someone to rediscover.** The wrong-password path now additionally awaits an indexed `UPDATE` that
+neither the unknown-username path nor the locked-out path performs. Both of those still pay a
+full dummy hash, so the dominant cost is matched; what is not matched is one round trip to
+Postgres on a primary-key predicate. A sufficiently patient attacker measuring response times
+could therefore separate "this username exists and I guessed wrong" from "this username does not
+exist" — the same order of residual signal as the locked-out/wrong-password difference the design
+already accepts, and far smaller than the difference the dummy hash exists to remove. Closing it
+would mean issuing a matching pointless write on the miss paths, which is a worse trade: real
+database work on every unauthenticated request, to hide a signal an attacker can only read
+through many samples. Named here so the next person weighing "should the miss path write too?"
+finds the reasoning instead of re-deriving it.
 
 `SignIn` is now the first command in this codebase to persist anything outside the unit of work.
-The XML doc on `IUserRepository.RecordSignInOutcomeAsync` carries that explanation at the point
-future readers will find it: that `Behaviors.CommitAsync` commits only a successful `Result`, and
-sign-in's failure path is exactly the one that has to persist regardless.
+The XML docs on `IUserRepository.TryRecordFailedSignInAsync` and `ClearSignInFailuresAsync` carry
+that explanation at the point future readers will find it: that `Behaviors.CommitAsync` commits
+only a successful `Result`, and sign-in's failure path is exactly the one that has to persist
+regardless. They also record the corollary — bypassing `SaveChangesAsync` bypasses
+`DomainEventsInterceptor`, so a domain event raised on this path would never reach the outbox.
+`User` raises none today, so nothing is broken; the note exists because adding one to
+`RegisterFailedSignIn` would compile, pass its unit tests, and silently go nowhere.
 
 The contract moved accordingly: `[ProducesResponseType(429)]` on `Login` and `Register`, and
 `openapi/AiFramework.Api.json` and `frontend/src/api/schema.d.ts` were regenerated and committed,
 changed only by the new 429 responses. Frontend handling of the 429 was left alone — the login
-page's existing error rendering already displays a problem-detail failure the same way it displays
-any other, so nothing needed to change there for this slice.
+page's existing error rendering displays a problem-detail failure the same way it displays any
+other, and because `OnRejected` writes a real `ProblemDetails` body (above), the 429 arrives as
+one: `frontend/src/api/client.ts` reads its `detail` rather than falling back to its generic
+"Request failed with status 429." So nothing needed to change there for this slice.
 
 ## Alternatives considered
 
