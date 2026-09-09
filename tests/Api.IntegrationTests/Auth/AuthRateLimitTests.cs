@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 
@@ -14,6 +15,7 @@ namespace AiFramework.Api.IntegrationTests.Auth;
 public sealed class AuthRateLimitTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private const int PermitLimit = 3;
+    private const int WindowSeconds = 60;
 
     private readonly WebApplicationFactory<Program> _factory;
 
@@ -32,7 +34,8 @@ public sealed class AuthRateLimitTests : IClassFixture<WebApplicationFactory<Pro
             builder.UseSetting("Wolverine:Durable", "false");
             builder.UseSetting(
                 "RateLimiting:Auth:PermitLimit", PermitLimit.ToString(CultureInfo.InvariantCulture));
-            builder.UseSetting("RateLimiting:Auth:WindowSeconds", "60");
+            builder.UseSetting(
+                "RateLimiting:Auth:WindowSeconds", WindowSeconds.ToString(CultureInfo.InvariantCulture));
         });
     }
 
@@ -63,5 +66,23 @@ public sealed class AuthRateLimitTests : IClassFixture<WebApplicationFactory<Pro
         rejected.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         rejected.Headers.RetryAfter.Should().NotBeNull(
             "a 429 with no Retry-After leaves a well-behaved client guessing");
+
+        // Truncating the remaining fraction of a window would emit "Retry-After: 0", and a client
+        // that obeys it comes straight back into another 429.
+        var delta = rejected.Headers.RetryAfter.Delta;
+        delta.Should().NotBeNull();
+        delta.Value.Should().BeGreaterThan(
+            TimeSpan.Zero, "a Retry-After of zero tells a client to retry immediately into another 429");
+        delta.Value.Should().BeLessThanOrEqualTo(
+            TimeSpan.FromSeconds(WindowSeconds), "the wait cannot exceed the window it is waiting out");
+
+        // The committed contract says 429 returns ProblemDetails. Nothing in the pipeline gives a
+        // short-circuited response a body by itself, so without OnRejected writing one this 429
+        // would go out empty and the contract would be a lie.
+        var body = await rejected.Content.ReadAsStringAsync();
+        using var problem = JsonDocument.Parse(body);
+        problem.RootElement.TryGetProperty("title", out var title).Should().BeTrue(
+            "the 429 body has to be a problem detail like every other error body in this API");
+        title.GetString().Should().NotBeNullOrWhiteSpace();
     }
 }

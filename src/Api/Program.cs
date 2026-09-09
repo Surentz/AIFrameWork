@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Threading.RateLimiting;
 using AiFramework.Api;
@@ -7,6 +8,7 @@ using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.EventPath;
 using JasperFx;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
 
@@ -96,15 +98,37 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromSeconds(windowSeconds),
             }));
 
-    options.OnRejected = (context, _) =>
+    options.OnRejected = async (context, cancellationToken) =>
     {
         if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
         {
+            // Ceiling, not a cast: truncation turns the 0.4s left in a window into
+            // "Retry-After: 0", and a well-behaved client obeys it straight back into another 429.
             context.HttpContext.Response.Headers.RetryAfter =
-                ((int)retryAfter.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+                ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
         }
 
-        return ValueTask.CompletedTask;
+        // The limiter short-circuits the pipeline, so nothing else gives this response a body:
+        // AddProblemDetails() only fills one in for an exception, and there is no
+        // UseStatusCodePages here. Without this the 429 goes out empty while the committed
+        // contract - openapi/AiFramework.Api.json and the schema.d.ts generated from it - says it
+        // returns ProblemDetails, and frontend/src/api/client.ts falls back to its own
+        // "Request failed with status 429." Shaped exactly like ResultExtensions.Problem's
+        // output, traceId included, so an error body from here is not a special case for a client.
+        var problemDetails = new ProblemDetails
+        {
+            Status = StatusCodes.Status429TooManyRequests,
+            Title = "rate.limited",
+            Detail = "Too many requests. Please wait a moment and try again.",
+        };
+        problemDetails.Extensions["traceId"] =
+            Activity.Current?.Id ?? context.HttpContext.TraceIdentifier;
+
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            problemDetails,
+            options: null,
+            contentType: "application/problem+json",
+            cancellationToken);
     };
 });
 
