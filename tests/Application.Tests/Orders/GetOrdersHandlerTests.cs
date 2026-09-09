@@ -171,4 +171,21 @@ public sealed class GetOrdersHandlerTests
 
         withNullCursor.CacheKey.Should().NotBe(withEmptyCursor.CacheKey);
     }
+
+    /// <summary>
+    /// The regression an earlier fix introduced: coalescing null to a fixed literal ("-") only
+    /// moves the collision, because a client can send that literal as an ordinary, non-empty
+    /// cursor (`?cursor=-` survives MVC's ConvertEmptyStringToNull) and it must decode-and-fail
+    /// like any other malformed cursor rather than share a key with Cursor == null. "N" is
+    /// GetOrders.CacheKey's current discriminator for the null case - if that literal ever
+    /// changes, change it here too.
+    /// </summary>
+    [Fact]
+    public void CacheKey_ForNullCursorVersusALiteralCursorEqualToTheMarker_DoesNotCollide()
+    {
+        var withNullCursor = new GetOrders(20, null);
+        var withCursorEqualToTheMarker = new GetOrders(20, "N");
+
+        withNullCursor.CacheKey.Should().NotBe(withCursorEqualToTheMarker.CacheKey);
+    }
 }
