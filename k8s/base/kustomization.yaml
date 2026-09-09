@@ -4,3 +4,4 @@ namespace: aiframework
 resources:
   - namespace.yaml
   - postgres.yaml
+  - migrate-job.yaml
