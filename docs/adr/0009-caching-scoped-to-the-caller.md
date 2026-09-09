@@ -347,3 +347,11 @@ design, and putting both behind one ADR would leave neither argued properly.
 **Caching anything on the auth path.** Deliberately permanent, not deferred. ADR 0008's lockout
 state must be read from the database every time, and a cached read there is a security bug rather
 than a stale one.
+
+---
+
+**Amended by ADR 0010.** The single-process premise this ADR was written on — stated explicitly
+in `Behaviors.cs`'s comment that "with an L1-only HybridCache `RemoveByTagAsync` has no realistic
+failure mode" — no longer holds once the API runs at more than one replica. ADR 0010 records how
+cache eviction correctness is preserved across replicas (ingress cookie session affinity) without
+changing anything decided above.
