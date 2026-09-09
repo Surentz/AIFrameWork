@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+.git/
+.vs/
+.idea/
+frontend/playwright-report/
+frontend/test-results/
+**/*.user

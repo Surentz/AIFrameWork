@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+
+# Release, always. Release is what loads the pre-generated Wolverine adapters committed under
+# src/Api/Internal/Generated; a Debug image would run here and diverge from what CI validates.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY Directory.Build.props .editorconfig ./
+COPY src/Domain/AiFramework.Domain.csproj src/Domain/
+COPY src/Application/AiFramework.Application.csproj src/Application/
+COPY src/Infrastructure/AiFramework.Infrastructure.csproj src/Infrastructure/
+COPY src/Api/AiFramework.Api.csproj src/Api/
+RUN dotnet restore src/Api/AiFramework.Api.csproj
+
+COPY src/ src/
+RUN dotnet publish src/Api/AiFramework.Api.csproj -c Release -o /app/publish --no-restore
+
+# A self-contained migration bundle, so the EF Design package never reaches a runtime image.
+# CLAUDE.md records what that package costs when it leaks into a publish: 7.9MB to 37MB.
+# src/Infrastructure is both project and startup project — it has its own design-time factory.
+FROM build AS bundle
+RUN dotnet tool install --global dotnet-ef --version 10.0.11
+ENV PATH="/root/.dotnet/tools:${PATH}"
+# The build stage's restore (dotnet restore src/Api/AiFramework.Api.csproj) never asked for a
+# runtime identifier, so its project.assets.json has no linux-x64 target. --self-contained below
+# needs one, and "ef migrations bundle" does not restore it implicitly (NETSDK1047 without this).
+RUN dotnet restore src/Infrastructure/AiFramework.Infrastructure.csproj --runtime linux-x64
+RUN dotnet ef migrations bundle \
+      --project src/Infrastructure/AiFramework.Infrastructure.csproj \
+      --startup-project src/Infrastructure/AiFramework.Infrastructure.csproj \
+      --configuration Release \
+      --self-contained --runtime linux-x64 \
+      --output /app/efbundle
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble-chiseled AS migrator
+WORKDIR /app
+COPY --from=bundle /app/efbundle ./efbundle
+USER $APP_UID
+ENTRYPOINT ["./efbundle"]
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
+WORKDIR /app
+COPY --from=build /app/publish ./
+ENV ASPNETCORE_HTTP_PORTS=8080
+EXPOSE 8080
+USER $APP_UID
+ENTRYPOINT ["dotnet", "AiFramework.Api.dll"]
