@@ -35,6 +35,7 @@ public static class MessagingRegistration
             var result = await handler.HandleAsync(typed, ct).ConfigureAwait(false);
 
             await Behaviors.CommitAsync(sp, result, ct).ConfigureAwait(false);
+            await Behaviors.EvictAsync(sp, typed, result, ct).ConfigureAwait(false);
 
             return result;
         }

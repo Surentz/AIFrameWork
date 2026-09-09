@@ -20,6 +20,10 @@ public sealed class CountingLookupHandler : IQueryHandler<Lookup, string>
     // Static because the handler is registered scoped: each dispatch resolves a new instance,
     // so an instance field could not tell one call from two. Internal, not public: CA2211/MA0069
     // flag a public mutable static field, and nothing outside this assembly needs to see it.
+    // Safe to mutate from tests only because QueryCachingBehaviorTests and
+    // CacheEvictionBehaviorTests both join CacheBehaviorCollection, which keeps xUnit from
+    // running their collections concurrently — a class added here that touches this counter
+    // must join that collection too.
     internal static int Calls;
 
     public Task<Result<string>> HandleAsync(Lookup query, CancellationToken cancellationToken)
@@ -65,6 +69,7 @@ public sealed class PlainHandler : IQueryHandler<Plain, string>
     }
 }
 
+[Collection(nameof(CacheBehaviorCollection))]
 public sealed class QueryCachingBehaviorTests
 {
     private static readonly Guid Alice = Guid.Parse("11111111-1111-1111-1111-111111111111");

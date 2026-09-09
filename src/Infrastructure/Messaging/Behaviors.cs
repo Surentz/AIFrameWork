@@ -138,6 +138,44 @@ internal static class Behaviors
         }
     }
 
+    /// <summary>
+    /// Removes the caller's cached entries for the query types a command declares, after the
+    /// command has committed. Runs in-request, before the response returns, so a client that
+    /// refetches immediately after a 201 reads its own write.
+    /// </summary>
+    /// <remarks>
+    /// A failure here is deliberately not caught. With an L1-only HybridCache
+    /// RemoveByTagAsync has no realistic failure mode, and catching one would mean
+    /// catch (Exception) on a path with no IExceptionHandler parameter, which this repository
+    /// bans outside the outbox's exemption. The consequence — a committed write surfacing a 500
+    /// — becomes the wrong trade if an L2 tier is ever added. ADR 0009 records that.
+    /// </remarks>
+    internal static async Task EvictAsync<TCommand, TResponse>(
+        IServiceProvider sp, TCommand command, Result<TResponse> result, CancellationToken ct)
+    {
+        if (!result.IsSuccess || command is not IInvalidatesCache invalidates)
+        {
+            return;
+        }
+
+        if (!sp.GetRequiredService<IOptions<CacheOptions>>().Value.Enabled)
+        {
+            return;
+        }
+
+        var userId = sp.GetRequiredService<ICurrentUser>().Id
+            ?? throw new InvalidOperationException(
+                $"'{typeof(TCommand).Name}' invalidates cache tags but there is no current user " +
+                "to scope them to.");
+
+        var cache = sp.GetRequiredService<HybridCache>();
+
+        foreach (var tag in invalidates.Tags)
+        {
+            await cache.RemoveByTagAsync(CacheScope.Tag(tag, userId), ct).ConfigureAwait(false);
+        }
+    }
+
     // CA1032 wants the standard exception constructor set; S3871 wants exception types public.
     // Both are asking to widen a type whose entire purpose is to stay inside one method: it is
     // thrown by the cache factory a dozen lines above and caught by name immediately after,

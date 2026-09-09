@@ -20,3 +20,22 @@ public interface ICacheable
     /// </summary>
     public TimeSpan Duration { get; }
 }
+
+/// <summary>
+/// A command that invalidates cached queries belonging to the caller who issued it. Eviction
+/// runs synchronously, after the command's transaction commits and before the response returns.
+/// </summary>
+/// <remarks>
+/// Tags name query TYPES — use <c>nameof(GetOrders)</c>, not a hand-written string. The calling
+/// user's id is prepended by the behavior, exactly as it is for keys, so one caller's write never
+/// evicts another's entries.
+/// <para>
+/// Synchronous rather than riding the domain-event path, and read-your-own-writes is the reason:
+/// the frontend refetches milliseconds after a 201, and must not be served a page that omits
+/// what it just created. The outbox is polled, so an event-driven eviction would land too late.
+/// </para>
+/// </remarks>
+public interface IInvalidatesCache
+{
+    public IReadOnlyList<string> Tags { get; }
+}
