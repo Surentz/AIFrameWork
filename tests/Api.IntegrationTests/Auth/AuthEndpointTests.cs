@@ -214,7 +214,23 @@ public sealed class AuthEndpointTests(ApiFactory factory)
         lockedOut.StatusCode.Should().Be(wrongPassword.StatusCode);
         (await StripTraceIdAsync(lockedOut))
             .Should().Be(await StripTraceIdAsync(wrongPassword), "traceId aside, the bodies must match");
+
+        // Headers are the observable a unit test structurally cannot reach, and the one a future
+        // change is most likely to differ on without noticing - a Retry-After, a WWW-Authenticate,
+        // a cache directive set on one branch and not the other names the account just as loudly
+        // as a different status code would.
+        HeaderNames(lockedOut).Should().Equal(
+            HeaderNames(wrongPassword), "a header set on only one branch is an enumeration oracle too");
     }
+
+    /// <summary>
+    /// Sorted, and Date excluded: it is a clock reading, not a property of the branch taken.
+    /// </summary>
+    private static IReadOnlyList<string> HeaderNames(HttpResponseMessage response) =>
+        [.. response.Headers.Concat(response.Content.Headers)
+            .Select(header => header.Key)
+            .Where(name => !string.Equals(name, "Date", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)];
 
     [Fact]
     public async Task GetMe_WhenSignedIn_ReturnsTheUser()
