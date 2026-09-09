@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  # Production is deliberate. It is also why Task 9's ingress must terminate TLS:
+  # Production sets CookieSecurePolicy.Always, and over plain HTTP the browser discards
+  # the session cookie silently.
+  ASPNETCORE_ENVIRONMENT: 'Production'
+  # Note the DOUBLE underscore. A single one binds nothing and warns nothing.
+  Cache__Enabled: 'true'
+  Wolverine__Durable: 'true'
+  RateLimiting__Auth__PermitLimit: '10'
+  RateLimiting__Auth__WindowSeconds: '60'
