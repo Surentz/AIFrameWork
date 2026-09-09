@@ -186,6 +186,28 @@ public sealed class UserTests
         user.IsLockedOut(expiry.AddMinutes(1)).Should().BeFalse();
     }
 
+    /// <summary>
+    /// The other half of the fixed window, guarded inside the type that owns the fields rather
+    /// than only in SignInHandler: an attempt made while the lockout is live must not count and
+    /// must not push the expiry forward, or an attacker who knows one username holds that account
+    /// locked indefinitely at one guess per window.
+    /// </summary>
+    [Fact]
+    public void RegisterFailedSignIn_DuringAnActiveLockout_ChangesNothing()
+    {
+        var user = User.Register(Guid.NewGuid(), "Ada", "hash", "Ada Lovelace", SignInAt);
+        for (var i = 0; i < User.MaxFailedSignInAttempts; i++)
+        {
+            user.RegisterFailedSignIn(SignInAt);
+        }
+
+        user.RegisterFailedSignIn(SignInAt + TimeSpan.FromMinutes(1));
+
+        user.FailedSignInAttempts.Should().Be(User.MaxFailedSignInAttempts);
+        user.LockedOutUntil.Should().Be(
+            SignInAt + User.LockoutDuration, "the window is fixed, not sliding");
+    }
+
     [Fact]
     public void RegisterSuccessfulSignIn_ClearsTheCounterAndTheLockout()
     {

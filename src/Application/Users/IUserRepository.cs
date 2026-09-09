@@ -16,13 +16,39 @@ public interface IUserRepository
         string usernameNormalized, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Writes the sign-in counter immediately, independently of the unit of work.
+    /// Records a failed sign-in, but only if the stored counter still holds
+    /// <paramref name="expectedAttempts"/>. Returns false when another request updated the row first,
+    /// so the caller can re-read and retry rather than silently overwriting the other's increment.
     /// <para>
-    /// This exists because <c>Behaviors.CommitAsync</c> commits only a successful Result, and
-    /// sign-in's failure path is the one that must persist. A tracked mutation there would be
+    /// Conditional because the caller reads the counter, then spends a PBKDF2 verification deciding
+    /// what to write. Overlapping sign-in attempts on one account are the normal case during an
+    /// attack — an unconditional write would let N concurrent guesses advance the counter by one.
+    /// </para>
+    /// <para>
+    /// Writes immediately, independently of the unit of work: <c>Behaviors.CommitAsync</c> commits
+    /// only a successful Result, and this is the failure path. A tracked mutation there would be
     /// discarded without an error, leaving the counter at zero forever and the lockout dead.
     /// </para>
+    /// <para>
+    /// Writing outside the unit of work also means bypassing <c>SaveChangesAsync</c>, and with it
+    /// <c>DomainEventsInterceptor</c>: a domain event raised on this path would never reach the
+    /// outbox. <see cref="User"/> raises none today, so nothing is broken — but adding one to
+    /// <see cref="User.RegisterFailedSignIn"/> would compile, pass its unit tests, and silently
+    /// go nowhere.
+    /// </para>
     /// </summary>
-    public Task RecordSignInOutcomeAsync(
-        Guid userId, int attempts, DateTimeOffset? lockedOutUntil, CancellationToken cancellationToken);
+    public Task<bool> TryRecordFailedSignInAsync(
+        Guid userId,
+        int expectedAttempts,
+        int attempts,
+        DateTimeOffset? lockedOutUntil,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Clears the failure counter and any lockout after a successful sign-in. Unconditional
+    /// deliberately: clearing is idempotent, and a successful sign-in should win over any concurrent
+    /// failed one. Writes immediately, for the same reason as above — and bypasses domain-event
+    /// dispatch for the same reason too.
+    /// </summary>
+    public Task ClearSignInFailuresAsync(Guid userId, CancellationToken cancellationToken);
 }

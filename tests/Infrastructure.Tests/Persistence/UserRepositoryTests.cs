@@ -126,51 +126,82 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
     /// zero forever.
     /// </summary>
     [Fact]
-    public async Task RecordSignInOutcomeAsync_PersistsWithoutSaveChanges()
+    public async Task TryRecordFailedSignInAsync_PersistsWithoutSaveChanges()
     {
         var id = Guid.NewGuid();
         var lockedUntil = new DateTimeOffset(2026, 9, 8, 10, 0, 0, TimeSpan.Zero);
-        await using (var seed = fixture.CreateContext())
-        {
-            await new UserRepository(seed).AddAsync(
-                User.Register(id, $"u{id:N}"[..32], "hash", "Ada Lovelace", RegisteredAt),
-                CancellationToken.None);
-            await new UnitOfWork(seed).SaveChangesAsync(CancellationToken.None);
-        }
+        await SeedAsync(id);
 
+        bool recorded;
         await using (var write = fixture.CreateContext())
         {
-            await new UserRepository(write).RecordSignInOutcomeAsync(
-                id, attempts: 5, lockedOutUntil: lockedUntil, CancellationToken.None);
+            recorded = await new UserRepository(write).TryRecordFailedSignInAsync(
+                id, expectedAttempts: 0, attempts: 5, lockedOutUntil: lockedUntil, CancellationToken.None);
             // Deliberately no SaveChangesAsync here.
         }
 
         await using var verify = fixture.CreateContext();
         var found = await new UserRepository(verify).GetAsync(id, CancellationToken.None);
 
+        recorded.Should().BeTrue("nothing else had touched the row");
         found.Should().NotBeNull();
         found.FailedSignInAttempts.Should().Be(5);
         found.LockedOutUntil.Should().Be(lockedUntil);
     }
 
+    /// <summary>
+    /// The conditional half of the write, and the reason the method returns a bool at all. A
+    /// caller's expectedAttempts is what it read before spending tens of milliseconds in PBKDF2;
+    /// if a concurrent attempt has moved the counter since, this write must refuse rather than
+    /// flatten it — otherwise N simultaneous guesses advance the counter by one between them.
+    /// </summary>
     [Fact]
-    public async Task RecordSignInOutcomeAsync_CanClearALockout()
+    public async Task TryRecordFailedSignInAsync_WithAStaleExpectation_RefusesAndLeavesTheRowAlone()
     {
         var id = Guid.NewGuid();
-        await using (var seed = fixture.CreateContext())
+        var lockedUntil = new DateTimeOffset(2026, 9, 8, 10, 0, 0, TimeSpan.Zero);
+        await SeedAsync(id);
+
+        await using (var winner = fixture.CreateContext())
         {
-            await new UserRepository(seed).AddAsync(
-                User.Register(id, $"u{id:N}"[..32], "hash", "Ada Lovelace", RegisteredAt),
-                CancellationToken.None);
-            await new UnitOfWork(seed).SaveChangesAsync(CancellationToken.None);
+            await new UserRepository(winner).TryRecordFailedSignInAsync(
+                id, expectedAttempts: 0, attempts: 1, lockedOutUntil: null, CancellationToken.None);
         }
+
+        bool recorded;
+        await using (var loser = fixture.CreateContext())
+        {
+            // Still believes the counter reads 0, exactly as a request that read before the
+            // winner's UPDATE landed would.
+            recorded = await new UserRepository(loser).TryRecordFailedSignInAsync(
+                id, expectedAttempts: 0, attempts: 1, lockedOutUntil: lockedUntil, CancellationToken.None);
+        }
+
+        await using var verify = fixture.CreateContext();
+        var found = await new UserRepository(verify).GetAsync(id, CancellationToken.None);
+
+        recorded.Should().BeFalse("the row no longer holds the value this caller read");
+        found.Should().NotBeNull();
+        found.FailedSignInAttempts.Should().Be(1, "the winner's increment must survive");
+        found.LockedOutUntil.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ClearSignInFailuresAsync_ClearsTheCounterAndTheLockout()
+    {
+        var id = Guid.NewGuid();
+        await SeedAsync(id);
 
         await using (var write = fixture.CreateContext())
         {
             var repository = new UserRepository(write);
-            await repository.RecordSignInOutcomeAsync(
-                id, 5, new DateTimeOffset(2026, 9, 8, 10, 0, 0, TimeSpan.Zero), CancellationToken.None);
-            await repository.RecordSignInOutcomeAsync(id, 0, null, CancellationToken.None);
+            await repository.TryRecordFailedSignInAsync(
+                id,
+                expectedAttempts: 0,
+                attempts: 5,
+                new DateTimeOffset(2026, 9, 8, 10, 0, 0, TimeSpan.Zero),
+                CancellationToken.None);
+            await repository.ClearSignInFailuresAsync(id, CancellationToken.None);
         }
 
         await using var verify = fixture.CreateContext();
@@ -179,5 +210,14 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         found.Should().NotBeNull();
         found.FailedSignInAttempts.Should().Be(0);
         found.LockedOutUntil.Should().BeNull();
+    }
+
+    private async Task SeedAsync(Guid id)
+    {
+        await using var seed = fixture.CreateContext();
+        await new UserRepository(seed).AddAsync(
+            User.Register(id, $"u{id:N}"[..32], "hash", "Ada Lovelace", RegisteredAt),
+            CancellationToken.None);
+        await new UnitOfWork(seed).SaveChangesAsync(CancellationToken.None);
     }
 }

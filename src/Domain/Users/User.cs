@@ -127,12 +127,24 @@ public sealed class User : Entity
     /// </summary>
     public void RegisterFailedSignIn(DateTimeOffset now)
     {
+        // The window is fixed, never sliding: an attempt made while a lockout is live must not
+        // count and must not push the expiry forward, or an attacker who knows one username could
+        // hold that account locked indefinitely at one guess per window. SignInHandler refuses
+        // such an attempt before ever reaching here, but the invariant belongs to the type that
+        // owns the two fields, not to its one caller.
+        if (IsLockedOut(now))
+        {
+            return;
+        }
+
         // Serving out a lockout earns a fresh set of attempts. Without this reset the count
         // would still stand at MaxFailedSignInAttempts when the window lapsed, so the very next
         // failure would reach the threshold again and re-lock — and every failure after it would
         // too. That is a sliding window arriving through the back door: it would let an attacker
         // hold an account locked indefinitely at one guess per window.
-        if (LockedOutUntil is not null && !IsLockedOut(now))
+        //
+        // A stamp still set here has necessarily lapsed: the guard above returned if it had not.
+        if (LockedOutUntil is not null)
         {
             FailedSignInAttempts = 0;
             LockedOutUntil = null;

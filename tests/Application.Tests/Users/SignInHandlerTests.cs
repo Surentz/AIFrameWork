@@ -15,7 +15,22 @@ public sealed class SignInHandlerTests
     private readonly IPasswordHasher _hasher = Substitute.For<IPasswordHasher>();
     private readonly IClock _clock = Substitute.For<IClock>();
 
-    public SignInHandlerTests() => _clock.UtcNow.Returns(Now);
+    public SignInHandlerTests()
+    {
+        _clock.UtcNow.Returns(Now);
+
+        // An unconfigured Task<bool> substitute returns false, which is "another request beat you
+        // to the row" — so every test that does not care about the race would otherwise exercise
+        // the retry path. The uncontended write succeeding is the default here; the one test that
+        // cares overrides it.
+        _users.TryRecordFailedSignInAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+    }
 
     private static User AnAda() =>
         User.Register(Guid.NewGuid(), "Ada", "stored-hash", "Ada Lovelace", RegisteredAt);
@@ -142,8 +157,8 @@ public sealed class SignInHandlerTests
 
         // A fixed window: attempts made during a lockout must not touch the counter at all,
         // or an attacker could hold the account locked forever by continuing to guess.
-        await _users.DidNotReceiveWithAnyArgs().RecordSignInOutcomeAsync(
-            Guid.Empty, default, default, default);
+        await _users.DidNotReceiveWithAnyArgs().TryRecordFailedSignInAsync(
+            Guid.Empty, default, default, default, default);
     }
 
     [Fact]
@@ -170,8 +185,46 @@ public sealed class SignInHandlerTests
 
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
-        await _users.Received(1).RecordSignInOutcomeAsync(
-            ada.Id, 1, null, Arg.Any<CancellationToken>());
+        await _users.Received(1).TryRecordFailedSignInAsync(
+            ada.Id, expectedAttempts: 0, attempts: 1, null, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The concurrency case the conditional write exists for. The handler reads the counter, then
+    /// spends a PBKDF2 verify deciding what to write, so a competing attempt on the same account
+    /// routinely lands in between. Without the re-read, N simultaneous guesses would all read k
+    /// and all write k+1 — advancing the counter by one instead of N, and pushing the lockout out
+    /// to roughly 5xN guesses.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_WhenAConcurrentAttemptWinsTheRace_RereadsAndRecordsAgain()
+    {
+        var ada = AnAda();
+        _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
+        _hasher.Verify("stored-hash", "wrong").Returns(false);
+        _users.TryRecordFailedSignInAsync(
+                ada.Id,
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(false, true);
+        var handler = new SignInHandler(_users, _hasher, _clock);
+
+        var result = await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
+
+        // Two reads: the handler's own load, plus exactly one more to pick up whatever the winner
+        // wrote. One retry, not a loop — a second lost race means the counter is moving anyway.
+        await _users.Received(2).GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>());
+        await _users.Received(2).TryRecordFailedSignInAsync(
+            ada.Id,
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<DateTimeOffset?>(),
+            Arg.Any<CancellationToken>());
+        result.Error.Should().Be(
+            new Error(ErrorKind.Unauthorized, "auth.failed", "That username and password do not match."),
+            "a lost race is invisible to the caller, or it becomes an oracle of its own");
     }
 
     [Fact]
@@ -189,8 +242,9 @@ public sealed class SignInHandlerTests
 
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
-        await _users.Received(1).RecordSignInOutcomeAsync(
+        await _users.Received(1).TryRecordFailedSignInAsync(
             ada.Id,
+            User.MaxFailedSignInAttempts - 1,
             User.MaxFailedSignInAttempts,
             Now + User.LockoutDuration,
             Arg.Any<CancellationToken>());
@@ -208,7 +262,29 @@ public sealed class SignInHandlerTests
         var result = await handler.HandleAsync(new SignIn("Ada", "correct horse"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _users.Received(1).RecordSignInOutcomeAsync(ada.Id, 0, null, Arg.Any<CancellationToken>());
+        await _users.Received(1).ClearSignInFailuresAsync(ada.Id, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The path a legitimate locked-out user actually takes back in, and the only test that pins
+    /// the clock being consulted on the read side. Without it, swapping IsLockedOut(now) for a
+    /// bare null check passes every other test in this class while locking such an account for
+    /// good — in a codebase with no password reset, that is permanent.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_AfterTheLockoutExpires_LetsTheRightPasswordIn()
+    {
+        var ada = ALockedOutAda();
+        _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
+        _hasher.Verify("stored-hash", "correct horse").Returns(true);
+        _clock.UtcNow.Returns(Now + User.LockoutDuration + TimeSpan.FromMinutes(1));
+        var handler = new SignInHandler(_users, _hasher, _clock);
+
+        var result = await handler.HandleAsync(
+            new SignIn("Ada", "correct horse"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue("a lockout that has expired must not keep anyone out");
+        await _users.Received(1).ClearSignInFailuresAsync(ada.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -221,7 +297,8 @@ public sealed class SignInHandlerTests
         await handler.HandleAsync(new SignIn("Ada", "correct horse"), CancellationToken.None);
 
         // An ordinary sign-in is the common case and must not cost a pointless UPDATE.
-        await _users.DidNotReceiveWithAnyArgs().RecordSignInOutcomeAsync(
-            Guid.Empty, default, default, default);
+        await _users.DidNotReceiveWithAnyArgs().ClearSignInFailuresAsync(Guid.Empty, default);
+        await _users.DidNotReceiveWithAnyArgs().TryRecordFailedSignInAsync(
+            Guid.Empty, default, default, default, default);
     }
 }

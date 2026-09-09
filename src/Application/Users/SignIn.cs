@@ -65,11 +65,7 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
 
         if (!hasher.Verify(user.PasswordHash, command.Password))
         {
-            user.RegisterFailedSignIn(now);
-            await users
-                .RecordSignInOutcomeAsync(
-                    user.Id, user.FailedSignInAttempts, user.LockedOutUntil, cancellationToken)
-                .ConfigureAwait(false);
+            await RecordFailureAsync(user, now, cancellationToken).ConfigureAwait(false);
 
             return Result.Failure<SessionView>(Failed);
         }
@@ -79,12 +75,45 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
         if (user.FailedSignInAttempts > 0 || user.LockedOutUntil is not null)
         {
             user.RegisterSuccessfulSignIn();
-            await users
-                .RecordSignInOutcomeAsync(
-                    user.Id, user.FailedSignInAttempts, user.LockedOutUntil, cancellationToken)
-                .ConfigureAwait(false);
+            await users.ClearSignInFailuresAsync(user.Id, cancellationToken).ConfigureAwait(false);
         }
 
         return Result.Success(new SessionView(user.Id, user.Username, user.DisplayName));
+    }
+
+    /// <summary>
+    /// Records the failure, retrying once if a concurrent attempt on the same account got there
+    /// first. One retry, not a loop: the point is that a burst of concurrent guesses each advance
+    /// the counter rather than all writing the same value, and a second lost race means the
+    /// counter is moving anyway. Giving up silently is safe — the caller still gets the uniform
+    /// failure, and this must never surface a different answer to the client.
+    /// </summary>
+    private async Task RecordFailureAsync(User user, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var expected = user.FailedSignInAttempts;
+        user.RegisterFailedSignIn(now);
+
+        if (await users.TryRecordFailedSignInAsync(
+                user.Id, expected, user.FailedSignInAttempts, user.LockedOutUntil, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            return;
+        }
+
+        var latest = await users
+            .GetByNormalizedUsernameAsync(user.UsernameNormalized, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (latest is null)
+        {
+            return;
+        }
+
+        var latestExpected = latest.FailedSignInAttempts;
+        latest.RegisterFailedSignIn(now);
+
+        _ = await users.TryRecordFailedSignInAsync(
+                latest.Id, latestExpected, latest.FailedSignInAttempts, latest.LockedOutUntil, cancellationToken)
+            .ConfigureAwait(false);
     }
 }
