@@ -82,6 +82,12 @@ or `System.ComponentModel.DataAnnotations`.
 
 ## Running locally
 
+```powershell
+./scripts/dev.ps1                                            # all of the below, in three windows
+```
+
+Or by hand:
+
 ```bash
 docker compose up -d --wait                                  # dev Postgres on 55433
 dotnet ef database update --project src/Infrastructure --startup-project src/Infrastructure
