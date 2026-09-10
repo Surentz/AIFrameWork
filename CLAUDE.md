@@ -122,6 +122,36 @@ committed value at runtime while `dotnet ef` ignores it. Check with
 `dotnet user-secrets list --project src/Api` if the app and the migrations disagree about which
 database they are talking to.
 
+## Running on Kubernetes
+
+A local kind cluster that runs the whole stack at **two API replicas**, to rehearse the
+things that only break above one. `docker compose` remains the inner development loop;
+this is additive.
+
+```powershell
+./deploy/deploy.ps1 -CreateCluster   # first run: creates the cluster and ingress-nginx
+./deploy/deploy.ps1                  # later runs: rebuild, migrate, roll out
+```
+
+Then open `https://aiframework.localtest.me` — that name resolves to `127.0.0.1` publicly,
+so there is nothing to add to `hosts`. The certificate is self-signed.
+
+Three things that will cost you time:
+
+- **TLS is not optional.** `ASPNETCORE_ENVIRONMENT=Production` sets
+  `CookieSecurePolicy.Always`, so over plain HTTP the browser discards the session cookie
+  silently: login appears to succeed and every later request is a 401, with nothing in the
+  logs.
+- **Config keys need double underscores.** `Cache__Enabled`, not `Cache_Enabled`. A single
+  underscore binds nothing, warns nothing, and leaves the default in place.
+- **Migrations run as a Job, before the rollout**, via a self-contained `dotnet ef migrations
+  bundle` — which is what keeps the EF Design package out of the runtime image (CLAUDE.md's
+  7.9MB → 37MB note). The script deletes the Job before re-applying it, because a completed
+  Job has immutable fields.
+
+Cache eviction correctness depends on the ingress's cookie affinity: `HybridCache` is L1-only,
+so a write handled by one pod cannot evict an entry held by the other. See ADR 0010.
+
 ## Wolverine codegen
 
 Wolverine builds its handler adapters with Roslyn, and **Release ships without the compiler** —
