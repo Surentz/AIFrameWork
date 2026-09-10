@@ -26,6 +26,17 @@ function Invoke-Step {
     if ($LASTEXITCODE -ne 0) { throw "$Name failed with exit code $LASTEXITCODE." }
 }
 
+# PowerShell does not treat a native command's nonzero exit as terminating, even under
+# $ErrorActionPreference = 'Stop'. A scriptblock that runs several kubectl calls and only lets
+# Invoke-Step check $LASTEXITCODE once, at the end, can swallow a failure in an earlier call if
+# a later one happens to succeed (or itself always exits 0, like `rollout status` against a
+# revision that never changed). Every native command inside a multi-command step must be
+# checked immediately after it runs, with this.
+function Assert-LastExitCode {
+    param([string]$Command)
+    if ($LASTEXITCODE -ne 0) { throw "$Command failed with exit code $LASTEXITCODE." }
+}
+
 if ($CreateCluster) {
     Invoke-Step 'Creating the kind cluster' {
         kind create cluster --config (Join-Path $PSScriptRoot 'kind-cluster.yaml')
@@ -38,10 +49,13 @@ if ($CreateCluster) {
         # `kubectl wait` treats zero currently-matching resources as an immediate failure
         # rather than polling for the pod to appear, so retry until it does (observed: this
         # is a real race on a just-booted control plane, not a hypothetical one).
+        # The inner --timeout is deliberately short: it bounds one attempt, not the whole
+        # retry loop. Matching it to the outer 300s deadline would let a genuine permanent
+        # failure take up to twice as long as $deadline implies before surfacing.
         $deadline = (Get-Date).AddSeconds(300)
         do {
             kubectl -n ingress-nginx wait --for=condition=ready pod `
-                -l app.kubernetes.io/component=controller --timeout=300s
+                -l app.kubernetes.io/component=controller --timeout=15s
             if ($LASTEXITCODE -eq 0) { break }
             Start-Sleep -Seconds 2
         } while ((Get-Date) -lt $deadline)
@@ -75,27 +89,79 @@ Invoke-Step 'Loading images into kind' {
 
 $overlay = Join-Path $repoRoot 'k8s/overlays/local'
 
-# 1. Namespace, config, secrets, and Postgres.
-Invoke-Step 'Applying the base stack' { kubectl apply -k $overlay }
+# Kustomize has no hook mechanism, so the migrate-before-rollout ordering that Helm would
+# express as a pre-upgrade hook has to be done here instead — the acknowledged cost of choosing
+# Kustomize over Helm for this deployment. A single `kubectl apply -k` applies every resource
+# from the base and overlay kustomizations at once, which creates the api Deployment (2
+# replicas) alongside Postgres and the migrate Job in the same call, with nothing to stop those
+# api pods from receiving traffic against an unmigrated schema: readiness does not catch this,
+# because `/health/ready` only checks that Postgres is reachable, not that the schema is
+# current. So instead of one `apply -k`, the overlay is rendered once into its multi-document
+# YAML stream, split by each document's top-level `kind`, and applied in three phases with the
+# Postgres and migration waits between them. Do not "simplify" this back into one `apply -k` —
+# that is exactly the ordering bug this block exists to avoid.
+Invoke-Step 'Rendering the overlay' {
+    $script:renderedLines = kubectl kustomize $overlay
+    Assert-LastExitCode 'kubectl kustomize'
+}
+$rendered = $renderedLines -join "`n"
+$documents = [regex]::Split($rendered, '(?m)^---\r?$') | Where-Object { $_.Trim() -ne '' }
+
+$passA = New-Object System.Collections.Generic.List[string]  # everything but Job/Deployment/Ingress
+$passB = New-Object System.Collections.Generic.List[string]  # the migrate Job
+$passC = New-Object System.Collections.Generic.List[string]  # Deployments and the Ingress
+
+foreach ($doc in $documents) {
+    $kindMatch = [regex]::Match($doc, '(?m)^kind:\s*(\S+)')
+    if (-not $kindMatch.Success) { throw 'Could not find a top-level kind: in a rendered document.' }
+    switch ($kindMatch.Groups[1].Value) {
+        'Job' { $passB.Add($doc) }
+        'Deployment' { $passC.Add($doc) }
+        'Ingress' { $passC.Add($doc) }
+        default { $passA.Add($doc) }
+    }
+}
+
+# 1. Namespace, config, secrets, services, and Postgres — everything migrations and the
+#    application both depend on, but neither the migrate Job nor a Deployment itself.
+Invoke-Step 'Phase A: namespace, config, secrets, services, and postgres' {
+    ($passA -join "`n---`n") | kubectl apply -f -
+    Assert-LastExitCode 'kubectl apply (phase A)'
+}
 
 # 2. Postgres must answer before migrations can run.
 Invoke-Step 'Waiting for postgres' {
     kubectl -n $namespace wait --for=condition=ready pod -l app=postgres --timeout=180s
 }
 
-# 3. Migrations, to completion. Deleted first: a completed Job has immutable fields, so a
-#    plain re-apply fails on the second deployment.
-Invoke-Step 'Running migrations' {
+# 3. Migrations, to completion, before any Deployment exists. Deleted first: a completed Job
+#    has immutable fields, so a plain re-apply fails on the second deployment.
+Invoke-Step 'Phase B: running migrations' {
     kubectl -n $namespace delete job migrate --ignore-not-found
-    kubectl apply -k $overlay
+    Assert-LastExitCode 'kubectl delete job migrate'
+    ($passB -join "`n---`n") | kubectl apply -f -
+    Assert-LastExitCode 'kubectl apply (phase B)'
     kubectl -n $namespace wait --for=condition=complete job/migrate --timeout=180s
+    Assert-LastExitCode 'kubectl wait job/migrate'
 }
 
-# 4. Roll the application out onto the migrated schema.
+# 4. Only now do the api and web Deployments, and the Ingress, exist — onto the migrated schema.
+Invoke-Step 'Phase C: applying deployments and ingress' {
+    ($passC -join "`n---`n") | kubectl apply -f -
+    Assert-LastExitCode 'kubectl apply (phase C)'
+}
+
+# On a first deploy phase C just created these Deployments fresh, so this restart is a no-op.
+# On a redeploy, where only the `:local` image contents changed underneath an unchanged pod
+# template, phase C's apply produces no diff for kubectl to act on — this restart is what
+# actually rolls the new image out.
 Invoke-Step 'Rolling out the application' {
     kubectl -n $namespace rollout restart deployment/api deployment/web
+    Assert-LastExitCode 'kubectl rollout restart'
     kubectl -n $namespace rollout status deployment/api --timeout=300s
+    Assert-LastExitCode 'kubectl rollout status (api)'
     kubectl -n $namespace rollout status deployment/web --timeout=300s
+    Assert-LastExitCode 'kubectl rollout status (web)'
 }
 
 Write-Host ''

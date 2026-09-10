@@ -145,9 +145,9 @@ Three things that will cost you time:
 - **Config keys need double underscores.** `Cache__Enabled`, not `Cache_Enabled`. A single
   underscore binds nothing, warns nothing, and leaves the default in place.
 - **Migrations run as a Job, before the rollout**, via a self-contained `dotnet ef migrations
-  bundle` — which is what keeps the EF Design package out of the runtime image (CLAUDE.md's
-  7.9MB → 37MB note). The script deletes the Job before re-applying it, because a completed
-  Job has immutable fields.
+  bundle` — which is what keeps the EF Design package out of the runtime image
+  (`src/Infrastructure/CLAUDE.md`'s 7.9MB → 37MB note). The script deletes the Job before
+  re-applying it, because a completed Job has immutable fields.
 
 Cache eviction correctness depends on the ingress's cookie affinity: `HybridCache` is L1-only,
 so a write handled by one pod cannot evict an entry held by the other. See ADR 0010.
