@@ -7,3 +7,4 @@ resources:
   - migrate-job.yaml
   - api.yaml
   - web.yaml
+  - ingress.yaml
