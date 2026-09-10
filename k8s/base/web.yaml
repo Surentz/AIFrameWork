@@ -47,5 +47,10 @@ spec:
               memory: 128Mi
           securityContext:
             allowPrivilegeEscalation: false
+            # No readOnlyRootFilesystem here, unlike the api Deployment: nginx writes its proxy
+            # and fastcgi caches under /var/cache/nginx and its temp files under /tmp, so a
+            # read-only root would need emptyDir mounts for both. Not worth the moving parts for
+            # a container that serves static files.
+            runAsNonRoot: true
             capabilities:
               drop: ['ALL']

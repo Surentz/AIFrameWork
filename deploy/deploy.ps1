@@ -19,6 +19,15 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $cluster = 'aiframework'
 $namespace = 'aiframework'
 
+# Every kubectl call below is pinned to this context rather than to whatever
+# `kubectl config current-context` happens to be. A script whose whole point is that it can be
+# run without thinking must not depend on ambient state: without the pin, running it while the
+# current context points at some other cluster would create the namespace there, apply the
+# Secrets there, and restart deployments there. `kind create cluster --name X` names its
+# context `kind-X`. The one call that goes unpinned is `kubectl kustomize`, which renders local
+# files and contacts no cluster at all.
+$context = "kind-$cluster"
+
 function Invoke-Step {
     param([string]$Name, [scriptblock]$Action)
     Write-Host "==> $Name" -ForegroundColor Cyan
@@ -42,7 +51,7 @@ if ($CreateCluster) {
         kind create cluster --config (Join-Path $PSScriptRoot 'kind-cluster.yaml')
     }
     Invoke-Step 'Installing ingress-nginx' {
-        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+        kubectl --context $context apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
     }
     Invoke-Step 'Waiting for ingress-nginx' {
         # Right after `kind create cluster`, the controller pod may not be scheduled yet.
@@ -54,7 +63,7 @@ if ($CreateCluster) {
         # failure take up to twice as long as $deadline implies before surfacing.
         $deadline = (Get-Date).AddSeconds(300)
         do {
-            kubectl -n ingress-nginx wait --for=condition=ready pod `
+            kubectl --context $context -n ingress-nginx wait --for=condition=ready pod `
                 -l app.kubernetes.io/component=controller --timeout=15s
             if ($LASTEXITCODE -eq 0) { break }
             Start-Sleep -Seconds 2
@@ -125,42 +134,57 @@ foreach ($doc in $documents) {
 # 1. Namespace, config, secrets, services, and Postgres — everything migrations and the
 #    application both depend on, but neither the migrate Job nor a Deployment itself.
 Invoke-Step 'Phase A: namespace, config, secrets, services, and postgres' {
-    ($passA -join "`n---`n") | kubectl apply -f -
+    ($passA -join "`n---`n") | kubectl --context $context apply -f -
     Assert-LastExitCode 'kubectl apply (phase A)'
 }
 
-# 2. Postgres must answer before migrations can run.
+# 2. Postgres must answer before migrations can run. Addressed as a named object rather than
+#    through a label selector on purpose: phase A created the StatefulSet microseconds ago and
+#    its controller may not have created the pod yet, and `kubectl wait -l app=postgres` against
+#    zero currently-matching resources errors out immediately instead of polling — the same race
+#    the ingress-nginx wait above works around with a retry loop. `rollout status` addresses
+#    statefulset/postgres itself, so it polls, and for a one-replica StatefulSet "rolled out"
+#    already means the pod is ready. Do not swap this back to a label selector.
 Invoke-Step 'Waiting for postgres' {
-    kubectl -n $namespace wait --for=condition=ready pod -l app=postgres --timeout=180s
+    kubectl --context $context -n $namespace rollout status statefulset/postgres --timeout=180s
 }
 
 # 3. Migrations, to completion, before any Deployment exists. Deleted first: a completed Job
 #    has immutable fields, so a plain re-apply fails on the second deployment.
 Invoke-Step 'Phase B: running migrations' {
-    kubectl -n $namespace delete job migrate --ignore-not-found
+    kubectl --context $context -n $namespace delete job migrate --ignore-not-found
     Assert-LastExitCode 'kubectl delete job migrate'
-    ($passB -join "`n---`n") | kubectl apply -f -
+    ($passB -join "`n---`n") | kubectl --context $context apply -f -
     Assert-LastExitCode 'kubectl apply (phase B)'
-    kubectl -n $namespace wait --for=condition=complete job/migrate --timeout=180s
-    Assert-LastExitCode 'kubectl wait job/migrate'
+    kubectl --context $context -n $namespace wait --for=condition=complete job/migrate --timeout=180s
+    if ($LASTEXITCODE -ne 0) {
+        # `wait --for=condition=complete` does not short-circuit when the Job fails: a migration
+        # that dies on its first pod still burns the whole 180s and then reports a timeout,
+        # which names the symptom and not the cause. Print what the migrator actually said
+        # before throwing, so the failure is diagnosable from the deploy output alone.
+        kubectl --context $context -n $namespace logs job/migrate --tail=50
+        throw 'kubectl wait job/migrate failed; the migrate Job log is above.'
+    }
 }
 
 # 4. Only now do the api and web Deployments, and the Ingress, exist — onto the migrated schema.
 Invoke-Step 'Phase C: applying deployments and ingress' {
-    ($passC -join "`n---`n") | kubectl apply -f -
+    ($passC -join "`n---`n") | kubectl --context $context apply -f -
     Assert-LastExitCode 'kubectl apply (phase C)'
 }
 
-# On a first deploy phase C just created these Deployments fresh, so this restart is a no-op.
 # On a redeploy, where only the `:local` image contents changed underneath an unchanged pod
 # template, phase C's apply produces no diff for kubectl to act on — this restart is what
-# actually rolls the new image out.
+# actually rolls the new image out. `rollout restart` is never literally a no-op: it stamps a
+# fresh annotation onto the pod template, which supersedes whatever ReplicaSet exists. On a
+# first deploy that means it supersedes the one phase C created seconds ago, and the practical
+# cost is near nil only because no pod of that ReplicaSet has become ready yet.
 Invoke-Step 'Rolling out the application' {
-    kubectl -n $namespace rollout restart deployment/api deployment/web
+    kubectl --context $context -n $namespace rollout restart deployment/api deployment/web
     Assert-LastExitCode 'kubectl rollout restart'
-    kubectl -n $namespace rollout status deployment/api --timeout=300s
+    kubectl --context $context -n $namespace rollout status deployment/api --timeout=300s
     Assert-LastExitCode 'kubectl rollout status (api)'
-    kubectl -n $namespace rollout status deployment/web --timeout=300s
+    kubectl --context $context -n $namespace rollout status deployment/web --timeout=300s
     Assert-LastExitCode 'kubectl rollout status (web)'
 }
 

@@ -149,6 +149,13 @@ internal static class Behaviors
     /// catch (Exception) on a path with no IExceptionHandler parameter, which this repository
     /// bans outside the outbox's exemption. The consequence — a committed write surfacing a 500
     /// — becomes the wrong trade if an L2 tier is ever added. ADR 0009 records that.
+    /// <para>
+    /// L1-only also means this eviction reaches only the process that handled the write: at more
+    /// than one replica, an entry cached by another pod survives it untouched. What keeps the
+    /// evicting pod the same pod that serves the caller's next read is the ingress's cookie
+    /// session affinity, so removing that annotation silently reintroduces stale reads here.
+    /// ADR 0010 records that.
+    /// </para>
     /// </remarks>
     internal static async Task EvictAsync<TCommand, TResponse>(
         IServiceProvider sp, TCommand command, Result<TResponse> result, CancellationToken ct)

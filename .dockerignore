@@ -8,3 +8,12 @@
 frontend/playwright-report/
 frontend/test-results/
 **/*.user
+
+# Nothing below is COPY'd by either Dockerfile, so excluding it changes no image — it only
+# stops the daemon transferring it as build context on every build. docs/ alone is several MB.
+docs/
+tests/
+k8s/
+deploy/
+.github/
+openapi/

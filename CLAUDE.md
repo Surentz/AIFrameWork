@@ -149,6 +149,13 @@ Three things that will cost you time:
   (`src/Infrastructure/CLAUDE.md`'s 7.9MB → 37MB note). The script deletes the Job before
   re-applying it, because a completed Job has immutable fields.
 
+The overlay's `secret.yaml` and `tls.yaml` commit real credentials — a Postgres password and a
+self-signed private key — on purpose: throwaway values for a localhost-only cluster that is
+never deployed, the same judgement already applied to `docker-compose.e2e.yml` and the dev
+connection string. Each file's own header says so, and `tls.yaml`'s carries the `openssl`
+command to regenerate the certificate when it expires (2027-09-10). Neither is a pattern to copy
+into an overlay that targets a real environment.
+
 Cache eviction correctness depends on the ingress's cookie affinity: `HybridCache` is L1-only,
 so a write handled by one pod cannot evict an entry held by the other. See ADR 0010.
 

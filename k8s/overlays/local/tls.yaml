@@ -1,3 +1,21 @@
+# Throwaway self-signed certificate for `aiframework.localtest.me`, which resolves to 127.0.0.1
+# publicly, so this key can only ever protect traffic that never leaves the machine. The private
+# key is committed on purpose, the same judgement already applied to `docker-compose.e2e.yml`
+# and to the dev connection string in `src/Api/appsettings.Development.json` — a bounded
+# exception, not a pattern. Never reuse this key, and never copy this file into an overlay that
+# targets a real environment; there the certificate comes from cert-manager or the platform.
+#
+# Valid 2026-09-10 to 2027-09-10. To regenerate when it expires:
+#
+#   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+#     -keyout tls.key -out tls.crt \
+#     -subj "/CN=aiframework.localtest.me" \
+#     -addext "subjectAltName=DNS:aiframework.localtest.me"
+#   kubectl create secret tls aiframework-tls --cert=tls.crt --key=tls.key \
+#     --dry-run=client -o yaml
+#
+# The namespace is deliberately absent: the overlay kustomization's namespace transformer
+# supplies it, as it does for every sibling resource.
 apiVersion: v1
 data:
   tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tDQpNSUlEVERDQ0FqU2dBd0lCQWdJVVVoWmNVQkNoRUd1Q3lycnNvMitEVDhuR3VHTXdEUVlKS29aSWh2Y05BUUVMDQpCUUF3SXpFaE1COEdBMVVFQXd3WVlXbG1jbUZ0WlhkdmNtc3ViRzlqWVd4MFpYTjBMbTFsTUI0WERUSTJNRGt4DQpNREExTVRNek5Gb1hEVEkzTURreE1EQTFNVE16TkZvd0l6RWhNQjhHQTFVRUF3d1lZV2xtY21GdFpYZHZjbXN1DQpiRzlqWVd4MFpYTjBMbTFsTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUFwUHB6DQpUWm1yb1pxUWJDaGV0MjdNM3R4RytVazUyZEdTa0UrNFc4TWFNdExkT25LRURFcnI1UWZyN2xwV0RlVHVlZlNLDQo4SCtsTU40OG5qN1BpNVlSSm5DQnZCclZuUGJRRXZDUnppcUYrckVTMnZVLzhJeURCWkJKekFnUUdmRFAxVkNsDQplSm44UU51S1JJS0o2a0s2aFc4QlVPL2xZZ2kvaXkzeXZCOGU4MnA5ekZ5WDhEVkFXc3NQOXhOQ1RZb09Vd0YzDQpZMTZMbVBLcWo4azZTU2ozZDJ1QnNacytJYkxiMFoxbm4zMDEyYUY2bVFQdW94RHh2cGFLY3FhOEJMdFRVQVJ3DQprcDRyamFNM1B2eGU5NE8walFpYjlwQVErRVhBOHVmVk1EQVB2VzFyajAwbkRZaWxVZnV6OVFiSUxDUi9vZzJnDQp0ZHRqaW14QlMwbWxQVjVOcHdJREFRQUJvM2d3ZGpBZEJnTlZIUTRFRmdRVTJTSzQrdHEvb285d1YwSW9oQXYvDQpFT2lTMG5jd0h3WURWUjBqQkJnd0ZvQVUyU0s0K3RxL29vOXdWMElvaEF2L0VPaVMwbmN3RHdZRFZSMFRBUUgvDQpCQVV3QXdFQi96QWpCZ05WSFJFRUhEQWFnaGhoYVdaeVlXMWxkMjl5YXk1c2IyTmhiSFJsYzNRdWJXVXdEUVlKDQpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFBSWlUbnlzRGdTR0JLTEw2cEN3SUthS0psNG94V2xvMmtyM1JNUTIydzllDQpid292eVhLLzNmWW5SSGFPQzVWU0VoUktWYmZLZjRPRERmZmk5V3A5dFlpUkJYcXAzNVc1YzVVdm5qSDhsNTdrDQp4ODVOM3g3ZmFIa0QrRFc4anNIdEUraWRtQ3hyYUVYNmxXNjE1alZOSVBSUW11bHVyT1R6TVVuendnYnRJY1dQDQpqSzd5cW93cytxc2txZGtIdWE1eGo3K0ZqMUtiMlUwMEhuL1h5bWYwV0VzR0l0dzZVbmZ3TlpWQ3p1aHFnMmVRDQpuVmVWU1lmeU9LL1lKbnEySndsVFl1a1k3RktqbVZVTEg2amlEc0RCY0N2a2tUcnBsWEhyRks4VSs4ZGVhTHdxDQpOQ1c1bklCZU5jQm1pdTE5UU1ZdnY1SVc2T01xdEtUb1l4L20rdFV6QklZPQ0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ0K
@@ -5,5 +23,4 @@ data:
 kind: Secret
 metadata:
   name: aiframework-tls
-  namespace: aiframework
 type: kubernetes.io/tls

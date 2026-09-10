@@ -36,10 +36,16 @@ public sealed class DataProtectionTests(ApiFactory factory)
     }
 
     /// <remarks>
+    /// A second and weaker guard than the sibling test above, despite the stronger-sounding
+    /// name: both hosts run in this process and share a content root, so the filesystem key
+    /// ring Data Protection falls back to is shared too, and this passes on one machine even
+    /// with PersistKeysToDbContext removed. The database assertion is what actually holds.
+    /// <para>
     /// Registers by hand rather than through CreateAuthenticatedClientAsync: that helper
     /// relies on the client's internal cookie handler, so the cookie never appears on
     /// DefaultRequestHeaders and cannot be lifted off it. Reading Set-Cookie from the
     /// response is the only way to carry the session to a second host.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task ACookieFromOneHost_IsAcceptedByASecondHost()

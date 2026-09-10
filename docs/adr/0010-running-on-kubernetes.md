@@ -51,10 +51,15 @@ audit tables it already owns, and the key table arrived as its own append-only m
 `SetApplicationName` is load-bearing, not decoration: the key ring's purpose string is derived
 from it, so two pods that disagree on the application name read the same table and *still*
 refuse each other's cookies — the same symptom, with the fix apparently already applied. This
-shipped in commit `84650ad`, ahead of this ADR, with an integration test that issues a cookie
-from one `WebApplicationFactory` host and asserts a second host, built over the same Postgres
-container, accepts it — the only thing that actually guards the regression; asserting the key
-table exists proves nothing.
+shipped in commit `84650ad`, ahead of this ADR. What guards the regression is
+`IssuingACookie_PersistsTheKeyRingToTheDatabase`, which signs a user in and asserts the ring
+landed in `DataProtectionKeys` — the persistence assertion is the primary guard precisely
+because it is the one that can fail on a single machine. Its companion
+`ACookieFromOneHost_IsAcceptedByASecondHost` is a second and weaker behavioural check: with no
+store configured, Data Protection falls back to a filesystem key ring keyed by content-root
+path, and two in-process `WebApplicationFactory` hosts share that path, so the cross-host test
+passes even with the bug present and only turns red once the hosts are separate containers. It
+is not evidence that `PersistKeysToDbContext` is removable.
 
 **Cache eviction correctness now rests on ingress cookie session affinity, and this amends
 ADR 0009's single-process premise.** ADR 0009 designed the query cache and its synchronous,
@@ -73,10 +78,11 @@ At two replicas that stops being true, and the failure is specific enough to wri
    30-second TTL.
 
 That is precisely the read-your-own-writes guarantee ADR 0009's synchronous eviction path was
-built to provide. It is not a rare interleaving, either: the ingress pools upstream connections
-and spreads requests across two pods, so the write (step 2) landing on a pod different from the
-follow-up read (step 3) — which is what leaves the stale entry step 1 cached on pod A still
-standing for step 3 to hit — is close to a coin flip.
+built to provide. It is not a rare interleaving, either. The sequence needs steps 1 and 3 on the
+same pod, so that there is a cached entry still standing to be hit, *and* step 2 on the other,
+so that the eviction misses it. With the ingress spreading requests independently across two
+pods, that is roughly one placement in four — routine rather than exotic, and rolled afresh on
+every write.
 
 The resolution is ingress session affinity, not Redis:
 
@@ -106,6 +112,21 @@ rather than a manifest feature — `deploy/deploy.ps1` (PowerShell, matching the
 deletes and reapplies the migration Job, waits for it to complete, and only then applies `api`,
 `web`, and the ingress. That script, five steps long, is the acknowledged price of choosing
 Kustomize.
+
+**Wolverine's own schema migration stays automatic, because the race was verified rather than
+assumed.** Durable Wolverine migrates its envelope storage during host startup, so at two
+replicas both pods attempt that against the same database at the same instant. The design spec
+named this the open risk to resolve before anything else, because it carried a design
+consequence: if the guard did not hold, auto-migration would be turned off and Wolverine's DDL
+folded into the migrate Job alongside the EF bundle. It holds. Against a freshly created empty
+database — the first probe, run against the persistent dev database, was a false negative, since
+its named volume already held the `wolverine` schema and the creation DDL never ran — two hosts
+were started simultaneously: one logged the `CREATE SCHEMA` / `CREATE TABLE` migration, the
+other found the storage already present and skipped it, and both nodes registered in
+`wolverine_nodes` a third of a second apart. The only collision-shaped line in either log was
+the literal `WHEN duplicate_schema THEN NULL` inside Wolverine's own migration script: the DDL
+is idempotent by construction, not by luck. So `Wolverine__Durable` stays `true`, and the
+migrate Job carries the EF bundle only.
 
 **Postgres only for shared state. No Redis.** The key ring and the eviction-affinity decisions
 above both keep the deployment's only stateful dependency at Postgres, which is already
@@ -143,6 +164,24 @@ throwaway credentials that are never deployed. It is recorded here as a conditio
 aside — a cloud target requires `ProtectKeysWith*` before this decision can be reused there,
 and `Program.cs`'s own comment carries that same condition forward to the next reader of the
 registration.
+
+**Two pods starting against an empty key table can each mint a key.** Data Protection locks key
+creation within a process, not across processes, so on a first deploy — the one moment when
+`DataProtectionKeys` is empty — both pods can generate a key and each then default to one the
+other's cached ring does not yet hold. Affinity hides it, because a user stays on the pod that
+issued their cookie, and it resolves itself once the rings refresh from the table. It is written
+down because of what it is: a residual multi-replica race inside the very mechanism introduced
+to fix a multi-replica bug. Persisting the ring narrows the window to the cold start; it does
+not close it.
+
+**Migrations must stay backwards-compatible with the code already running.** The three-phase
+ordering guarantees that a *new* pod never starts against an unmigrated schema. It guarantees
+nothing about the old ones: through Phase B and the rollout that follows, the previous
+generation's pods keep serving requests against a schema that has already moved underneath them.
+That is the ordinary migrate-then-deploy contract rather than a defect in the script — but it is
+an obligation on every migration written from here on, and nothing else in the repository says
+so. A migration that drops or renames a column the running code still reads will produce errors
+for the length of the rollout, not just at its boundary.
 
 ## Alternatives considered
 

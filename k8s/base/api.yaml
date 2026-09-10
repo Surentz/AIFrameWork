@@ -67,6 +67,11 @@ spec:
               path: /health/ready
               port: 8080
             periodSeconds: 10
+          # A memory limit but deliberately no CPU limit. Memory is the one the kubelet cannot
+          # reclaim gracefully, so a ceiling turns a leak into a restart instead of an evicted
+          # neighbour. A CPU limit, by contrast, throttles: the request already guarantees a
+          # share under contention, and capping on top of it would only add latency at startup
+          # and under burst, where this workload is at its spikiest.
           resources:
             requests:
               cpu: 200m
@@ -75,6 +80,14 @@ spec:
               memory: 768Mi
           securityContext:
             allowPrivilegeEscalation: false
+            # Safe because nothing in the running API writes to disk: the Data Protection key
+            # ring is in Postgres (ADR 0010), and a Release build loads the Wolverine adapters
+            # committed under src/Api/Internal/Generated rather than compiling any at startup.
+            # A Debug image would need a writable path for that codegen; this one does not.
             readOnlyRootFilesystem: true
+            # Both images already set a non-root USER, so this changes nothing at runtime. It
+            # makes the guarantee enforced rather than incidental: an image edit that drops
+            # USER fails the pod loudly instead of quietly running as root.
+            runAsNonRoot: true
             capabilities:
               drop: ['ALL']
