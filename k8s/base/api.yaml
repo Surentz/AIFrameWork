@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  # Two replicas is the point of the exercise: it is what makes the data protection key ring
+  # and the ingress session affinity load-bearing rather than decorative.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      # 60s against the host's 30s shutdown timeout. The Kubernetes default is also 30s, so a
+      # host using its full budget would be SIGKILLed exactly at the boundary — and the outbox
+      # increments Attempts at claim time, so a kill mid-handler burns an attempt against
+      # MaxAttempts.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: api
+          image: aiframework-api:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          lifecycle:
+            preStop:
+              # Leave the Service endpoints before we stop accepting connections. Without this,
+              # in-flight requests are refused during a rolling update while endpoint removal
+              # propagates. Uses the native sleep hook (GA since v1.30) rather than an exec
+              # command because the chiseled base image has no shell.
+              sleep:
+                seconds: 5
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            # Generous: durable Wolverine does schema work at boot, and a slow start must not
+            # read as a crash loop.
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']

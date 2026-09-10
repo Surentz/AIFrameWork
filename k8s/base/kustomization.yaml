@@ -5,3 +5,5 @@ resources:
   - namespace.yaml
   - postgres.yaml
   - migrate-job.yaml
+  - api.yaml
+  - web.yaml
