@@ -7,8 +7,10 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.Persistence;
 using JasperFx;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
@@ -138,6 +140,19 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(connectionString);
 
+// The key ring goes to Postgres, not to each host's memory. Two replicas with separate
+// rings reject each other's session cookies, which surfaces as an intermittent 401 rather
+// than an obvious failure. SetApplicationName is load-bearing, not decoration: the purpose
+// string derives from it, so pods that disagree on the name share a ring and still refuse
+// each other's cookies. Keys are unencrypted at rest - acceptable for a local cluster with
+// throwaway credentials, and the condition ADR 0010 places on a cloud target.
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<AiFrameworkDbContext>()
+    .SetApplicationName("AiFramework");
+
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AiFrameworkDbContext>();
+
 // Bound here rather than inside AddCaching, which must stay resolvable from a bare
 // ServiceCollection in unit tests. Same shape as Wolverine:Durable and RateLimiting:Auth above:
 // Api reads its own configuration and hands the values to Infrastructure.
@@ -167,6 +182,12 @@ app.MapControllers();
 // No fallback authorization policy is registered, so this stays anonymous without an attribute -
 // a readiness probe that needs credentials is not a readiness probe.
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+// Readiness, distinct from the liveness check above: this one answers "may this pod receive
+// traffic", which needs Postgres. It stays a separate endpoint because /health must remain
+// database-free — HealthTests boots a host with no database at all and asserts 200 on it.
+// Anonymous for the same reason /health is: no fallback authorization policy is registered.
+app.MapHealthChecks("/health/ready");
 
 // Development only, deliberately: a deployed instance must not publish its endpoint surface.
 // Asserted in both directions by OpenApiDocumentTests, because a missing environment check

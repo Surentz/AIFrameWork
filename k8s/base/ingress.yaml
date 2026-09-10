@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aiframework
+  annotations:
+    # Cookie affinity is what keeps query-cache eviction correct. HybridCache is L1-only, so
+    # a PlaceOrder handled by one pod cannot evict an entry held by the other; pinning a user
+    # to a pod means the pod that evicts is always the pod that reads. See ADR 0010, which
+    # amends ADR 0009's single-process premise.
+    nginx.ingress.kubernetes.io/affinity: 'cookie'
+    nginx.ingress.kubernetes.io/affinity-mode: 'persistent'
+    nginx.ingress.kubernetes.io/session-cookie-name: 'aiframework.route'
+    nginx.ingress.kubernetes.io/session-cookie-max-age: '3600'
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - aiframework.localtest.me
+      secretName: aiframework-tls
+  rules:
+    - host: aiframework.localtest.me
+      http:
+        paths:
+          # /api first: Prefix rules are matched longest-first, but keeping the order explicit
+          # makes the intent readable.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 8080

@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: efbundle
+          image: aiframework-migrator:local
+          imagePullPolicy: Never
+          # Passed explicitly rather than relying on DesignTimeDbContextFactory's environment
+          # variable, so what this Job connects to is visible in the manifest.
+          args:
+            - '--connection'
+            - '$(ConnectionStrings__Default)'
+          env:
+            - name: ConnectionStrings__Default
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: ConnectionStrings__Default
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi

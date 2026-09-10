@@ -1,7 +1,26 @@
 # Running the stack locally
 
-One command per piece, or one keystroke if you set your IDE up. The command line is the
-reference; the IDE sections build on it.
+One script, one command per piece, or one keystroke if you set your IDE up. The command line is
+the reference; the script and the IDE sections build on it.
+
+## The script
+
+```powershell
+./scripts/dev.ps1                  # database, migrations, API, dev server
+./scripts/dev.ps1 -SkipMigrations  # when you know the schema is current
+```
+
+It checks Docker is running and that 5234 and 5173 are free, starts Postgres and waits for its
+healthcheck, applies migrations, then launches the API and the dev server **each in its own
+window**. Both are long-running foreground processes with their own logs, so a window each keeps
+those readable and makes Ctrl-C mean "stop this one".
+
+The migration step is the part worth having: it sets `ConnectionStrings__Default` before calling
+`dotnet ef`, which is exactly the trap described under "The gotcha that will cost you an
+afternoon" in the root `CLAUDE.md`. Without it, `database update` aims at the
+`design_time_only` placeholder rather than your dev database.
+
+`docker compose down` stops the database; the two windows are yours to Ctrl-C.
 
 ## The command line
 
