@@ -11,9 +11,11 @@ nodes:
           kubeletExtraArgs:
             node-labels: "ingress-ready=true"
     extraPortMappings:
+      # Host 80/443 are taken on this machine (IIS/BranchCache reserve them via http.sys), so
+      # the ingress is exposed on 8080/8443 instead. Browse https://aiframework.localtest.me:8443.
       - containerPort: 80
-        hostPort: 80
+        hostPort: 8080
         protocol: TCP
       - containerPort: 443
-        hostPort: 443
+        hostPort: 8443
         protocol: TCP

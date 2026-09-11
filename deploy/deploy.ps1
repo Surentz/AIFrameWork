@@ -188,6 +188,20 @@ Invoke-Step 'Rolling out the application' {
     Assert-LastExitCode 'kubectl rollout status (web)'
 }
 
+$kindConfig = Get-Content (Join-Path $PSScriptRoot 'kind-cluster.yaml') -Raw
+$httpsHostPort = if ($kindConfig -match '(?ms)containerPort:\s*443\s*\r?\n\s*hostPort:\s*(\d+)') {
+    $matches[1]
+}
+else {
+    443
+}
+$readyUrl = if ($httpsHostPort -eq 443) {
+    'https://aiframework.localtest.me'
+}
+else {
+    "https://aiframework.localtest.me:$httpsHostPort"
+}
+
 Write-Host ''
-Write-Host 'Ready: https://aiframework.localtest.me' -ForegroundColor Green
+Write-Host "Ready: $readyUrl" -ForegroundColor Green
 Write-Host 'The certificate is self-signed, so the browser will warn once.' -ForegroundColor DarkGray

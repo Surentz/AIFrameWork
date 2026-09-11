@@ -142,6 +142,10 @@ this is additive.
 Then open `https://aiframework.localtest.me` — that name resolves to `127.0.0.1` publicly,
 so there is nothing to add to `hosts`. The certificate is self-signed.
 
+> On a machine where host ports 80/443 are already taken (IIS, BranchCache, or anything else
+> bound via `http.sys`), `deploy/kind-cluster.yaml` maps the ingress to 8080/8443 instead —
+> in that case browse `https://aiframework.localtest.me:8443`.
+
 Three things that will cost you time:
 
 - **TLS is not optional.** `ASPNETCORE_ENVIRONMENT=Production` sets
