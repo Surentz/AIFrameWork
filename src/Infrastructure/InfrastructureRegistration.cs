@@ -47,6 +47,7 @@ public static class InfrastructureRegistration
         services.AddCommand<RegisterUser, SessionView, RegisterUserHandler>();
         services.AddCommand<SignIn, SessionView, SignInHandler>();
         services.AddCommand<ChangePassword, SessionView, ChangePasswordHandler>();
+        services.AddCommand<SignOutEverywhere, bool, SignOutEverywhereHandler>();
         services.AddQuery<GetUser, SessionView, GetUserHandler>();
 
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();

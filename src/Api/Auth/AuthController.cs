@@ -141,6 +141,34 @@ public sealed class AuthController(
         return NoContent();
     }
 
+    /// <summary>Invalidates every session for the signed-in user, including this one.</summary>
+    [HttpPost("sign-out-everywhere")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult> SignOutEverywhere(CancellationToken cancellationToken)
+    {
+        if (currentUser.Id is not { } userId)
+        {
+            return Unauthorized();
+        }
+
+        var result = await commands.SendAsync(
+            new Application.Users.SignOutEverywhere(userId), cancellationToken).ConfigureAwait(false);
+
+        if (!result.IsSuccess)
+        {
+            return result.Problem(HttpContext);
+        }
+
+        // Clears this browser's cookie as well. The rotation alone would already make it fail
+        // validation on the next request, so this is tidiness rather than the security boundary -
+        // it avoids one guaranteed 401 round trip before the SPA notices.
+        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme)
+            .ConfigureAwait(false);
+
+        return NoContent();
+    }
+
     private static SessionResponse ToResponse(SessionView session) => new()
     {
         UserId = session.UserId,

@@ -577,6 +577,39 @@
           }
         }
       }
+    },
+    "/api/auth/sign-out-everywhere": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Invalidates every session for the signed-in user, including this one.",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

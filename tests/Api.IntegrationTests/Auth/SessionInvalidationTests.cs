@@ -84,4 +84,19 @@ public sealed class SessionInvalidationTests(ApiFactory factory)
         // rotation is for. AuthController re-issues this cookie with the new stamp.
         (await client.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task SignOutEverywhere_EndsEveryOtherSessionAndThisOne()
+    {
+        var (first, username) = await _factory.CreateAuthenticatedClientWithUsernameAsync();
+        var second = await _factory.SignInAgainAsync(username);
+        (await second.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await first.PostAsync(
+            new Uri("/api/auth/sign-out-everywhere", UriKind.Relative), content: null);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await second.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await first.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }
