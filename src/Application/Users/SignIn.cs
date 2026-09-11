@@ -78,7 +78,8 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
             await users.ClearSignInFailuresAsync(user.Id, cancellationToken).ConfigureAwait(false);
         }
 
-        return Result.Success(new SessionView(user.Id, user.Username, user.DisplayName));
+        return Result.Success(
+            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp));
     }
 
     /// <summary>

@@ -16,6 +16,6 @@ public sealed class GetUserHandler(IUserRepository users) : IQueryHandler<GetUse
         return user is null
             ? Result.Failure<SessionView>(new Error(
                 ErrorKind.NotFound, "user.not_found", $"No user with id '{query.Id}'."))
-            : Result.Success(new SessionView(user.Id, user.Username, user.DisplayName));
+            : Result.Success(new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp));
     }
 }

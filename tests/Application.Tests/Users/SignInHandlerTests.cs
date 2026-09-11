@@ -58,7 +58,7 @@ public sealed class SignInHandlerTests
         var result = await handler.HandleAsync(new SignIn("Ada", "correct horse"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().Be(new SessionView(ada.Id, "Ada", "Ada Lovelace"));
+        result.Value.Should().Be(new SessionView(ada.Id, "Ada", "Ada Lovelace", ada.SecurityStamp));
     }
 
     [Fact]
@@ -300,5 +300,20 @@ public sealed class SignInHandlerTests
         await _users.DidNotReceiveWithAnyArgs().ClearSignInFailuresAsync(Guid.Empty, default);
         await _users.DidNotReceiveWithAnyArgs().TryRecordFailedSignInAsync(
             Guid.Empty, default, default, default, default);
+    }
+
+    [Fact]
+    public async Task HandleAsync_OnSuccess_ReturnsTheUsersCurrentSecurityStamp()
+    {
+        var ada = AnAda();
+        _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
+        _hasher.Verify("stored-hash", "the right password").Returns(true);
+        var handler = new SignInHandler(_users, _hasher, _clock);
+
+        var result = await handler.HandleAsync(
+            new SignIn("Ada", "the right password"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.SecurityStamp.Should().Be(ada.SecurityStamp);
     }
 }

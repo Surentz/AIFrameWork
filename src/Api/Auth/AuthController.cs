@@ -131,9 +131,10 @@ public sealed class AuthController(
     };
 
     /// <summary>
-    /// The only place a session is minted. The claims are the whole session: NameIdentifier is
-    /// what <see cref="ICurrentUser.Id"/> reads back on later requests, so nothing else has to be
-    /// looked up to know who is calling.
+    /// The only place a session is minted. The claims are the whole session: NameIdentifier is what
+    /// <see cref="ICurrentUser.Id"/> reads back on later requests, and the security stamp is what
+    /// Program.cs's OnValidatePrincipal compares against the database on every request. Nothing else
+    /// has to be looked up to know who is calling.
     /// </summary>
     private Task IssueCookieAsync(SessionView session, bool persistent)
     {
@@ -143,6 +144,7 @@ public sealed class AuthController(
                     ClaimTypes.NameIdentifier,
                     session.UserId.ToString("D", CultureInfo.InvariantCulture)),
                 new Claim(ClaimTypes.Name, session.Username),
+                new Claim(SessionClaims.SecurityStamp, session.SecurityStamp),
             ],
             CookieAuthenticationDefaults.AuthenticationScheme);
 
