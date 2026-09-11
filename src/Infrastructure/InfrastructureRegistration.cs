@@ -75,6 +75,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ISessionValidator, SessionValidator>();
         services.AddSingleton<IClock, SystemClock>();
         // Singleton: PasswordHasher<T> is stateless and thread-safe, and the object it wraps
         // holds only the work-factor settings.
