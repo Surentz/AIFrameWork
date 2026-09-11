@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using AiFramework.Api.IntegrationTests.Diagnostics;
+using AiFramework.Domain.Users;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -116,6 +117,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             ServiceDescriptor.Singleton<IStartupFilter, TestEndpointsStartupFilter>());
     }
 
+    /// <summary>The password every client from <see cref="CreateAuthenticatedClientAsync"/> is
+    /// registered with, exposed so a test can present it as the current password.</summary>
+    public const string RegisteredPassword = "a long enough test password";
+
     /// <summary>
     /// A client that has registered a fresh user and is carrying its session cookie, for the
     /// endpoints that now require one. <see cref="WebApplicationFactory{TEntryPoint}.CreateClient()"/>
@@ -126,22 +131,58 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// through ApiFactoryCollection, and a shared user would let a password change in one test
     /// invalidate another's session.
     /// </remarks>
-    public async Task<HttpClient> CreateAuthenticatedClientAsync()
+    public async Task<HttpClient> CreateAuthenticatedClientAsync() =>
+        (await CreateAuthenticatedClientWithUsernameAsync()).Client;
+
+    /// <summary>
+    /// The same thing, plus the generated username, for tests that need a second session for the
+    /// same user or want to reach that user in the database.
+    /// </summary>
+    public async Task<(HttpClient Client, string Username)> CreateAuthenticatedClientWithUsernameAsync()
+    {
+        var client = CreateClient();
+        var username = $"u{Guid.NewGuid():N}"[..32];
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new { Username = username, Password = RegisteredPassword, DisplayName = "Test User" });
+
+        response.EnsureSuccessStatusCode();
+
+        return (client, username);
+    }
+
+    /// <summary>
+    /// A second, independent signed-in client for an existing user. A distinct HttpClient means a
+    /// distinct cookie container, which is what makes the two genuinely separate sessions.
+    /// </summary>
+    public async Task<HttpClient> SignInAgainAsync(string username)
     {
         var client = CreateClient();
 
         var response = await client.PostAsJsonAsync(
-            "/api/auth/register",
-            new
-            {
-                Username = $"u{Guid.NewGuid():N}"[..32],
-                Password = "a long enough test password",
-                DisplayName = "Test User",
-            });
+            "/api/auth/login",
+            new { Username = username, Password = RegisteredPassword, RememberMe = false });
 
         response.EnsureSuccessStatusCode();
 
         return client;
+    }
+
+    /// <summary>
+    /// Rotates a user's stamp directly, standing in for whatever would do it in production. Lets a
+    /// test prove the validation path without depending on the endpoints that trigger it.
+    /// </summary>
+    public async Task RotateSecurityStampAsync(string username)
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+        var normalized = User.Normalize(username);
+
+        var user = await context.Users.SingleAsync(u => u.UsernameNormalized == normalized);
+        user.RotateSecurityStamp();
+
+        await context.SaveChangesAsync();
     }
 
     /// <summary>

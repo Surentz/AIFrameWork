@@ -1,14 +1,17 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using AiFramework.Api;
 using AiFramework.Api.Auth;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Users;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Persistence;
 using JasperFx;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
@@ -67,6 +70,48 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return Task.CompletedTask;
+        };
+
+        // The stamp check, and the reason ADR 0011's invalidation works at all. Runs on every request
+        // that presents a cookie, before the endpoint sees it, and is what makes a password change, a
+        // lockout, or a sign-out-everywhere take effect on the next request instead of whenever the
+        // cookie happens to expire.
+        //
+        // Rejecting rather than throwing: a stale session is an expected state, not a fault. The
+        // principal is dropped and the cookie cleared, so the request continues unauthenticated and
+        // lands on OnRedirectToLogin above - coming back as a 401, exactly as a request with no cookie
+        // would. The client cannot tell the two apart, which is the point.
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var principal = context.Principal;
+
+            if (principal?.Identity?.IsAuthenticated != true)
+            {
+                return;
+            }
+
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            var stamp = principal.FindFirstValue(SessionClaims.SecurityStamp);
+
+            if (!Guid.TryParse(userId, out var id) || string.IsNullOrEmpty(stamp))
+            {
+                // No stamp claim means a cookie minted before ADR 0011. Failing closed retires those on
+                // their holder's next request rather than trusting them until they expire.
+                await RejectAsync(context).ConfigureAwait(false);
+                return;
+            }
+
+            // Resolved per request, from the request's own scope: ISessionValidator is scoped and holds
+            // the scoped DbContext. Capturing it outside this lambda would leak one DbContext across
+            // every request in the process.
+            var validator = context.HttpContext.RequestServices.GetRequiredService<ISessionValidator>();
+
+            if (!await validator
+                    .IsStampCurrentAsync(id, stamp, context.HttpContext.RequestAborted)
+                    .ConfigureAwait(false))
+            {
+                await RejectAsync(context).ConfigureAwait(false);
+            }
         };
     });
 
@@ -227,6 +272,20 @@ static async Task<int> RunTheWebApplicationAsync(WebApplication webApplication)
 {
     await webApplication.RunAsync();
     return 0;
+}
+
+// Both rejection paths do the same two things, and doing only the first leaves the dead cookie
+// in the browser to be re-sent and re-rejected on every subsequent request.
+//
+// Not async/await: RejectPrincipal() is synchronous and SignOutAsync is the only await, so
+// AsyncFixer01 asks for the task to be returned directly rather than wrapped in a state machine.
+// The caller still applies ConfigureAwait(false) when it awaits this.
+static Task RejectAsync(CookieValidatePrincipalContext context)
+{
+    context.RejectPrincipal();
+
+    return context.HttpContext
+        .SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 }
 
 /// <summary>Exposed so <c>WebApplicationFactory</c> can find the entry point.</summary>
