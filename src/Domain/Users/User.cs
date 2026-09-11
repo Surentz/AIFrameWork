@@ -19,6 +19,12 @@ public sealed class User : Entity
     /// <summary>How long a lockout lasts. Fixed, never sliding — see RegisterFailedSignIn.</summary>
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
+    /// <summary>
+    /// The widest stamp the EF mapping allows. A "N"-format Guid is 32 characters; the slack is
+    /// for a future format change and costs nothing in Postgres.
+    /// </summary>
+    public const int MaxSecurityStampLength = 64;
+
     private User(
         Guid id,
         string username,
@@ -33,6 +39,7 @@ public sealed class User : Entity
         PasswordHash = passwordHash;
         DisplayName = displayName;
         RegisteredAt = registeredAt;
+        SecurityStamp = NewStamp();
     }
 
     public Guid Id { get; private set; }
@@ -57,6 +64,15 @@ public sealed class User : Entity
 
     /// <summary>When the current lockout expires, or null when the account is not locked.</summary>
     public DateTimeOffset? LockedOutUntil { get; private set; }
+
+    /// <summary>
+    /// Opaque nonce identifying the current authority of this user's sessions. Written into the
+    /// session cookie at sign-in and compared on every authenticated request, so rotating it
+    /// invalidates every cookie already issued for this user. Rotated by anything that changes what
+    /// a session is allowed to do: a password change, a lockout, an explicit sign-out-everywhere,
+    /// and (from plan 2) a permission change. See ADR 0011.
+    /// </summary>
+    public string SecurityStamp { get; private set; }
 
     /// <summary>
     /// The one way a username becomes a lookup key. Callers that search by username must go
@@ -116,7 +132,18 @@ public sealed class User : Entity
         }
 
         PasswordHash = newPasswordHash;
+
+        // Ends every session issued under the old password. The session doing the changing is
+        // re-issued by AuthController, so the person changing their own password stays signed in
+        // while anyone else holding a cookie for this account does not. See ADR 0011.
+        RotateSecurityStamp();
     }
+
+    /// <summary>
+    /// Invalidates every session already issued for this user. The single primitive behind
+    /// "sign out everywhere", lockout enforcement, and (in plan 2) permission revocation.
+    /// </summary>
+    public void RotateSecurityStamp() => SecurityStamp = NewStamp();
 
     public bool IsLockedOut(DateTimeOffset now) => LockedOutUntil is { } until && until > now;
 
@@ -155,6 +182,13 @@ public sealed class User : Entity
         if (FailedSignInAttempts >= MaxFailedSignInAttempts)
         {
             LockedOutUntil = now + LockoutDuration;
+
+            // Locking the account has to cut off whoever is already inside it. Without this, an
+            // attacker holding a cookie from an earlier successful sign-in is untouched by the lockout
+            // - the gap ADR 0011 records against ADR 0008. Only on the failure that actually locks:
+            // rotating on every wrong guess would let anyone who knows a username sign that user out
+            // at will.
+            RotateSecurityStamp();
         }
     }
 
@@ -163,4 +197,9 @@ public sealed class User : Entity
         FailedSignInAttempts = 0;
         LockedOutUntil = null;
     }
+
+    // Generated here rather than handed in the way Id is. The stamp is opaque - no test asserts a
+    // specific value, only that it changed - so injecting it would buy no determinism while
+    // changing three handler signatures. Deliberate departure from Order.Place's convention.
+    private static string NewStamp() => Guid.NewGuid().ToString("N");
 }

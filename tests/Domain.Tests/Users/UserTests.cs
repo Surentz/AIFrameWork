@@ -245,4 +245,71 @@ public sealed class UserTests
         user.LockedOutUntil.Should().BeNull();
         user.IsLockedOut(afterExpiry).Should().BeFalse();
     }
+
+    [Fact]
+    public void Register_GivesTheUserASecurityStamp()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+
+        ada.SecurityStamp.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void Register_GivesEachUserADifferentSecurityStamp()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+        var grace = User.Register(Guid.NewGuid(), "grace", "hash", "Grace Hopper", RegisteredAt);
+
+        ada.SecurityStamp.Should().NotBe(grace.SecurityStamp);
+    }
+
+    [Fact]
+    public void ChangePassword_RotatesTheSecurityStamp()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+        var before = ada.SecurityStamp;
+
+        ada.ChangePassword("new-hash");
+
+        ada.SecurityStamp.Should().NotBe(before);
+    }
+
+    [Fact]
+    public void RotateSecurityStamp_ChangesTheStamp()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+        var before = ada.SecurityStamp;
+
+        ada.RotateSecurityStamp();
+
+        ada.SecurityStamp.Should().NotBe(before);
+    }
+
+    [Fact]
+    public void RegisterFailedSignIn_OnTheLockingFailure_RotatesTheSecurityStamp()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+        var before = ada.SecurityStamp;
+
+        for (var attempt = 0; attempt < User.MaxFailedSignInAttempts; attempt++)
+        {
+            ada.RegisterFailedSignIn(RegisteredAt);
+        }
+
+        ada.IsLockedOut(RegisteredAt).Should().BeTrue();
+        ada.SecurityStamp.Should().NotBe(before);
+    }
+
+    [Fact]
+    public void RegisterFailedSignIn_BelowTheThreshold_LeavesTheStampAlone()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+        var before = ada.SecurityStamp;
+
+        ada.RegisterFailedSignIn(RegisteredAt);
+
+        // A single wrong guess must not sign the real user out. If it did, anyone who knew a
+        // username could evict that user from their session at will, without the password.
+        ada.SecurityStamp.Should().Be(before);
+    }
 }
