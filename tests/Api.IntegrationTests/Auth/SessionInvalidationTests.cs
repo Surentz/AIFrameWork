@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using AiFramework.Domain.Users;
 using FluentAssertions;
 
 namespace AiFramework.Api.IntegrationTests.Auth;
@@ -98,5 +99,24 @@ public sealed class SessionInvalidationTests(ApiFactory factory)
 
         (await second.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         (await first.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task LockingTheAccount_EndsItsLiveSessions()
+    {
+        var (signedIn, username) = await _factory.CreateAuthenticatedClientWithUsernameAsync();
+        (await signedIn.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // An anonymous attacker who knows the username. Cookie-less on purpose: the point is that
+        // the lockout reaches a session the attacker does not hold. ADR 0011 gap 2.
+        using var attacker = _factory.CreateClient();
+        for (var attempt = 0; attempt < User.MaxFailedSignInAttempts; attempt++)
+        {
+            await attacker.PostAsJsonAsync(
+                new Uri("/api/auth/login", UriKind.Relative),
+                new { Username = username, Password = "not the password", RememberMe = false });
+        }
+
+        (await signedIn.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

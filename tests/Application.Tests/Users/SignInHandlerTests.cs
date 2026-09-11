@@ -349,6 +349,79 @@ public sealed class SignInHandlerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The race-lost retry, where the re-read row is already locked by whoever won. The stamp
+    /// decision must be "did this call rotate anything", not "is the account locked" - the retry
+    /// finds a locked account without itself having done anything, and the old, wrong rule would
+    /// still write the as-read stamp back, capable of clobbering a rotation - a password change, a
+    /// sign-out-everywhere - that landed between the re-read and this write.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_WhenTheRetryFindsTheAccountAlreadyLocked_PersistsNoStamp()
+    {
+        var ada = AnAda();
+        var latest = ALockedOutAda();
+
+        _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada, latest);
+        _hasher.Verify("stored-hash", "wrong").Returns(false);
+        _users.TryRecordFailedSignInAsync(
+                ada.Id,
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(false);
+        var handler = new SignInHandler(_users, _hasher, _clock);
+
+        await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
+
+        await _users.Received(1).TryRecordFailedSignInAsync(
+            latest.Id,
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<DateTimeOffset?>(),
+            null,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The race-lost retry where the re-read row was one failure away, and this call is the one
+    /// that locks it. The rotated stamp must still make it through in this case.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_WhenTheRetryItselfLocks_PersistsTheRotatedStamp()
+    {
+        var ada = AnAda();
+        var latest = AnAda();
+        for (var i = 0; i < User.MaxFailedSignInAttempts - 1; i++)
+        {
+            latest.RegisterFailedSignIn(Now);
+        }
+
+        _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada, latest);
+        _hasher.Verify("stored-hash", "wrong").Returns(false);
+        _users.TryRecordFailedSignInAsync(
+                ada.Id,
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(false);
+        var handler = new SignInHandler(_users, _hasher, _clock);
+
+        await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
+
+        await _users.Received(1).TryRecordFailedSignInAsync(
+            latest.Id,
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<DateTimeOffset?>(),
+            latest.SecurityStamp,
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task HandleAsync_OnSuccess_ReturnsTheUsersCurrentSecurityStamp()
     {

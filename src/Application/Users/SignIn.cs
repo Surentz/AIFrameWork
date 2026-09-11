@@ -92,11 +92,12 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
     private async Task RecordFailureAsync(User user, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var expected = user.FailedSignInAttempts;
+        var stampBefore = user.SecurityStamp;
         user.RegisterFailedSignIn(now);
 
         if (await users.TryRecordFailedSignInAsync(
                 user.Id, expected, user.FailedSignInAttempts, user.LockedOutUntil,
-                RotatedStampOrNull(user, now), cancellationToken)
+                RotatedStampOrNull(user, stampBefore), cancellationToken)
             .ConfigureAwait(false))
         {
             return;
@@ -112,20 +113,24 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
         }
 
         var latestExpected = latest.FailedSignInAttempts;
+        var latestStampBefore = latest.SecurityStamp;
         latest.RegisterFailedSignIn(now);
 
         _ = await users.TryRecordFailedSignInAsync(
                 latest.Id, latestExpected, latest.FailedSignInAttempts, latest.LockedOutUntil,
-                RotatedStampOrNull(latest, now), cancellationToken)
+                RotatedStampOrNull(latest, latestStampBefore), cancellationToken)
             .ConfigureAwait(false);
     }
 
     /// <summary>
-    /// The stamp to persist, or null to leave the stored one alone. Non-null only when this failure
-    /// actually locked the account: <see cref="User.RegisterFailedSignIn"/> rotates on the locking
-    /// failure and on no other, and rotating on every wrong guess would let anyone who knows a
-    /// username sign that user out at will, without ever learning the password.
+    /// The stamp to persist, or null to leave the stored one alone. Compares the stamp before and
+    /// after <see cref="User.RegisterFailedSignIn"/> rather than asking whether the account is
+    /// locked: on the race-lost retry the re-read row is usually locked already, in which case
+    /// nothing rotated and writing the as-read stamp back could overwrite a rotation - a password
+    /// change, a sign-out-everywhere - that landed between the re-read and this write. Non-null only
+    /// when THIS call rotated, which by the domain rule is only the failure that locks. Rotating on
+    /// every wrong guess would let anyone who knows a username sign that user out at will.
     /// </summary>
-    private static string? RotatedStampOrNull(User user, DateTimeOffset now) =>
-        user.IsLockedOut(now) ? user.SecurityStamp : null;
+    private static string? RotatedStampOrNull(User user, string stampBefore) =>
+        string.Equals(user.SecurityStamp, stampBefore, StringComparison.Ordinal) ? null : user.SecurityStamp;
 }
