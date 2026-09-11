@@ -169,6 +169,31 @@ into an overlay that targets a real environment.
 Cache eviction correctness depends on the ingress's cookie affinity: `HybridCache` is L1-only,
 so a write handled by one pod cannot evict an entry held by the other. See ADR 0010.
 
+### One-click start/stop
+
+`local-run/control-panel.bat` is a double-clickable menu for both setups, for anyone who would
+rather not open a terminal — it has no logic of its own beyond the menu:
+
+| Menu option | Runs |
+|---|---|
+| Install/check prerequisites | `scripts/install-prereqs.ps1` — see below |
+| Start dev loop | `scripts/dev.ps1` — the plain local dev loop |
+| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/Vite ports, `docker compose down` |
+| Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
+| Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
+
+The `.ps1` scripts it calls are the source of truth and work the same run directly.
+
+`scripts/install-prereqs.ps1` is what a genuinely new machine needs run first — it checks for
+(and installs via `winget` whatever is missing) the .NET SDK, Node.js, Docker Desktop, `kubectl`,
+`kind`, and `k9s`. It only installs what is entirely absent; a tool that is present but older
+than expected is reported, not silently upgraded, since upgrading Docker Desktop or Node.js
+touches every other project on the machine, not just this one. It also flags a global `~/.npmrc`
+pinning `os=`/`cpu=` to the wrong platform — the exact cause of a `npm install` failure
+(`Cannot find native binding`, rolldown's Windows binding silently never downloaded) hit and
+fixed on this repo once already. Docker Desktop's own first-run setup (WSL2 backend, license
+terms, a restart) cannot be scripted unattended; the script starts that install and says so.
+
 ## Wolverine codegen
 
 Wolverine builds its handler adapters with Roslyn, and **Release ships without the compiler** —

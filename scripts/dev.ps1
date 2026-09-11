@@ -104,9 +104,46 @@ Invoke-Step 'Launching the API' {
     $global:LASTEXITCODE = 0
 }
 
-# Not gated on the API being healthy. Vite serves the app regardless and only its /api calls
-# depend on the backend, which is up within seconds — polling /health here would be complexity
-# for a delay nobody notices.
+# A fixed pause, not a health-check poll: polling /health/ready would need retry/timeout logic
+# for a problem this small. In practice the API is answering within a few seconds, and the
+# frontend dependency check below (when it has to run `npm install`) usually eats this delay on
+# its own anyway — this only bites on an already-installed frontend, which is exactly when
+# nothing else here would otherwise slow the frontend down. Observed: without this, Vite's proxy
+# logs one ECONNREFUSED for /api/... before the API finishes starting, which is harmless (Vite
+# retries on the next real request) but reads like a failure the first time you see it.
+Write-Host '==> Giving the API a moment to finish starting' -ForegroundColor Cyan
+Start-Sleep -Seconds 5
+
+# A missing node_modules doesn't fail loudly: `npm start` still launches, and only the
+# `vite` binary it shells out to is missing, so the error surfaces inside the new window
+# ("'vite' is not recognized...") well after this script has already reported success. Checking
+# here instead means a first run on a fresh clone (or a machine where npm install was never run)
+# just works.
+Invoke-Step 'Checking frontend dependencies' {
+    $frontendDir = Join-Path $repoRoot 'frontend'
+    if (Test-Path (Join-Path $frontendDir 'node_modules')) {
+        $global:LASTEXITCODE = 0
+        return
+    }
+    Write-Host '    node_modules missing, running npm install...' -ForegroundColor DarkGray
+    # `--prefix` only changes where npm installs to, not where it reads package.json from —
+    # that still comes from the process's current directory, which is whatever launched this
+    # script (control-panel.bat's own folder, when run that way) and is not necessarily
+    # $repoRoot. Push-Location first so `npm install` reads the right package.json.
+    Push-Location $frontendDir
+    try {
+        npm install
+    }
+    finally {
+        Pop-Location
+    }
+    # $LASTEXITCODE now reflects npm install itself; Invoke-Step checks it right after this
+    # scriptblock returns, so a failed install still throws instead of proceeding to launch
+    # Vite against a half-installed node_modules.
+}
+
+# Still not gated on an actual health check — Vite serves the app regardless, and the fixed
+# pause above is enough in practice — just no longer assuming the race is imperceptible.
 Invoke-Step 'Launching the frontend' {
     Start-Process powershell -WorkingDirectory $repoRoot -ArgumentList @(
         '-NoExit', '-Command', 'npm start --prefix frontend'
