@@ -120,7 +120,25 @@ public sealed class AuthController(
             new ChangePassword(userId, request.CurrentPassword, request.NewPassword),
             cancellationToken).ConfigureAwait(false);
 
-        return result.IsSuccess ? NoContent() : result.Problem(HttpContext);
+        if (!result.IsSuccess)
+        {
+            return result.Problem(HttpContext);
+        }
+
+        // Read the current cookie's persistence before replacing it. Re-issuing with a hard-coded
+        // false would silently downgrade a "remember me" session to a browser-session cookie as a
+        // side effect of changing a password.
+        var existing = await HttpContext
+            .AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme)
+            .ConfigureAwait(false);
+
+        // The stamp this request's cookie carries is now stale - the handler rotated it. Without
+        // re-issuing, this caller's very next request would 401 (Program.cs's OnValidatePrincipal),
+        // which is not what rotating the stamp is for: it is meant to end OTHER sessions.
+        await IssueCookieAsync(result.Value, existing.Properties?.IsPersistent ?? false)
+            .ConfigureAwait(false);
+
+        return NoContent();
     }
 
     private static SessionResponse ToResponse(SessionView session) => new()

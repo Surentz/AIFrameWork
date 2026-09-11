@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using FluentAssertions;
 
 namespace AiFramework.Api.IntegrationTests.Auth;
@@ -45,5 +46,42 @@ public sealed class SessionInvalidationTests(ApiFactory factory)
         {
             (await client.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.OK);
         }
+    }
+
+    [Fact]
+    public async Task ChangingThePassword_EndsTheUsersOtherSessions()
+    {
+        var (first, username) = await _factory.CreateAuthenticatedClientWithUsernameAsync();
+        var second = await _factory.SignInAgainAsync(username);
+        (await second.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var change = await first.PostAsJsonAsync(
+            new Uri("/api/auth/change-password", UriKind.Relative),
+            new
+            {
+                CurrentPassword = ApiFactory.RegisteredPassword,
+                NewPassword = "an even longer replacement password",
+            });
+        change.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await second.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ChangingThePassword_KeepsTheSessionThatChangedIt()
+    {
+        var client = await _factory.CreateAuthenticatedClientAsync();
+
+        await client.PostAsJsonAsync(
+            new Uri("/api/auth/change-password", UriKind.Relative),
+            new
+            {
+                CurrentPassword = ApiFactory.RegisteredPassword,
+                NewPassword = "an even longer replacement password",
+            });
+
+        // Signing someone out for changing their own password is hostile, and is not what the
+        // rotation is for. AuthController re-issues this cookie with the new stamp.
+        (await client.GetAsync(Me)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }

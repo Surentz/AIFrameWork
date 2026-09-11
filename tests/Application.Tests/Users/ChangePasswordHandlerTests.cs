@@ -33,6 +33,25 @@ public sealed class ChangePasswordHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_OnSuccess_ReturnsTheRotatedStamp()
+    {
+        var ada = AnAda();
+        var before = ada.SecurityStamp;
+        _users.GetAsync(ada.Id, Arg.Any<CancellationToken>()).Returns(ada);
+        _hasher.Verify("old-hash", "old password here").Returns(true);
+        _hasher.Hash("new password here").Returns("new-hash");
+        var handler = new ChangePasswordHandler(_users, _hasher);
+
+        var result = await handler.HandleAsync(
+            new ChangePassword(ada.Id, "old password here", "new password here"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.SecurityStamp.Should().Be(ada.SecurityStamp).And.NotBe(before);
+        result.Value.UserId.Should().Be(ada.Id);
+    }
+
+    [Fact]
     public async Task HandleAsync_WithTheWrongCurrentPassword_LeavesTheHashAlone()
     {
         var ada = AnAda();
