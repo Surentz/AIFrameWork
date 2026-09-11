@@ -295,6 +295,7 @@ defence, so no antiforgery token is issued.
 | `POST` | `/api/auth/logout` | cookie | Sign out |
 | `GET` | `/api/auth/me` | cookie | The current session |
 | `POST` | `/api/auth/change-password` | cookie | Change your own password |
+| `POST` | `/api/auth/sign-out-everywhere` | cookie | Invalidate every session for this user |
 | `POST` | `/api/orders` | cookie | Place an order |
 | `GET` | `/api/orders` | cookie | List your orders, paged |
 | `GET` | `/api/orders/{id}` | cookie | One of your orders |

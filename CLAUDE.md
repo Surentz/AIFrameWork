@@ -274,6 +274,30 @@ ordinary build stays ordinary, and only the two commands above and CI's `contrac
 the cost.
 
 
+## Session invalidation
+
+Every authenticated request costs one uncached read of the user's security stamp, in
+`Program.cs`'s `OnValidatePrincipal`. That read is deliberately **not** cached: `HybridCache`
+here is L1-only and cannot be evicted across pods, so caching it would let a revoked session
+survive on another replica for the length of the TTL.
+
+Rotating `User.SecurityStamp` invalidates every cookie already issued for that user. Three
+things rotate it: a password change, the failed sign-in that locks an account, and
+`POST /api/auth/sign-out-everywhere`.
+
+Two things that will cost you time:
+
+- **A cookie carrying no stamp claim is rejected.** That is what retires sessions issued before
+  ADR 0011, and it means any change to `SessionClaims.SecurityStamp`'s value signs everybody out.
+- **Changing a password re-issues the caller's own cookie.** `ChangePassword` returns a
+  `SessionView` rather than a bool for exactly this reason; without the re-issue in
+  `AuthController`, changing your own password signs you out.
+
+Nothing on the auth path is cached, which is what stops a stale stamp being served from the
+query cache. Do not make `GetUser` `ICacheable`.
+
+See ADR 0011.
+
 ## Caching
 
 Queries opt in by implementing `ICacheable` (`src/Application/Abstractions/Caching.cs`); commands
