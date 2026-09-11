@@ -4,18 +4,32 @@
 
 ## Versions
 
-| | Version |
-|---|---|
-| .NET SDK | 10.0.400 |
-| Target framework | net10.0 |
-| Node | 24.20.0 |
-| React | 19.2.8 |
-| Vite | 8.2.2 |
+| | Version | Where it is pinned |
+|---|---|---|
+| .NET SDK | 10.0.400 | `.github/workflows/ci.yml`. There is no `global.json`, so any 10.x SDK builds |
+| Target framework | net10.0 | `Directory.Build.props`, alongside `LangVersion` 14.0 |
+| Node | 24.20.0 | `.github/workflows/ci.yml`. 24.15.0 is the hard floor — see below |
+| React | 19.3.0 | `frontend/package-lock.json`, declared `^19.2.8` |
+| Vite | 8.3.0 | `frontend/package-lock.json`, declared `^8.2.2` |
+| TypeScript | 6.0.3 | `frontend/package-lock.json`, declared `~6.0.2` |
 
-Verified 2026-09-03 from `dotnet --list-sdks`, `node --version`, and `frontend/package.json`
-(post-install, resolved versions). The target framework was pinned when the solution was
-scaffolded. React and Vite were pinned once the workspace was created, read from the
-generated `package.json` — not from memory.
+Re-verified 2026-09-11 from `dotnet --list-sdks`, `node --version`, and the *lockfile* rather
+than `package.json` — the declared ranges are carets, so the resolved version drifts above the
+declared one and the two are worth keeping distinct. CI is the authority for the SDK and Node,
+because nothing in the repo pins either: without a `global.json` the SDK is whatever the machine
+has, and Node is whatever is on `PATH`.
+
+**Node 24.15.0 is a floor, not a preference.** Below it, `npm install` in `frontend/` fails
+outright: npm's own `engines` requirement rejects the upgrade, jsdom refuses to install, and the
+npm that ships with older 24.x crashes in its dependency resolver
+(`Cannot read properties of null (reading 'edgesOut')`). `scripts/install-prereqs.ps1` checks
+this floor.
+
+> **This machine does not match the table.** As of 2026-09-11 it has SDK 10.0.204 and 10.0.111
+> (no 4xx band at all) and Node 24.19.0, so a local build uses a different SDK feature band than
+> CI does. Nothing pins it, so nothing complains. Bring the machine up to the table before
+> trusting a green local build as evidence about CI, or treat the difference as a known variable
+> when the two disagree.
 
 ## Layout
 
