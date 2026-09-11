@@ -29,3 +29,7 @@ export function changePassword(change: PasswordChange): Promise<void> {
     body: JSON.stringify(change),
   });
 }
+
+export function signOutEverywhere(): Promise<void> {
+  return requestVoid('/api/auth/sign-out-everywhere', { method: 'POST' });
+}

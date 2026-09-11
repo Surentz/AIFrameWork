@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { useChangePassword } from './queries';
+import { useChangePassword, useSignOutEverywhere } from './queries';
 import '../orders/orders.css';
 
 /** Mirrors PasswordPolicy.MinimumLength in src/Application/Users; the server is the authority. */
@@ -11,6 +11,7 @@ export function ChangePasswordPage(): React.JSX.Element {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const mutation = useChangePassword();
+  const signOutEverywhere = useSignOutEverywhere();
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -119,6 +120,30 @@ export function ChangePasswordPage(): React.JSX.Element {
           )}
         </div>
       </form>
+
+      <div className="card order-form">
+        <h2>Other sessions</h2>
+        <p>
+          Signs you out on every device, including this one. Changing your password already ends
+          your other sessions.
+        </p>
+        <button
+          className="btn btn--secondary"
+          type="button"
+          onClick={() => {
+            signOutEverywhere.mutate();
+          }}
+          disabled={signOutEverywhere.isPending}
+        >
+          {signOutEverywhere.isPending && <span className="spinner" aria-hidden="true" />}
+          {signOutEverywhere.isPending ? 'Signing out…' : 'Sign out everywhere'}
+        </button>
+        {signOutEverywhere.isError && (
+          <p className="alert" role="alert">
+            {signOutEverywhere.error.message}
+          </p>
+        )}
+      </div>
     </>
   );
 }

@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
-import { changePassword, getSession, login, logout, register } from '../../api/auth';
+import {
+  changePassword,
+  getSession,
+  login,
+  logout,
+  register,
+  signOutEverywhere,
+} from '../../api/auth';
 import { ApiError } from '../../api/client';
 import type { Credentials, PasswordChange, Registration, Session } from './types';
 
@@ -71,4 +78,21 @@ export function useLogout(): UseMutationResult<void, ApiError, void> {
 
 export function useChangePassword(): UseMutationResult<void, ApiError, PasswordChange> {
   return useMutation({ mutationFn: changePassword });
+}
+
+/**
+ * Ends every session for the current user, this browser included. The cache teardown matches
+ * useLogout exactly: the server has already cleared this browser's cookie, so anything still
+ * cached was fetched as a user who is no longer signed in here.
+ */
+export function useSignOutEverywhere(): UseMutationResult<void, ApiError, void> {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: signOutEverywhere,
+    onSuccess: async () => {
+      client.setQueryData(authKeys.session(), null);
+      await client.invalidateQueries();
+    },
+  });
 }

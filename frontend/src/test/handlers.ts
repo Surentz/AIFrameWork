@@ -27,6 +27,7 @@ export const handlers = [
   http.get('/api/auth/me', () => HttpResponse.json(aSession)),
   http.post('/api/auth/logout', () => new HttpResponse(null, { status: 204 })),
   http.post('/api/auth/change-password', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/auth/sign-out-everywhere', () => new HttpResponse(null, { status: 204 })),
   http.get('/api/orders', () =>
     HttpResponse.json({
       items: [anOrder, { ...anOrder, id: '22222222-2222-2222-2222-222222222222', sku: 'SKU-2' }],
