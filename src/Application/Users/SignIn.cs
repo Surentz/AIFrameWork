@@ -95,7 +95,8 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
         user.RegisterFailedSignIn(now);
 
         if (await users.TryRecordFailedSignInAsync(
-                user.Id, expected, user.FailedSignInAttempts, user.LockedOutUntil, cancellationToken)
+                user.Id, expected, user.FailedSignInAttempts, user.LockedOutUntil,
+                RotatedStampOrNull(user, now), cancellationToken)
             .ConfigureAwait(false))
         {
             return;
@@ -114,7 +115,17 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
         latest.RegisterFailedSignIn(now);
 
         _ = await users.TryRecordFailedSignInAsync(
-                latest.Id, latestExpected, latest.FailedSignInAttempts, latest.LockedOutUntil, cancellationToken)
+                latest.Id, latestExpected, latest.FailedSignInAttempts, latest.LockedOutUntil,
+                RotatedStampOrNull(latest, now), cancellationToken)
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// The stamp to persist, or null to leave the stored one alone. Non-null only when this failure
+    /// actually locked the account: <see cref="User.RegisterFailedSignIn"/> rotates on the locking
+    /// failure and on no other, and rotating on every wrong guess would let anyone who knows a
+    /// username sign that user out at will, without ever learning the password.
+    /// </summary>
+    private static string? RotatedStampOrNull(User user, DateTimeOffset now) =>
+        user.IsLockedOut(now) ? user.SecurityStamp : null;
 }

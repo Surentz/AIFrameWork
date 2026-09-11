@@ -136,7 +136,8 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         await using (var write = fixture.CreateContext())
         {
             recorded = await new UserRepository(write).TryRecordFailedSignInAsync(
-                id, expectedAttempts: 0, attempts: 5, lockedOutUntil: lockedUntil, CancellationToken.None);
+                id, expectedAttempts: 0, attempts: 5, lockedOutUntil: lockedUntil,
+                rotatedSecurityStamp: null, CancellationToken.None);
             // Deliberately no SaveChangesAsync here.
         }
 
@@ -165,7 +166,8 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         await using (var winner = fixture.CreateContext())
         {
             await new UserRepository(winner).TryRecordFailedSignInAsync(
-                id, expectedAttempts: 0, attempts: 1, lockedOutUntil: null, CancellationToken.None);
+                id, expectedAttempts: 0, attempts: 1, lockedOutUntil: null,
+                rotatedSecurityStamp: null, CancellationToken.None);
         }
 
         bool recorded;
@@ -174,7 +176,8 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
             // Still believes the counter reads 0, exactly as a request that read before the
             // winner's UPDATE landed would.
             recorded = await new UserRepository(loser).TryRecordFailedSignInAsync(
-                id, expectedAttempts: 0, attempts: 1, lockedOutUntil: lockedUntil, CancellationToken.None);
+                id, expectedAttempts: 0, attempts: 1, lockedOutUntil: lockedUntil,
+                rotatedSecurityStamp: null, CancellationToken.None);
         }
 
         await using var verify = fixture.CreateContext();
@@ -200,6 +203,7 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
                 expectedAttempts: 0,
                 attempts: 5,
                 new DateTimeOffset(2026, 9, 8, 10, 0, 0, TimeSpan.Zero),
+                rotatedSecurityStamp: null,
                 CancellationToken.None);
             await repository.ClearSignInFailuresAsync(id, CancellationToken.None);
         }
@@ -226,6 +230,55 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         var found = await new UserRepository(reading).GetAsync(ada.Id, CancellationToken.None);
 
         found!.SecurityStamp.Should().Be(stamp);
+    }
+
+    [Fact]
+    public async Task TryRecordFailedSignInAsync_WithARotatedStamp_WritesIt()
+    {
+        await using var context = fixture.CreateContext();
+        var repository = new UserRepository(context);
+        var ada = User.Register(Guid.NewGuid(), AUniqueName(), "hash", "Ada Lovelace", RegisteredAt);
+        await repository.AddAsync(ada, CancellationToken.None);
+        await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
+        var original = ada.SecurityStamp;
+        var rotated = Guid.NewGuid().ToString("N");
+
+        var written = await repository.TryRecordFailedSignInAsync(
+            ada.Id,
+            expectedAttempts: 0,
+            attempts: User.MaxFailedSignInAttempts,
+            lockedOutUntil: DateTimeOffset.UtcNow.AddMinutes(15),
+            rotatedSecurityStamp: rotated,
+            CancellationToken.None);
+
+        written.Should().BeTrue();
+
+        await using var reading = fixture.CreateContext();
+        var found = await new UserRepository(reading).GetAsync(ada.Id, CancellationToken.None);
+        found!.SecurityStamp.Should().Be(rotated).And.NotBe(original);
+    }
+
+    [Fact]
+    public async Task TryRecordFailedSignInAsync_WithoutARotatedStamp_LeavesTheStampAlone()
+    {
+        await using var context = fixture.CreateContext();
+        var repository = new UserRepository(context);
+        var ada = User.Register(Guid.NewGuid(), AUniqueName(), "hash", "Ada Lovelace", RegisteredAt);
+        await repository.AddAsync(ada, CancellationToken.None);
+        await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
+        var original = ada.SecurityStamp;
+
+        await repository.TryRecordFailedSignInAsync(
+            ada.Id,
+            expectedAttempts: 0,
+            attempts: 1,
+            lockedOutUntil: null,
+            rotatedSecurityStamp: null,
+            CancellationToken.None);
+
+        await using var reading = fixture.CreateContext();
+        var found = await new UserRepository(reading).GetAsync(ada.Id, CancellationToken.None);
+        found!.SecurityStamp.Should().Be(original);
     }
 
     private async Task SeedAsync(Guid id)

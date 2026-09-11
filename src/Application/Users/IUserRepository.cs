@@ -37,11 +37,25 @@ public interface IUserRepository
     /// go nowhere.
     /// </para>
     /// </summary>
+    /// <param name="userId">The account to update.</param>
+    /// <param name="expectedAttempts">
+    /// The counter value the caller read before verifying the password. The write is refused if the
+    /// stored value has since moved.
+    /// </param>
+    /// <param name="attempts">The counter value to store.</param>
+    /// <param name="lockedOutUntil">The lockout expiry to store, or null to clear it.</param>
+    /// <param name="rotatedSecurityStamp">
+    /// The new stamp to store, or null to leave the existing one. Non-null only on the failure that
+    /// locks the account: the rotation is what cuts off a session that is already signed in, and it
+    /// cannot ride on the tracked entity because this write bypasses the unit of work. See ADR 0011.
+    /// </param>
+    /// <param name="cancellationToken">Propagated to the underlying <c>ExecuteUpdateAsync</c>.</param>
     public Task<bool> TryRecordFailedSignInAsync(
         Guid userId,
         int expectedAttempts,
         int attempts,
         DateTimeOffset? lockedOutUntil,
+        string? rotatedSecurityStamp,
         CancellationToken cancellationToken);
 
     /// <summary>

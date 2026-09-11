@@ -34,6 +34,7 @@ public sealed class UserRepository(AiFrameworkDbContext context) : IUserReposito
         int expectedAttempts,
         int attempts,
         DateTimeOffset? lockedOutUntil,
+        string? rotatedSecurityStamp,
         CancellationToken cancellationToken)
     {
         var updated = await context.Users
@@ -41,7 +42,10 @@ public sealed class UserRepository(AiFrameworkDbContext context) : IUserReposito
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(u => u.FailedSignInAttempts, attempts)
-                    .SetProperty(u => u.LockedOutUntil, lockedOutUntil),
+                    .SetProperty(u => u.LockedOutUntil, lockedOutUntil)
+                    // Coalesce rather than a second query shape: null means "keep what is stored",
+                    // so one statement serves both the ordinary failure and the locking one.
+                    .SetProperty(u => u.SecurityStamp, u => rotatedSecurityStamp ?? u.SecurityStamp),
                 cancellationToken)
             .ConfigureAwait(false);
 

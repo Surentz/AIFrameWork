@@ -28,6 +28,7 @@ public sealed class SignInHandlerTests
                 Arg.Any<int>(),
                 Arg.Any<int>(),
                 Arg.Any<DateTimeOffset?>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);
     }
@@ -158,7 +159,7 @@ public sealed class SignInHandlerTests
         // A fixed window: attempts made during a lockout must not touch the counter at all,
         // or an attacker could hold the account locked forever by continuing to guess.
         await _users.DidNotReceiveWithAnyArgs().TryRecordFailedSignInAsync(
-            Guid.Empty, default, default, default, default);
+            Guid.Empty, default, default, default, default, default);
     }
 
     [Fact]
@@ -186,7 +187,7 @@ public sealed class SignInHandlerTests
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
         await _users.Received(1).TryRecordFailedSignInAsync(
-            ada.Id, expectedAttempts: 0, attempts: 1, null, Arg.Any<CancellationToken>());
+            ada.Id, expectedAttempts: 0, attempts: 1, null, null, Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -207,6 +208,7 @@ public sealed class SignInHandlerTests
                 Arg.Any<int>(),
                 Arg.Any<int>(),
                 Arg.Any<DateTimeOffset?>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(false, true);
         var handler = new SignInHandler(_users, _hasher, _clock);
@@ -221,6 +223,7 @@ public sealed class SignInHandlerTests
             Arg.Any<int>(),
             Arg.Any<int>(),
             Arg.Any<DateTimeOffset?>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
         result.Error.Should().Be(
             new Error(ErrorKind.Unauthorized, "auth.failed", "That username and password do not match."),
@@ -247,6 +250,7 @@ public sealed class SignInHandlerTests
             User.MaxFailedSignInAttempts - 1,
             User.MaxFailedSignInAttempts,
             Now + User.LockoutDuration,
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -299,7 +303,50 @@ public sealed class SignInHandlerTests
         // An ordinary sign-in is the common case and must not cost a pointless UPDATE.
         await _users.DidNotReceiveWithAnyArgs().ClearSignInFailuresAsync(Guid.Empty, default);
         await _users.DidNotReceiveWithAnyArgs().TryRecordFailedSignInAsync(
-            Guid.Empty, default, default, default, default);
+            Guid.Empty, default, default, default, default, default);
+    }
+
+    [Fact]
+    public async Task HandleAsync_OnTheLockingFailure_PersistsARotatedStamp()
+    {
+        var ada = AnAda();
+        for (var i = 0; i < User.MaxFailedSignInAttempts - 1; i++)
+        {
+            ada.RegisterFailedSignIn(Now);
+        }
+
+        _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
+        _hasher.Verify("stored-hash", "wrong").Returns(false);
+        var handler = new SignInHandler(_users, _hasher, _clock);
+
+        await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
+
+        await _users.Received(1).TryRecordFailedSignInAsync(
+            ada.Id,
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<DateTimeOffset?>(),
+            Arg.Is<string?>(s => s != null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_OnAnOrdinaryFailure_PersistsNoStamp()
+    {
+        var ada = AnAda();
+        _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
+        _hasher.Verify("stored-hash", "wrong").Returns(false);
+        var handler = new SignInHandler(_users, _hasher, _clock);
+
+        await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
+
+        await _users.Received(1).TryRecordFailedSignInAsync(
+            ada.Id,
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<DateTimeOffset?>(),
+            null,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
