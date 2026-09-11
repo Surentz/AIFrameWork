@@ -135,6 +135,11 @@ public sealed class AuthController(
         // The stamp this request's cookie carries is now stale - the handler rotated it. Without
         // re-issuing, this caller's very next request would 401 (Program.cs's OnValidatePrincipal),
         // which is not what rotating the stamp is for: it is meant to end OTHER sessions.
+        //
+        // IssueCookieAsync builds a fresh AuthenticationProperties, so the cookie's absolute expiry
+        // restarts from now rather than carrying over the original sign-in's. Benign: Program.cs has
+        // SlidingExpiration on, so an active session's expiry is already being pushed forward on every
+        // request. Only IsPersistent is deliberately carried over from the cookie being replaced.
         await IssueCookieAsync(result.Value, existing.Properties?.IsPersistent ?? false)
             .ConfigureAwait(false);
 

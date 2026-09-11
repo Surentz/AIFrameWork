@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using AiFramework.Domain.Abstractions;
 
 namespace AiFramework.Domain.Users;
@@ -20,7 +21,7 @@ public sealed class User : Entity
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// The widest stamp the EF mapping allows. A "N"-format Guid is 32 characters; the slack is
+    /// The widest stamp the EF mapping allows. 128 bits hex-encoded is 32 characters; the slack is
     /// for a future format change and costs nothing in Postgres.
     /// </summary>
     public const int MaxSecurityStampLength = 64;
@@ -201,5 +202,9 @@ public sealed class User : Entity
     // Generated here rather than handed in the way Id is. The stamp is opaque - no test asserts a
     // specific value, only that it changed - so injecting it would buy no determinism while
     // changing three handler signatures. Deliberate departure from Order.Place's convention.
-    private static string NewStamp() => Guid.NewGuid().ToString("N");
+    //
+    // 128 bits from the platform CSPRNG, hex-encoded - the same construction ASP.NET Core Identity
+    // uses for its own security stamp. A Guid is not specified to be unpredictable; this is a value
+    // an attacker must not be able to guess or influence, not merely one that must be unique.
+    private static string NewStamp() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 }
