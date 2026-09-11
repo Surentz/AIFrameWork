@@ -187,25 +187,35 @@ public sealed class AuthEndpointTests(ApiFactory factory)
     public async Task PostLogin_WhenLockedOut_IsIndistinguishableFromAWrongPassword()
     {
         var lockedOutUser = AUsername();
-        using var client = factory.CreateClient();
-        (await client.PostAsJsonAsync("/api/auth/register", ARegistration(lockedOutUser)))
+        var otherUser = AUsername();
+        using var registrar = factory.CreateClient();
+        (await registrar.PostAsJsonAsync("/api/auth/register", ARegistration(lockedOutUser)))
             .EnsureSuccessStatusCode();
+        (await registrar.PostAsJsonAsync("/api/auth/register", ARegistration(otherUser)))
+            .EnsureSuccessStatusCode();
+
+        // Every probe below - the attempts that cause the lockout, the locked-out probe, and the
+        // wrong-password comparison - goes through this separate, never-registered client, so it
+        // never holds a cookie. The locking failure rotates lockedOutUser's stamp (ADR 0011,
+        // Task 7): a prober who had registered (and so was signed in as) lockedOutUser would see
+        // its OWN session invalidated by the very lockout it is causing, adding Set-Cookie and
+        // cache-control headers that are about the prober's session, not about the account being
+        // distinguishable. A genuine anonymous attacker never holds that cookie in the first
+        // place, so the probe client must not either.
+        using var prober = factory.CreateClient();
 
         for (var attempt = 0; attempt < User.MaxFailedSignInAttempts; attempt++)
         {
-            await client.PostAsJsonAsync(
+            await prober.PostAsJsonAsync(
                 "/api/auth/login",
                 new { Username = lockedOutUser, Password = "not the password", RememberMe = false });
         }
 
-        var lockedOut = await client.PostAsJsonAsync(
+        var lockedOut = await prober.PostAsJsonAsync(
             "/api/auth/login",
             new { Username = lockedOutUser, Password = "not the password", RememberMe = false });
 
-        var otherUser = AUsername();
-        (await client.PostAsJsonAsync("/api/auth/register", ARegistration(otherUser)))
-            .EnsureSuccessStatusCode();
-        var wrongPassword = await client.PostAsJsonAsync(
+        var wrongPassword = await prober.PostAsJsonAsync(
             "/api/auth/login",
             new { Username = otherUser, Password = "not the password", RememberMe = false });
 
