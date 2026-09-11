@@ -212,6 +212,22 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         found.LockedOutUntil.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetAsync_RoundTripsTheSecurityStamp()
+    {
+        await using var context = fixture.CreateContext();
+        var repository = new UserRepository(context);
+        var ada = User.Register(Guid.NewGuid(), AUniqueName(), "hash", "Ada Lovelace", RegisteredAt);
+        var stamp = ada.SecurityStamp;
+        await repository.AddAsync(ada, CancellationToken.None);
+        await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
+
+        await using var reading = fixture.CreateContext();
+        var found = await new UserRepository(reading).GetAsync(ada.Id, CancellationToken.None);
+
+        found!.SecurityStamp.Should().Be(stamp);
+    }
+
     private async Task SeedAsync(Guid id)
     {
         await using var seed = fixture.CreateContext();

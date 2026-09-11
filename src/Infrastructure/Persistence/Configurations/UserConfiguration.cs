@@ -28,6 +28,8 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         // until a time in the past" and avoids a sentinel date.
         builder.Property(u => u.LockedOutUntil);
 
+        builder.Property(u => u.SecurityStamp).IsRequired().HasMaxLength(User.MaxSecurityStampLength);
+
         // DomainEvents is transient state the interceptor drains before save; it is not
         // persisted. Without this, EF tries to map IDomainEvent as an entity type and the
         // model fails to build at first use.
