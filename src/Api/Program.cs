@@ -14,6 +14,7 @@ using JasperFx;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
@@ -180,6 +181,34 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
+// Off by default, and that default is load-bearing. The limiter above partitions on
+// Connection.RemoteIpAddress, which behind ingress-nginx is the ingress pod for every caller -
+// so the whole world shares one partition. Believing X-Forwarded-For fixes that, but only by
+// clearing the proxy allow-list below, and a host that trusts the header while being directly
+// reachable lets any caller mint a fresh partition per request simply by varying it. Enable it
+// only where an ingress is provably the sole path in; see ADR 0012.
+if (builder.Configuration.GetValue("ForwardedHeaders:Enabled", defaultValue: false))
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        // XForwardedFor only. Nothing in this application reads Request.IsHttps -
+        // CookieSecurePolicy.Always is unconditional in Production - so forwarding the proto
+        // would change behaviour for no benefit.
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+
+        // Exactly one proxy: the ingress. A larger limit would let a client prepend its own
+        // hop and choose which address the limiter sees.
+        options.ForwardLimit = 1;
+
+        // Cleared because the proxy is a cluster-assigned pod IP, not loopback, and its address
+        // is not knowable at build time. Safe only under the flag above.
+        // The network list property was renamed to KnownIPNetworks in this SDK (ASPDEPR005
+        // flags the old name as obsolete); the proxy list property has no such replacement.
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+}
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
@@ -221,6 +250,11 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Must precede UseRateLimiter: after it, the limiter has already read the pre-rewrite address
+// and the rewrite changes nothing. Registered unconditionally - with the flag off,
+// ForwardedHeadersOptions keeps its defaults, which forward nothing.
+app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.MapControllers();
 
