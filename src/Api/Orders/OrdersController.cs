@@ -48,6 +48,9 @@ public sealed class OrdersController(
                     Sku = i.Sku,
                     Quantity = i.Quantity,
                     PlacedAt = i.PlacedAt,
+                    ProductId = i.ProductId,
+                    ProductName = i.ProductName,
+                    UnitPrice = i.UnitPrice,
                 })],
                 NextCursor = result.Value.NextCursor,
             })
@@ -69,6 +72,9 @@ public sealed class OrdersController(
                 Sku = result.Value.Sku,
                 Quantity = result.Value.Quantity,
                 PlacedAt = result.Value.PlacedAt,
+                ProductId = result.Value.ProductId,
+                ProductName = result.Value.ProductName,
+                UnitPrice = result.Value.UnitPrice,
             })
             : result.Problem(HttpContext);
     }

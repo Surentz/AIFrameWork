@@ -2,7 +2,14 @@ using AiFramework.Application.Abstractions;
 
 namespace AiFramework.Application.Orders;
 
-public sealed record OrderListItem(Guid Id, string Sku, int Quantity, DateTimeOffset PlacedAt);
+public sealed record OrderListItem(
+    Guid Id,
+    string Sku,
+    int Quantity,
+    DateTimeOffset PlacedAt,
+    Guid? ProductId,
+    string? ProductName,
+    decimal? UnitPrice);
 
 public sealed record OrderPage(IReadOnlyList<OrderListItem> Items, string? NextCursor);
 
@@ -78,7 +85,9 @@ public sealed class GetOrdersHandler(IOrderRepository orders, ICurrentUser curre
 
         var hasMore = rows.Count > query.Limit;
         var page = rows.Take(query.Limit)
-            .Select(o => new OrderListItem(o.Id, o.Sku, o.Quantity, o.PlacedAt))
+            .Select(o => new OrderListItem(
+                o.Id, o.Sku, o.Quantity, o.PlacedAt,
+                o.Product?.ProductId, o.Product?.Name, o.Product?.UnitPrice))
             .ToArray();
 
         var next = hasMore

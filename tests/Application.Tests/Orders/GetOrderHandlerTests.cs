@@ -20,14 +20,16 @@ public sealed class GetOrderHandlerTests
     public async Task HandleAsync_WhenTheOrderExists_ReturnsTheView()
     {
         var id = Guid.NewGuid();
+        var product = AnOrderedProduct.Any();
         _repository.GetAsync(id, UserId, Arg.Any<CancellationToken>())
-            .Returns(Order.Place(id, UserId, 4, PlacedAt, AnOrderedProduct.Any(), "SKU-1"));
+            .Returns(Order.Place(id, UserId, 4, PlacedAt, product, "SKU-1"));
         var handler = new GetOrderHandler(_repository, _currentUser);
 
         var result = await handler.HandleAsync(new GetOrder(id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().Be(new OrderView(id, "SKU-1", 4, PlacedAt));
+        result.Value.Should().Be(new OrderView(
+            id, "SKU-1", 4, PlacedAt, product.ProductId, product.Name, product.UnitPrice));
     }
 
     [Fact]

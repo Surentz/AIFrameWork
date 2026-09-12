@@ -169,5 +169,32 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
             "another user's order id must be indistinguishable from one that was never issued");
     }
 
+    [Fact]
+    public async Task PostOrders_ThenGet_ReturnsTheProductSnapshot()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client, price: 12.50m);
+
+        var created = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 2 });
+        var id = await created.Content.ReadFromJsonAsync<Guid>();
+
+        var order = await client.GetFromJsonAsync<JsonElement>($"/api/orders/{id}");
+
+        order.GetProperty("productName").GetString().Should().Be("Widget");
+        order.GetProperty("unitPrice").GetDecimal().Should().Be(12.50m);
+        order.GetProperty("productId").GetGuid().Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task PostOrders_WithAnUnknownSku_Returns400()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/orders", new { Sku = "SKU-NOT-IN-THE-CATALOGUE", Quantity = 2 });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     public sealed record OrderResponseDto(Guid Id, string Sku, int Quantity, DateTimeOffset PlacedAt);
 }

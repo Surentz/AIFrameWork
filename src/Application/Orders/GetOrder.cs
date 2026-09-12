@@ -2,7 +2,14 @@ using AiFramework.Application.Abstractions;
 
 namespace AiFramework.Application.Orders;
 
-public sealed record OrderView(Guid Id, string Sku, int Quantity, DateTimeOffset PlacedAt);
+public sealed record OrderView(
+    Guid Id,
+    string Sku,
+    int Quantity,
+    DateTimeOffset PlacedAt,
+    Guid? ProductId,
+    string? ProductName,
+    decimal? UnitPrice);
 
 public sealed record GetOrder(Guid Id) : IQuery<OrderView>, ICacheable
 {
@@ -31,7 +38,8 @@ public sealed class GetOrderHandler(IOrderRepository orders, ICurrentUser curren
         return order is null
             ? Result.Failure<OrderView>(new Error(
                 ErrorKind.NotFound, "order.not_found", $"No order with id '{query.Id}'."))
-            : Result.Success(
-                new OrderView(order.Id, order.Sku, order.Quantity, order.PlacedAt));
+            : Result.Success(new OrderView(
+                order.Id, order.Sku, order.Quantity, order.PlacedAt,
+                order.Product?.ProductId, order.Product?.Name, order.Product?.UnitPrice));
     }
 }
