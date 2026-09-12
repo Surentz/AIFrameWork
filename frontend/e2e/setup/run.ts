@@ -11,6 +11,9 @@
 // It also sets E2E_TARGET itself, because `E2E_TARGET=kind npm run e2e` is bash syntax that does
 // nothing in PowerShell — and adding cross-env for one variable is not worth a dependency.
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 function run(command: string, args: readonly string[]): void {
   const result = spawnSync(command, [...args], { stdio: 'inherit' });
@@ -57,7 +60,7 @@ if (target === 'local') {
   run(process.execPath, ['e2e/setup/prepare-database.ts']);
 }
 
-const playwrightArgs = ['playwright', 'test', ...passthrough];
+const playwrightArgs = ['test', ...passthrough];
 
 // Anything we do not manage has production-shaped configuration: caching on, the real rate
 // limit, and a database that keeps whatever earlier runs left behind.
@@ -65,13 +68,13 @@ if (target !== 'local') {
   playwrightArgs.push('--grep-invert', '@local-only');
 }
 
-if (process.platform === 'win32') {
-  // npx is a .cmd shim on Windows, and on this machine's Node build (v24.20.0) spawnSync
-  // throws EINVAL invoking `npx.cmd` directly - reproducible with a bare, argument-free call,
-  // so it is a Node/Windows spawnSync regression, not anything about this project's arguments.
-  // Routing through cmd.exe's own /d /s /c sidesteps Node's `.cmd`-shim handling entirely,
-  // without `shell: true`'s DEP0190 deprecation warning and unescaped-argument risk.
-  run(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'npx', ...playwrightArgs]);
-} else {
-  run('npx', playwrightArgs);
-}
+// Not `npx`/`npx.cmd`: on Windows, spawnSync throws EINVAL invoking `npx.cmd` directly on some
+// Node builds (reproduced here on Node 24.20.0, even bare with no arguments - a Node/Windows
+// spawnSync regression, not anything about this project's arguments; see CVE-2024-27980, the
+// batch-file command-injection fix that made `.cmd`/`.bat` spawning on Windows fragile). Routing
+// through `cmd.exe /c` sidesteps that, but trades it for a worse bug: cmd.exe re-tokenizes the
+// whole line by its OWN grammar, so a perfectly normal `--grep "@auth|@orders"` has its `|` read
+// as a pipe instead of passed through - silent, Windows-only breakage on ordinary input.
+// Resolving Playwright's own CLI entry point and running it directly with `process.execPath`
+// avoids a shim, a shell, and the quoting question entirely, on every platform.
+run(process.execPath, [require.resolve('@playwright/test/cli'), ...playwrightArgs]);
