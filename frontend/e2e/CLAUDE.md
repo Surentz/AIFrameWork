@@ -75,8 +75,9 @@ says otherwise. Add the tag when a test needs any of these:
 
 **Two specs carry it today, and the arithmetic is worth spelling out.** `registration.spec.ts`
 registers three times across its two tests (a UI register, an `api.register`, and the duplicate
-attempt); `change-password.spec.ts` registers and signs in again in each of its two tests, four
-calls total. Seven of the suite's twelve tests' worth of auth calls sit in those two files alone.
+attempt); `change-password.spec.ts` spends four across its two — the first test only registers, the
+second registers and then signs in twice, once with the old password and once with the new.
+Seven of the suite's twelve tests' worth of auth calls sit in those two files alone.
 Run untagged against the cluster's shared 10-per-60-seconds partition, they would eat most of the
 budget before the rest of the suite got a permit. **A `kind` run therefore executes 8 of the 12
 tests, not all 12** — `npm run e2e` still runs all twelve locally, where the test host's limit is

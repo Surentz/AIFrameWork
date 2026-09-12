@@ -421,7 +421,7 @@ double-click user.
 
 The naive fix opens a larger hole than it closes. ASP.NET trusts only loopback proxies by
 default; behind ingress-nginx the proxy is a cluster-assigned pod IP, so making it work at all
-requires clearing `KnownNetworks`/`KnownProxies`. Once trust is cleared, anyone who can reach
+requires clearing `KnownIPNetworks`/`KnownProxies`. Once trust is cleared, anyone who can reach
 the API directly can spoof `X-Forwarded-For` and mint a fresh rate-limit partition per
 request — a complete bypass of ADR 0008's volume defence.
 
@@ -435,7 +435,8 @@ if (builder.Configuration.GetValue("ForwardedHeaders:Enabled", defaultValue: fal
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
         options.ForwardLimit = 1;
-        options.KnownNetworks.Clear();
+        // Renamed from KnownNetworks under ASPDEPR005; same object instance either name.
+        options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
     });
 }
@@ -457,12 +458,10 @@ off-case is the regression guard that stops the flag later being "simplified" aw
 leaves `Connection.RemoteIpAddress` null — which is why `Program.cs`'s rate-limiter partition
 key has its `"unknown"` fallback. `ForwardedHeadersMiddleware` rewrites cleanly from that null
 starting point: both `ForwardedHeadersTests` below pass with no `IStartupFilter` or other
-fallback to give TestServer a non-null starting address. Also note for any future reader of the
-code block above: this SDK ships `ForwardedHeadersOptions.KnownIPNetworks`, not `KnownNetworks`
-— the old name is obsolete (ASPDEPR005, an error here since warnings are errors) — and a
-reviewer confirmed by reflection that the two properties are the same object instance, so
-clearing one clears both. The rest of this section is left as drafted, as the historical record
-of the question this answers.
+fallback to give TestServer a non-null starting address. The rest of this section is left as
+drafted, as the historical record of the question this answers — the code block above is the
+one exception, corrected to the SDK's real property name rather than preserved as drafted,
+since a reader skimming code rather than prose could copy an identifier that no longer compiles.
 
 **This fix does not raise the suite's own ceiling.** Every worker on one machine shares a
 client IP and so would still share a partition. It is a production correctness fix — without

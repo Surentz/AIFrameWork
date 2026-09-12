@@ -160,7 +160,8 @@ disuse, not a permanent exemption.
 **Two specs are tagged `@local-only`, and a cluster run therefore executes 8 of the suite's 12
 tests, not 12.** `registration.spec.ts` spends three auth-endpoint calls across its two tests (a
 UI registration, an `api.register`, and a duplicate-username attempt); `change-password.spec.ts`
-spends four across its two (each test registers a fresh user, then signs in again). Seven of the
+spends four across its two — the first test only registers a fresh user, the second registers
+one and then signs in twice, once with the old password and once with the new. Seven of the
 suite's worth of auth calls sit in those two files — untagged, a cluster run would spend most of
 its 10-per-60-seconds budget on them before the rest of the suite got a permit. `run.ts` passes
 `--grep-invert @local-only` for any target but `local`, so `npm run e2e` still runs all twelve
