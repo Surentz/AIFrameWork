@@ -25,11 +25,12 @@ npm that ships with older 24.x crashes in its dependency resolver
 (`Cannot read properties of null (reading 'edgesOut')`). `scripts/install-prereqs.ps1` checks
 this floor.
 
-> **This machine does not match the table.** As of 2026-09-11 it has SDK 10.0.204 and 10.0.111
-> (no 4xx band at all) and Node 24.19.0, so a local build uses a different SDK feature band than
-> CI does. Nothing pins it, so nothing complains. Bring the machine up to the table before
-> trusting a green local build as evidence about CI, or treat the difference as a known variable
-> when the two disagree.
+> **This machine now matches the table.** Re-checked 2026-09-12: `dotnet --list-sdks` shows only
+> `10.0.400`, and `node --version` reports `v24.20.0` — both exactly the pinned versions above.
+> The gap noted here on 2026-09-11 (SDK 10.0.204/10.0.111, Node 24.19.0) is gone; a green local
+> build is now real evidence about CI on the SDK/Node axis. Re-verify with the same two commands
+> before trusting this note itself, since nothing in the repo pins either and the machine can
+> drift again silently.
 
 ## Layout
 
