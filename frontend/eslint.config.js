@@ -41,4 +41,14 @@ export default tseslint.config(
       'no-empty': ['error', { allowEmptyCatch: false }],
     },
   },
+  {
+    // e2e/ is Playwright test code, never React component code. Its fixtures take a `use`
+    // callback parameter - the same name as the React hook - which eslint-plugin-react-hooks
+    // otherwise flags as a hook called outside a component. The rule's intent (hooks only run
+    // inside components/hooks) does not apply to a Playwright fixture function.
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 );
