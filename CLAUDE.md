@@ -183,7 +183,10 @@ command to regenerate the certificate when it expires (2027-09-10). Neither is a
 into an overlay that targets a real environment.
 
 Cache eviction correctness depends on the ingress's cookie affinity: `HybridCache` is L1-only,
-so a write handled by one pod cannot evict an entry held by the other. See ADR 0010.
+so a write handled by one pod cannot evict an entry held by the other. That affinity lives on
+its own `aiframework-api` Ingress and must stay there — annotations apply to a whole Ingress,
+so putting the SPA's `/` path back alongside `/api` issues a *second* `aiframework.route`
+cookie, which silently disables affinity rather than erroring. See ADR 0010.
 
 `./deploy/e2e-k8s.ps1` runs the Playwright suite against this cluster — a gate that exercises
 durable Wolverine, caching on, two replicas, and the real rate limit, none of which the compose
