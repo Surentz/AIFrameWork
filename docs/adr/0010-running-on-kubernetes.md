@@ -103,6 +103,22 @@ rebalanced, the new pod holds no entry for them at all, because affinity meant t
 served there. That is a cold miss and a database read, not a stale read. A stale read would
 need two rebalances inside the same 30-second window.
 
+**Affinity is a property of an Ingress, not of a path, and that is the trap in this decision.**
+These annotations were first applied to a single Ingress carrying both backends — `/api` to the
+API and `/` to the SPA. ingress-nginx honours them per backend, so it issued a sticky cookie for
+*each*, both named `aiframework.route`: one scoped `Path=/api` hashing an api pod, one scoped
+`Path=/` hashing a web pod. A browser stores those as two distinct cookies and sends both on
+every `/api` request, at which point nginx stops resolving affinity and load-balances instead —
+reinstating precisely the one-placement-in-four failure enumerated above, with the annotations
+present and apparently correct. Measured on the kind cluster, the read-your-own-writes path
+failed 4 attempts in 15, and `frontend/e2e/specs/orders/place-order.spec.ts` — untagged so that
+it runs here for exactly this reason — failed intermittently against it. Splitting the manifest
+into `aiframework-api`, which carries the affinity annotations, and `aiframework-web`, which
+deliberately carries none because it serves a static bundle and needs no stickiness, leaves
+exactly one `aiframework.route` cookie and took both measurements to zero. The general rule this
+leaves behind: every backend sharing an Ingress shares its affinity annotations, so a session
+cookie name is only safe on an Ingress with a single backend behind it.
+
 **Kustomize over Helm, with the migration-ordering cost moved into `deploy/deploy.ps1`.**
 There is exactly one environment here, so Helm's templating buys nothing. What Helm did offer
 was its `pre-upgrade` hook, the natural primitive for "migrations must finish before any pod
