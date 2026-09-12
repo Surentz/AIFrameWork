@@ -14,7 +14,7 @@
 // Teardown is still `globalTeardown` in playwright.config.ts — that one runs late, which is
 // exactly when it should.
 import { execFileSync } from 'node:child_process';
-import { E2E_CONNECTION_STRING } from './env.ts';
+import { E2E_CONNECTION_STRING } from '../support/env.ts';
 
 // dotnet-ef is a local tool (.config/dotnet-tools.json); without a restore this only works
 // by accident, on a machine that also happens to have it installed globally.

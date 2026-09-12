@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { signUp } from './sign-up.ts';
+import { signUp } from '../support/sign-up.ts';
 
 test('registers, signs out, and signs back in', async ({ page }) => {
   const username = await signUp(page);

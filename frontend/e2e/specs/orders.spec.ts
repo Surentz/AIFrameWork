@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { signUp } from './sign-up.ts';
+import { signUp } from '../support/sign-up.ts';
 
 // The orders endpoints carry [Authorize] now, so every one of these starts signed in. Without
 // this, /orders redirects to /login and the assertions below never see an order at all.
