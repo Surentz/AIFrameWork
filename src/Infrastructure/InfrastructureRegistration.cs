@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
+using AiFramework.Application.Products;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
 using AiFramework.Infrastructure.Caching;
@@ -44,6 +45,11 @@ public static class InfrastructureRegistration
         services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
         services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
 
+        services.AddCommand<CreateProduct, Guid, CreateProductHandler>();
+        services.AddCommand<UpdateProduct, bool, UpdateProductHandler>();
+        services.AddQuery<GetProduct, ProductView, GetProductHandler>();
+        services.AddQuery<GetProducts, ProductPage, GetProductsHandler>();
+
         services.AddCommand<RegisterUser, SessionView, RegisterUserHandler>();
         services.AddCommand<SignIn, SessionView, SignInHandler>();
         services.AddCommand<ChangePassword, SessionView, ChangePasswordHandler>();
@@ -51,6 +57,8 @@ public static class InfrastructureRegistration
         services.AddQuery<GetUser, SessionView, GetUserHandler>();
 
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
+        services.AddScoped<IValidator<CreateProduct>, CreateProductValidator>();
+        services.AddScoped<IValidator<UpdateProduct>, UpdateProductValidator>();
         services.AddScoped<IValidator<RegisterUser>, RegisterUserValidator>();
         services.AddScoped<IValidator<SignIn>, SignInValidator>();
         services.AddScoped<IValidator<ChangePassword>, ChangePasswordValidator>();
@@ -75,6 +83,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
+        services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ISessionValidator, SessionValidator>();
         services.AddSingleton<IClock, SystemClock>();

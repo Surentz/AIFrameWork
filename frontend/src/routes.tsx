@@ -7,6 +7,10 @@ import { RequireAuth } from './features/auth/RequireAuth';
 import { OrderDetail } from './features/orders/OrderDetail';
 import { OrderList } from './features/orders/OrderList';
 import { PlaceOrderForm } from './features/orders/PlaceOrderForm';
+import { CreateProductForm } from './features/products/CreateProductForm';
+import { EditProductForm } from './features/products/EditProductForm';
+import { ProductDetail } from './features/products/ProductDetail';
+import { ProductList } from './features/products/ProductList';
 
 export function AppRoutes(): React.JSX.Element {
   return (
@@ -24,6 +28,12 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/orders" element={<OrderList />} />
           <Route path="/orders/new" element={<PlaceOrderForm />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
+          {/* /products/new is declared before /products/:id so "new" is matched as the literal
+              route, not captured as an id. */}
+          <Route path="/products" element={<ProductList />} />
+          <Route path="/products/new" element={<CreateProductForm />} />
+          <Route path="/products/:id" element={<ProductDetail />} />
+          <Route path="/products/:id/edit" element={<EditProductForm />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
         </Route>
       </Route>

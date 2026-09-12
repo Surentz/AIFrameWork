@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { Session } from '../features/auth/types';
 import type { Order } from '../features/orders/types';
+import type { Product } from '../features/products/types';
 
 // Typed against the generated schema, not loose. An untyped fixture is how a renamed backend
 // property leaves the frontend tests passing while the app breaks — the tests would keep
@@ -11,6 +12,16 @@ export const anOrder: Order = {
   sku: 'SKU-1',
   quantity: 2,
   placedAt: '2026-09-02T10:00:00+00:00',
+};
+
+export const aProduct: Product = {
+  id: '44444444-4444-4444-4444-444444444444',
+  sku: 'SKU-1',
+  name: 'Widget',
+  description: 'A widget.',
+  price: 9.99,
+  createdAt: '2026-09-02T10:00:00+00:00',
+  updatedAt: '2026-09-02T10:00:00+00:00',
 };
 
 export const aSession: Session = {
@@ -38,6 +49,20 @@ export const handlers = [
     HttpResponse.json({ ...anOrder, id: String(params.id) }),
   ),
   http.post('/api/orders', () => HttpResponse.json(anOrder.id, { status: 201 })),
+  http.get('/api/products', () =>
+    HttpResponse.json({
+      items: [
+        aProduct,
+        { ...aProduct, id: '55555555-5555-5555-5555-555555555555', sku: 'SKU-2', name: 'Gadget' },
+      ],
+      nextCursor: null,
+    }),
+  ),
+  http.get('/api/products/:id', ({ params }) =>
+    HttpResponse.json({ ...aProduct, id: String(params.id) }),
+  ),
+  http.post('/api/products', () => HttpResponse.json(aProduct.id, { status: 201 })),
+  http.put('/api/products/:id', () => new HttpResponse(null, { status: 204 })),
 ];
 
 export const server = setupServer(...handlers);

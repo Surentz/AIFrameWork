@@ -52,11 +52,20 @@ export async function registerUser(): Promise<TestUser> {
   }
 }
 
+export interface NewProduct {
+  readonly sku: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly price: string;
+}
+
 export interface ApiClient {
   register(): Promise<TestUser>;
   placeOrder(user: TestUser, order: { sku: string; quantity: number }): Promise<string>;
   /** `count` orders with generated SKUs, in parallel. Returns the SKUs, newest-first order not guaranteed. */
   placeOrders(user: TestUser, count: number): Promise<readonly string[]>;
+  /** Returns the new product's id. The catalogue is global, so any signed-in user may add to it. */
+  createProduct(user: TestUser, product: NewProduct): Promise<string>;
   dispose(): Promise<void>;
 }
 
@@ -95,9 +104,25 @@ export function createApiClient(): ApiClient {
     return (await response.json()) as string;
   }
 
+  async function createProduct(user: TestUser, product: NewProduct): Promise<string> {
+    const context = await contextFor(user);
+    const response = await context.post('/api/products', {
+      data: { description: null, ...product },
+    });
+
+    if (!response.ok()) {
+      throw new Error(
+        `Creating '${product.sku}' failed with ${String(response.status())}: ${await response.text()}`,
+      );
+    }
+
+    return (await response.json()) as string;
+  }
+
   return {
     register: registerUser,
     placeOrder,
+    createProduct,
     async placeOrders(user, count) {
       const skus = Array.from({ length: count }, () => uniqueSku());
       await Promise.all(skus.map((sku) => placeOrder(user, { sku, quantity: 1 })));

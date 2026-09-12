@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using AiFramework.Application.Abstractions;
 
 namespace AiFramework.Application.Orders;
@@ -63,7 +61,7 @@ public sealed class GetOrdersHandler(IOrderRepository orders, ICurrentUser curre
         (DateTimeOffset PlacedAt, Guid Id)? after = null;
         if (query.Cursor is not null)
         {
-            if (!TryDecode(query.Cursor, out var decoded))
+            if (!KeysetCursor.TryDecode(query.Cursor, out var decoded))
             {
                 return Result.Failure<OrderPage>(new Error(
                     ErrorKind.Validation, "orders.malformed_cursor",
@@ -84,36 +82,9 @@ public sealed class GetOrdersHandler(IOrderRepository orders, ICurrentUser curre
             .ToArray();
 
         var next = hasMore
-            ? Encode(page[^1].PlacedAt, page[^1].Id)
+            ? KeysetCursor.Encode(page[^1].PlacedAt, page[^1].Id)
             : null;
 
         return Result.Success(new OrderPage(page, next));
-    }
-
-    private static string Encode(DateTimeOffset placedAt, Guid id) =>
-        Convert.ToBase64String(Encoding.UTF8.GetBytes(
-            $"{placedAt.ToString("O", CultureInfo.InvariantCulture)}|{id}"));
-
-    private static bool TryDecode(string cursor, out (DateTimeOffset PlacedAt, Guid Id) value)
-    {
-        value = default;
-
-        Span<byte> buffer = new byte[cursor.Length];
-        if (!Convert.TryFromBase64String(cursor, buffer, out var written))
-        {
-            return false;
-        }
-
-        var parts = Encoding.UTF8.GetString(buffer[..written]).Split('|');
-        if (parts.Length != 2
-            || !DateTimeOffset.TryParse(parts[0], CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind, out var placedAt)
-            || !Guid.TryParse(parts[1], out var id))
-        {
-            return false;
-        }
-
-        value = (placedAt, id);
-        return true;
     }
 }
