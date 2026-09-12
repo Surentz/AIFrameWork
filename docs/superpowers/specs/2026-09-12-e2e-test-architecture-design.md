@@ -3,7 +3,8 @@
 **Date:** 2026-09-12
 **Status:** Approved for planning
 **Scope:** `frontend/e2e`, `frontend/playwright.config.ts`, `src/Api/Program.cs`,
-`k8s/overlays/local/config.yaml`, `deploy/`, `local-run/`, `.github/workflows/ci.yml`
+`k8s/overlays/local/config.yaml`, `deploy/`, `scripts/`, `local-run/`,
+`.github/workflows/ci.yml`
 
 ---
 
@@ -152,6 +153,8 @@ leaves 0011 reserved.
 | D9 | Kubernetes is an additional gate, not the primary run | F5 makes it valuable; build-and-deploy cost makes it unsuitable as the everyday loop |
 | D10 | `UseForwardedHeaders` added, gated by config, default off | F1 — and clearing proxy trust unconditionally would turn `X-Forwarded-For` into a rate-limiter bypass |
 | D11 | One Node entry point (`run.ts`) replaces the `&&` script chain | Makes DB prep unforgettable and works identically in PowerShell and bash |
+| D12 | Both e2e runs, and the report, reachable from `control-panel.bat` | It is the front door for people who do not open a terminal; an e2e suite they cannot start is one they will not run |
+| D13 | `install-prereqs.ps1` gains a Playwright chromium check | Without it D12's local option fails on a new machine with an error naming neither cause nor fix |
 
 ---
 
@@ -376,9 +379,41 @@ isolated, and clean; the kind run covers what only it can (F5).
    rollout.
 4. Runs Playwright with `E2E_TARGET=kind` and `--grep-invert @local-only`.
 
-`local-run/control-panel.bat` gains **option 6, "Run e2e against Kubernetes"**, renumbering
-Exit to 7. Consistent with the file's existing shape: a menu entry calling one `.ps1`, with no
-logic of its own.
+---
+
+## 12a. The control panel
+
+`local-run/control-panel.bat` is the front door for anyone who would rather not open a
+terminal, and its header states it has no logic of its own beyond the menu. Both e2e runs are
+reachable from it, each as one entry calling one `.ps1`, keeping that property intact.
+
+| Option | Runs | Script |
+|---|---|---|
+| 1–5 | unchanged | — |
+| **6. Run e2e tests (local stack)** | compose Postgres, API, preview build, full suite | `scripts/e2e.ps1` (new) |
+| **7. Run e2e tests (Kubernetes)** | the deployed cluster, `--grep-invert @local-only` | `deploy/e2e-k8s.ps1` (new) |
+| **8. Open last e2e report** | `playwright show-report` | `scripts/e2e-report.ps1` (new) |
+| 9. Exit | unchanged | — |
+
+`scripts/e2e.ps1` is a thin wrapper over `npm run e2e --prefix frontend`, so the npm scripts
+stay the source of truth exactly as `scripts/dev.ps1` does for the dev loop.
+
+### Prerequisite, currently missing
+
+`npm run e2e` needs the Playwright browser binary — `npx --prefix frontend playwright install
+chromium` — a one-off per machine documented in `frontend/CLAUDE.md` but **not** checked by
+`scripts/install-prereqs.ps1`, which covers the .NET SDK, Node, Docker Desktop, `kubectl`,
+`kind`, and `k9s`.
+
+Without it, option 6 fails on a new machine with a Playwright error that names neither the
+cause nor the fix — precisely the experience the control panel exists to prevent. So
+`install-prereqs.ps1` gains a chromium check, installing it when absent. It follows that
+script's existing rule: install only what is entirely missing, report anything present but
+outdated rather than silently upgrading it.
+
+Option 8 is listed separately rather than folded into the run scripts because the report is
+worth reopening after the terminal window has been closed, which is the normal case for a
+double-click user.
 
 ---
 
@@ -487,7 +522,8 @@ that ingress cookie affinity keeps L1 eviction correct across two pods.
 - **`frontend/CLAUDE.md`** — e2e section updated for the new paths and scripts, keeping its
   existing warning about `prepare-database.ts` not becoming `globalSetup`.
 - **Root `CLAUDE.md`** — the e2e lines under "Running locally", "Running on Kubernetes", and
-  "CI"; the control-panel menu table gains option 6.
+  "CI"; the control-panel menu table gains the three new options (§12a), and the
+  `install-prereqs.ps1` paragraph gains the Playwright browser.
 - **`docs/adr/0012-end-to-end-test-architecture.md`** — seeding strategy, target switching,
   the abstraction layer, and the forwarded-headers trust decision. It **amends ADR 0008**, the
   way ADR 0010 amends 0009.
