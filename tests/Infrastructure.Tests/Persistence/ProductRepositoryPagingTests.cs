@@ -29,10 +29,24 @@ public sealed class ProductRepositoryPagingTests(PostgresFixture fixture)
         (Base.AddMinutes(windowMinute), Guid.Empty);
 
     // Fixed, not Guid.NewGuid(): deterministic ids make the expected page contents and order
-    // predictable ahead of time. High is the maximum possible uuid and Low is near the minimum,
-    // so Postgres will always place High above Low when CreatedAt ties.
-    private static readonly Guid Low = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private static readonly Guid High = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+    // predictable ahead of time. Within a window High always sorts above Low under Postgres's
+    // own uuid ordering, so a tie on CreatedAt resolves the same way on every run.
+    //
+    // Per window rather than two literals shared by the class, because the id is the PRIMARY KEY
+    // and one Postgres container is shared by every test in this collection: a second test
+    // seeding the same literal pair collides on PK_products instead of isolating anything.
+    private static Guid LowIn(int windowMinute) =>
+        Guid.Parse($"00000000-0000-0000-0000-{windowMinute:D12}");
+
+    private static Guid HighIn(int windowMinute) =>
+        Guid.Parse($"ffffffff-ffff-ffff-ffff-{windowMinute:D12}");
+
+    /// <summary>
+    /// Unique per row and deliberately independent of the id: the sku carries its own global
+    /// unique index, so a sku derived from a fixed id would collide across windows in exactly
+    /// the way a reused id does, just on a different constraint.
+    /// </summary>
+    private static string NewSku() => Product.NormalizeSku($"SKU-{Guid.NewGuid():N}"[..20]);
 
     private Task<Guid> SeedAsync(DateTimeOffset createdAt) =>
         SeedAsync(createdAt, Guid.NewGuid());
@@ -41,7 +55,7 @@ public sealed class ProductRepositoryPagingTests(PostgresFixture fixture)
     {
         await using var context = fixture.CreateContext();
         await new ProductRepository(context).AddAsync(
-            Product.Create(id, $"SKU-{id:N}"[..20], "Widget", null, 1m, createdAt),
+            Product.Create(id, NewSku(), "Widget", null, 1m, createdAt),
             CancellationToken.None);
         await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         return id;
@@ -71,12 +85,14 @@ public sealed class ProductRepositoryPagingTests(PostgresFixture fixture)
     {
         const int Window = 20;
         var tied = Base.AddMinutes(Window - 1);
-        await SeedAsync(tied, Low);
-        await SeedAsync(tied, High);
+        var low = LowIn(Window);
+        var high = HighIn(Window);
+        await SeedAsync(tied, low);
+        await SeedAsync(tied, high);
 
         var page = await ListAsync(2, TopOf(Window));
 
-        page.Select(p => p.Id).Should().Equal(High, Low);
+        page.Select(p => p.Id).Should().Equal(high, low);
     }
 
     [Fact]
@@ -112,12 +128,14 @@ public sealed class ProductRepositoryPagingTests(PostgresFixture fixture)
         // comparing on the timestamp alone would skip the second row of a tied pair.
         const int Window = 50;
         var tied = Base.AddMinutes(Window - 1);
-        await SeedAsync(tied, Low);
-        await SeedAsync(tied, High);
+        var low = LowIn(Window);
+        var high = HighIn(Window);
+        await SeedAsync(tied, low);
+        await SeedAsync(tied, high);
 
-        var page = await ListAsync(1, (tied, High));
+        var page = await ListAsync(1, (tied, high));
 
-        page.Select(p => p.Id).Should().Equal(Low);
+        page.Select(p => p.Id).Should().Equal(low);
     }
 
     [Fact]

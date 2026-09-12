@@ -13,8 +13,13 @@ public sealed class ProductRepositoryTests(PostgresFixture fixture)
     /// <summary>
     /// Unique per call, because the catalogue is global: every test in this class shares one
     /// database with every other, and a fixed sku would make them collide on the unique index.
+    /// Already normalized, because that is the only form that exists once a product is stored:
+    /// Product.Create keeps NormalizeSku's output and nothing else, and the repository port is
+    /// keyed on that same normalized form. A raw "N"-formatted guid is lower-case, so a sku
+    /// built from one and left un-normalized here matches neither what comes back out of the
+    /// database nor what a lookup by sku finds.
     /// </summary>
-    private static string NewSku() => $"SKU-{Guid.NewGuid():N}"[..20];
+    private static string NewSku() => Product.NormalizeSku($"SKU-{Guid.NewGuid():N}"[..20]);
 
     private static Product NewProduct(
         string sku, string name = "Widget", decimal price = 9.99m, int minutesOld = 0) =>
