@@ -158,6 +158,41 @@ else {
     Install-Winget -Id 'Derailed.k9s' -DisplayName 'k9s'
 }
 
+# --- Playwright browser -----------------------------------------------------------------------
+# `npm ci` installs @playwright/test but not the chromium binary it drives, so the first
+# `npm run e2e` on a new machine fails with an error naming neither the cause nor the fix -
+# exactly the experience the control panel exists to prevent. Unlike every other tool here this
+# one is not on PATH (it lands in the user's Playwright cache), so the check delegates to
+# Playwright itself, whose installer is a no-op when the browser is already present. That keeps
+# this script's rule intact: install what is absent, never silently upgrade what is there.
+Write-Host '==> Checking Playwright browser' -ForegroundColor Cyan
+$frontendDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'frontend'
+if (-not (Test-Path (Join-Path $frontendDir 'node_modules'))) {
+    Add-Result -Tool 'Playwright chromium' -Status 'SKIPPED' `
+        -Detail 'frontend/node_modules is missing. Run `npm ci --prefix frontend`, then re-run this script.'
+}
+else {
+    # `npx --prefix <dir>` does not change the working directory, only where npm resolves
+    # packages from - running it from the repo root picks up the wrong Playwright config
+    # entirely. Push-Location first so cwd and package resolution agree.
+    Push-Location $frontendDir
+    try {
+        npx playwright install chromium
+        $playwrightExitCode = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+
+    if ($playwrightExitCode -eq 0) {
+        Add-Result -Tool 'Playwright chromium' -Status 'OK' -Detail 'installed or already present'
+    }
+    else {
+        Add-Result -Tool 'Playwright chromium' -Status 'FAILED' `
+            -Detail "npx playwright install exited $playwrightExitCode"
+    }
+}
+
 # --- npm platform override sanity check ------------------------------------------------------
 # Not a tool to install, but a specific, hard-to-diagnose trap this project already hit on this
 # machine: a global ~/.npmrc pinning `os=` (or `cpu=`) to something other than this machine's

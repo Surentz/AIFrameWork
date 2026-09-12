@@ -12,3 +12,7 @@ data:
   Wolverine__Durable: 'true'
   RateLimiting__Auth__PermitLimit: '10'
   RateLimiting__Auth__WindowSeconds: '60'
+  # Note the DOUBLE underscore, like every key here. Safe in this overlay specifically: the
+  # ingress is the only route to the api Service, so X-Forwarded-For cannot be attacker-chosen.
+  # Do not copy this into an overlay whose API is reachable directly - see ADR 0012.
+  ForwardedHeaders__Enabled: 'true'

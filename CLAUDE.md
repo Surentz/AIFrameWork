@@ -25,11 +25,12 @@ npm that ships with older 24.x crashes in its dependency resolver
 (`Cannot read properties of null (reading 'edgesOut')`). `scripts/install-prereqs.ps1` checks
 this floor.
 
-> **This machine does not match the table.** As of 2026-09-11 it has SDK 10.0.204 and 10.0.111
-> (no 4xx band at all) and Node 24.19.0, so a local build uses a different SDK feature band than
-> CI does. Nothing pins it, so nothing complains. Bring the machine up to the table before
-> trusting a green local build as evidence about CI, or treat the difference as a known variable
-> when the two disagree.
+> **This machine now matches the table.** Re-checked 2026-09-12: `dotnet --list-sdks` shows only
+> `10.0.400`, and `node --version` reports `v24.20.0` — both exactly the pinned versions above.
+> The gap noted here on 2026-09-11 (SDK 10.0.204/10.0.111, Node 24.19.0) is gone; a green local
+> build is now real evidence about CI on the SDK/Node axis. Re-verify with the same two commands
+> before trusting this note itself, since nothing in the repo pins either and the machine can
+> drift again silently.
 
 ## Layout
 
@@ -166,8 +167,9 @@ Three things that will cost you time:
   `CookieSecurePolicy.Always`, so over plain HTTP the browser discards the session cookie
   silently: login appears to succeed and every later request is a 401, with nothing in the
   logs.
-- **Config keys need double underscores.** `Cache__Enabled`, not `Cache_Enabled`. A single
-  underscore binds nothing, warns nothing, and leaves the default in place.
+- **Config keys need double underscores.** `Cache__Enabled` and `ForwardedHeaders__Enabled`, not
+  `Cache_Enabled`. A single underscore binds nothing, warns nothing, and leaves the default in
+  place.
 - **Migrations run as a Job, before the rollout**, via a self-contained `dotnet ef migrations
   bundle` — which is what keeps the EF Design package out of the runtime image
   (`src/Infrastructure/CLAUDE.md`'s 7.9MB → 37MB note). The script deletes the Job before
@@ -183,6 +185,12 @@ into an overlay that targets a real environment.
 Cache eviction correctness depends on the ingress's cookie affinity: `HybridCache` is L1-only,
 so a write handled by one pod cannot evict an entry held by the other. See ADR 0010.
 
+`./deploy/e2e-k8s.ps1` runs the Playwright suite against this cluster — a gate that exercises
+durable Wolverine, caching on, two replicas, and the real rate limit, none of which the compose
+stack does. It gates readiness on `/api/auth/me`, not `/health`: the ingress routes `/health` to
+the web pod, whose `nginx.conf` serves the SPA for any unmatched path, so it answers 200 whether
+or not a single API pod is up. See ADR 0012.
+
 ### One-click start/stop
 
 `local-run/control-panel.bat` is a double-clickable menu for both setups, for anyone who would
@@ -195,12 +203,16 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Stop dev loop | `scripts/stop-dev.ps1` — kills the API/Vite ports, `docker compose down` |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
+| Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses port 5234 |
+| Run e2e tests (against Kubernetes) | `deploy/e2e-k8s.ps1` — deploy it first with "Start Kubernetes" |
+| Open last e2e report | `scripts/e2e-report.ps1` |
 
 The `.ps1` scripts it calls are the source of truth and work the same run directly.
 
 `scripts/install-prereqs.ps1` is what a genuinely new machine needs run first — it checks for
 (and installs via `winget` whatever is missing) the .NET SDK, Node.js, Docker Desktop, `kubectl`,
-`kind`, and `k9s`. It only installs what is entirely absent; a tool that is present but older
+`kind`, `k9s`, and Playwright's chromium browser. It only installs what is entirely absent; a
+tool that is present but older
 than expected is reported, not silently upgraded, since upgrading Docker Desktop or Node.js
 touches every other project on the machine, not just this one. It also flags a global `~/.npmrc`
 pinning `os=`/`cpu=` to the wrong platform — the exact cause of a `npm install` failure

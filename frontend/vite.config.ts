@@ -27,9 +27,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
-    // Vitest's default include glob matches *.spec.ts, which also matches
-    // e2e/orders.spec.ts - a Playwright spec, not a Vitest one. Excluding e2e/ keeps the two
-    // runners from fighting over the same file.
+    // Vitest's default include glob matches *.spec.ts, which also matches specs under
+    // e2e/specs/ (e.g. e2e/specs/orders/place-order.spec.ts) - Playwright specs, not Vitest
+    // ones. Excluding e2e/ keeps the two runners from fighting over the same files.
     exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 });

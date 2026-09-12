@@ -226,8 +226,9 @@ jobs:
       - name: Build backend
         run: dotnet build -c Debug
 
-      # global-setup.ts already does `dotnet tool restore`, `docker compose up --wait` and
-      # `dotnet ef database update` itself, so the only thing it cannot provide is the browser
+      # `npm run e2e` (e2e/setup/run.ts) already does `dotnet tool restore`,
+      # `docker compose up --wait` and `dotnet ef database update` itself via
+      # e2e/setup/prepare-database.ts, so the only thing it cannot provide is the browser
       # binary — the same one-off documented in frontend/CLAUDE.md for a fresh machine.
       - name: Install Playwright browser
         run: npx --prefix frontend playwright install --with-deps chromium

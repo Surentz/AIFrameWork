@@ -11,7 +11,11 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "generate:api": "node ../scripts/normalize-openapi.mjs && npx --yes openapi-typescript@7.13.0 ../openapi/AiFramework.Api.json --immutable --output src/api/schema.d.ts",
-    "e2e": "node e2e/prepare-database.ts && playwright test"
+    "e2e": "node e2e/setup/run.ts",
+    "e2e:ui": "node e2e/setup/run.ts --ui",
+    "e2e:kind": "node e2e/setup/run.ts --target kind",
+    "e2e:url": "node e2e/setup/run.ts --target",
+    "e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
