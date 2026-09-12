@@ -453,11 +453,16 @@ if (builder.Configuration.GetValue("ForwardedHeaders:Enabled", defaultValue: fal
 must be ignored; with it **on**, two different values must land in different partitions. The
 off-case is the regression guard that stops the flag later being "simplified" away.
 
-**Known implementation detail, to be confirmed rather than assumed:** `WebApplicationFactory`'s
-TestServer leaves `Connection.RemoteIpAddress` null — which is why `Program.cs:142` has its
-`"unknown"` fallback. Whether `ForwardedHeadersMiddleware` rewrites cleanly from null, or the
-test needs a small middleware to set a remote address first, must be verified against actual
-behaviour during implementation.
+**Settled during implementation, not merely assumed:** `WebApplicationFactory`'s TestServer
+leaves `Connection.RemoteIpAddress` null — which is why `Program.cs`'s rate-limiter partition
+key has its `"unknown"` fallback. `ForwardedHeadersMiddleware` rewrites cleanly from that null
+starting point: both `ForwardedHeadersTests` below pass with no `IStartupFilter` or other
+fallback to give TestServer a non-null starting address. Also note for any future reader of the
+code block above: this SDK ships `ForwardedHeadersOptions.KnownIPNetworks`, not `KnownNetworks`
+— the old name is obsolete (ASPDEPR005, an error here since warnings are errors) — and a
+reviewer confirmed by reflection that the two properties are the same object instance, so
+clearing one clears both. The rest of this section is left as drafted, as the historical record
+of the question this answers.
 
 **This fix does not raise the suite's own ceiling.** Every worker on one machine shares a
 client IP and so would still share a partition. It is a production correctness fix — without
@@ -534,7 +539,7 @@ that ingress cookie affinity keeps L1 eviction correct across two pods.
 
 | Risk | Mitigation |
 |---|---|
-| `ForwardedHeadersMiddleware` behaviour under TestServer's null `RemoteIpAddress` | Verify during implementation; §13 states this explicitly rather than assuming |
+| `ForwardedHeadersMiddleware` behaviour under TestServer's null `RemoteIpAddress` | **Settled.** It rewrites cleanly from null; both `ForwardedHeadersTests` pass with no fallback needed. See §13. |
 | Someone enables `ForwardedHeaders__Enabled` where the API is directly reachable | Default off; the justification comment and the ADR both name the bypass; the flag-off integration test guards the default |
 | A new test assumes a clean database and fails only against kind | `@local-only` checklist in `frontend/e2e/CLAUDE.md`; failure is immediate and names the cause |
 | The kind path rots because it is not in CI | Accepted (D9, §14); revisit with a scheduled job if it happens |

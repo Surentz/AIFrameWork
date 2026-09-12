@@ -52,20 +52,24 @@ a busy machine. Each is overridable by environment variable: `DEV_PORT`, `PREVIE
 | `npm test` | Vitest |
 | `npm run lint` | `eslint . --max-warnings 0` |
 | `npm run e2e` | Playwright, against a real API and a real Postgres |
+| `npm run e2e:ui` | The same, in UI mode; keeps the database between runs |
+| `npm run e2e:kind` | The deployed kind cluster |
+| `npm run e2e:url -- https://…` | Any URL — including a dev loop already running on 5173 |
+| `npm run e2e:report` | The last HTML report |
 
 Lint runs with `--max-warnings 0`: one warning is a failure.
 
 ## Before the first `npm run e2e`
 
-`npm ci --prefix frontend` installs the `@playwright/test` package but not its browser
-binary — run this once per machine:
+`scripts/install-prereqs.ps1` now installs the Playwright chromium binary, so a machine set up
+through it needs nothing further here. Doing it by hand once per machine still works:
 
 ```
 npx --prefix frontend playwright install chromium
 ```
 
-`e2e/prepare-database.ts` runs `dotnet tool restore` itself, so `dotnet-ef` (pinned in the repo's
-`.config/dotnet-tools.json`) needs no separate setup step.
+`e2e/setup/prepare-database.ts` runs `dotnet tool restore` itself, so `dotnet-ef` (pinned in the
+repo's `.config/dotnet-tools.json`) needs no separate setup step.
 
 **It runs from the `e2e` npm script, before `playwright test` — not as Playwright's
 `globalSetup`, and it must not be moved back.** Playwright starts `webServer` processes *before*
@@ -74,6 +78,9 @@ nothing. Durable Wolverine migrates its envelope schema during host startup (ADR
 now means the API does not boot at all, and Playwright reports only "Process from
 config.webServer was not able to start. Exit code: 1". Teardown stays `globalTeardown`, which
 runs late by design.
+
+See `frontend/e2e/CLAUDE.md` for the fixture and screen conventions — the fixtures, the
+`@local-only` tag, and the two rules that are correctness rather than style.
 
 ## The API contract
 

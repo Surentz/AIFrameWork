@@ -166,8 +166,9 @@ Three things that will cost you time:
   `CookieSecurePolicy.Always`, so over plain HTTP the browser discards the session cookie
   silently: login appears to succeed and every later request is a 401, with nothing in the
   logs.
-- **Config keys need double underscores.** `Cache__Enabled`, not `Cache_Enabled`. A single
-  underscore binds nothing, warns nothing, and leaves the default in place.
+- **Config keys need double underscores.** `Cache__Enabled` and `ForwardedHeaders__Enabled`, not
+  `Cache_Enabled`. A single underscore binds nothing, warns nothing, and leaves the default in
+  place.
 - **Migrations run as a Job, before the rollout**, via a self-contained `dotnet ef migrations
   bundle` — which is what keeps the EF Design package out of the runtime image
   (`src/Infrastructure/CLAUDE.md`'s 7.9MB → 37MB note). The script deletes the Job before
@@ -183,6 +184,12 @@ into an overlay that targets a real environment.
 Cache eviction correctness depends on the ingress's cookie affinity: `HybridCache` is L1-only,
 so a write handled by one pod cannot evict an entry held by the other. See ADR 0010.
 
+`./deploy/e2e-k8s.ps1` runs the Playwright suite against this cluster — a gate that exercises
+durable Wolverine, caching on, two replicas, and the real rate limit, none of which the compose
+stack does. It gates readiness on `/api/auth/me`, not `/health`: the ingress routes `/health` to
+the web pod, whose `nginx.conf` serves the SPA for any unmatched path, so it answers 200 whether
+or not a single API pod is up. See ADR 0012.
+
 ### One-click start/stop
 
 `local-run/control-panel.bat` is a double-clickable menu for both setups, for anyone who would
@@ -195,12 +202,16 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Stop dev loop | `scripts/stop-dev.ps1` — kills the API/Vite ports, `docker compose down` |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
+| Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses port 5234 |
+| Run e2e tests (against Kubernetes) | `deploy/e2e-k8s.ps1` — deploy it first with "Start Kubernetes" |
+| Open last e2e report | `scripts/e2e-report.ps1` |
 
 The `.ps1` scripts it calls are the source of truth and work the same run directly.
 
 `scripts/install-prereqs.ps1` is what a genuinely new machine needs run first — it checks for
 (and installs via `winget` whatever is missing) the .NET SDK, Node.js, Docker Desktop, `kubectl`,
-`kind`, and `k9s`. It only installs what is entirely absent; a tool that is present but older
+`kind`, `k9s`, and Playwright's chromium browser. It only installs what is entirely absent; a
+tool that is present but older
 than expected is reported, not silently upgraded, since upgrading Docker Desktop or Node.js
 touches every other project on the machine, not just this one. It also flags a global `~/.npmrc`
 pinning `os=`/`cpu=` to the wrong platform — the exact cause of a `npm install` failure
