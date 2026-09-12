@@ -247,14 +247,17 @@ builder.Host.AddWolverineEventPath(
 
 var app = builder.Build();
 
+// First, conventionally: everything downstream - exception logging, authentication, the rate
+// limiter - should see the client's real address rather than the ingress's. The only *live*
+// constraint today is that this precedes UseRateLimiter, since the limiter partitions on the
+// connection's address and a rewrite after it reads has no effect - but placing it first means a
+// later addition (request logging, an IP-based policy) inherits the right address by
+// construction instead of by remembering this comment. Registered unconditionally - with the
+// flag off, ForwardedHeadersOptions keeps its defaults, which forward nothing.
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
-
-// Must precede UseRateLimiter: after it, the limiter has already read the pre-rewrite address
-// and the rewrite changes nothing. Registered unconditionally - with the flag off,
-// ForwardedHeadersOptions keeps its defaults, which forward nothing.
-app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.MapControllers();
 
