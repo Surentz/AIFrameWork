@@ -37,6 +37,207 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/products": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Lists the catalogue newest first, one page at a time. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly limit?: number | string;
+                    readonly cursor?: string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProductPageResponse"];
+                        readonly "application/json": components["schemas"]["ProductPageResponse"];
+                        readonly "text/json": components["schemas"]["ProductPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        /** Adds a product to the catalogue and returns its new identifier. */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["CreateProductRequest"];
+                    readonly "text/json": components["schemas"]["CreateProductRequest"];
+                    readonly "application/*+json": components["schemas"]["CreateProductRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description Created */
+                readonly 201: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": string;
+                        readonly "application/json": string;
+                        readonly "text/json": string;
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/products/{id}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Fetches a single product by its identifier. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProductResponse"];
+                        readonly "application/json": components["schemas"]["ProductResponse"];
+                        readonly "text/json": components["schemas"]["ProductResponse"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        /** Replaces a product's editable fields. The sku is not among them. */
+        readonly put: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["UpdateProductRequest"];
+                    readonly "text/json": components["schemas"]["UpdateProductRequest"];
+                    readonly "application/*+json": components["schemas"]["UpdateProductRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/orders": {
         readonly parameters: {
             readonly query?: never;
@@ -535,6 +736,18 @@ export interface components {
             readonly currentPassword: string;
             readonly newPassword: string;
         };
+        /**
+         * @description Business-rule validation (non-empty, max length, price range and scale) is owned by
+         *     `CreateProductValidator` in the validation behavior — not duplicated here as
+         *     DataAnnotations. See `src/Api/CLAUDE.md`.
+         */
+        readonly CreateProductRequest: {
+            readonly sku: string;
+            readonly name: string;
+            readonly description?: null | string;
+            /** Format: double */
+            readonly price: number | string;
+        };
         readonly LoginRequest: {
             readonly username: string;
             readonly password: string;
@@ -584,6 +797,33 @@ export interface components {
             readonly detail?: null | string;
             readonly instance?: null | string;
         };
+        readonly ProductListItemResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            readonly sku: string;
+            readonly name: string;
+            /** Format: double */
+            readonly price: number | string;
+            /** Format: date-time */
+            readonly createdAt: string;
+        };
+        readonly ProductPageResponse: {
+            readonly items: readonly components["schemas"]["ProductListItemResponse"][];
+            readonly nextCursor: null | string;
+        };
+        readonly ProductResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            readonly sku: string;
+            readonly name: string;
+            readonly description: null | string;
+            /** Format: double */
+            readonly price: number | string;
+            /** Format: date-time */
+            readonly createdAt: string;
+            /** Format: date-time */
+            readonly updatedAt: string;
+        };
         /**
          * @description Business-rule validation (length, charset, password policy) is owned by the validators in
          *     `src/Application/Users`, not duplicated here as DataAnnotations. See `src/Api/CLAUDE.md`.
@@ -599,6 +839,16 @@ export interface components {
             readonly userId: string;
             readonly username: string;
             readonly displayName: string;
+        };
+        /**
+         * @description No Sku: it is the catalogue's business key and the domain refuses to change it. No Id
+         *     either — that comes from the route, so a body that disagreed with the URL could not arise.
+         */
+        readonly UpdateProductRequest: {
+            readonly name: string;
+            readonly description?: null | string;
+            /** Format: double */
+            readonly price: number | string;
         };
     };
     responses: never;

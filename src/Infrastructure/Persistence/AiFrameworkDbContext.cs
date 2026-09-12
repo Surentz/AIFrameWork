@@ -1,4 +1,5 @@
 using AiFramework.Domain.Orders;
+using AiFramework.Domain.Products;
 using AiFramework.Domain.Users;
 using AiFramework.Infrastructure.Outbox;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -16,6 +17,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     public DbSet<OrderAudit> OrderAudits => Set<OrderAudit>();
 
     public DbSet<User> Users => Set<User>();
+
+    public DbSet<Product> Products => Set<Product>();
 
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 

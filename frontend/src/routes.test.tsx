@@ -20,6 +20,21 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: 'All orders' })).toBeInTheDocument();
   });
 
+  it('renders the catalogue screens inside the app shell', async () => {
+    renderAt('/products');
+
+    expect(await screen.findByRole('link', { name: 'Widget' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Catalogue' })).toBeInTheDocument();
+  });
+
+  it('matches /products/new as the create screen rather than as an id', async () => {
+    // The route order is what decides this; declared the other way round, "new" would be
+    // captured as :id and the detail screen would request /api/products/new.
+    renderAt('/products/new');
+
+    expect(await screen.findByRole('heading', { name: 'Add a product' })).toBeInTheDocument();
+  });
+
   // The reason /login sits outside the layout route: it is a full-bleed page, and rendering it
   // under the shell would put it beneath an "Orders" heading and the app nav.
   it('renders login outside the app shell, with a main landmark of its own', () => {

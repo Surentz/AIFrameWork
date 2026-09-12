@@ -17,5 +17,14 @@ export function uniqueSku(): string {
   return `SKU-E2E-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`;
 }
 
+/**
+ * The same idea for catalogue SKUs. Separate from `uniqueSku` so a catalogue row and an order
+ * line are never confused in an assertion — and necessary rather than cosmetic: the products
+ * table has a UNIQUE index on Sku, so two tests picking one literal would collide on a 409.
+ */
+export function uniqueProductSku(): string {
+  return `CAT-E2E-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`;
+}
+
 /** PasswordPolicy.MinimumLength is 12; this is comfortably above it. */
 export const PASSWORD = 'a long enough e2e password';

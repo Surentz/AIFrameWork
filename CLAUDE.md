@@ -314,8 +314,10 @@ See ADR 0011.
 
 Queries opt in by implementing `ICacheable` (`src/Application/Abstractions/Caching.cs`); commands
 opt in to eviction with `IInvalidatesCache`. `GetOrders` and `GetOrder` are cached at thirty
-seconds; `PlaceOrder` evicts both for the caller who placed the order. Nothing on the auth path is
-cached, deliberately and permanently — ADR 0008's lockout state must be read every time.
+seconds; `PlaceOrder` evicts both for the caller who placed the order. `GetProducts` and
+`GetProduct` are cached the same way, and `CreateProduct`/`UpdateProduct` evict them. Nothing on
+the auth path is cached, deliberately and permanently — ADR 0008's lockout state must be read
+every time.
 
 Four things that will cost you time:
 
@@ -337,6 +339,13 @@ Four things that will cost you time:
   `docker-compose.e2e.yml`, which runs only Postgres. `Orders/OrderCachingTests` turns it back on
   for itself — `WithWebHostBuilder` over the shared `ApiFactory`, so it keeps the one Postgres
   container — the same split `AuthRateLimitTests` uses for the rate limiter.
+
+**The catalogue is the one cached read that is not per-user data.** Products are global, but the
+cache is scoped per caller by construction, so `CreateProduct`'s eviction reaches only the caller
+who made the write — everyone else keeps their cached pages until the thirty seconds lapse. The
+TTL, not the eviction, is what bounds how long an edit stays invisible to other people. That is
+accepted rather than worked around: an unscoped cache path would give up the one property that
+makes this cache safe to use without thinking. See ADR 0013.
 
 No test waits for a TTL to lapse; `HybridCache` expires on its own clock, which `IClock` cannot
 reach. The only TTL arithmetic is `CacheDuration.Clamp`, tested directly.
