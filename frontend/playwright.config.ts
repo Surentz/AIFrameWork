@@ -30,7 +30,12 @@ export default defineConfig({
     ignoreHTTPSErrors: target.ignoreHTTPSErrors,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // No `video` option: it is honored only by the built-in page/context fixtures'
+    // _contextFactory, but signedInPage/isolatedPage (e2e/fixtures/index.ts's newSignedInPage) -
+    // most of this suite - call browser.newContext() directly and would silently record
+    // nothing, making a blanket `video: 'retain-on-failure'` a promise the config could not keep
+    // for those tests. Trace and screenshot ARE captured for every context regardless of how it
+    // was created, so failure diagnosis is not lost - just not doubled with video everywhere.
   },
 
   // One browser today. Named anyway: it labels the report, and adding firefox/webkit becomes a

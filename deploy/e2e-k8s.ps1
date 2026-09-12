@@ -39,8 +39,14 @@ else {
 }
 
 # Windows PowerShell 5.1 has no -SkipCertificateCheck, and the ingress serves a self-signed
-# certificate (k8s/overlays/local/tls.yaml). Relaxed for this process only.
-if (-not ('E2ECertPolicy' -as [type])) {
+# certificate (k8s/overlays/local/tls.yaml). PowerShell 7's Invoke-WebRequest is built on
+# HttpClient and ignores ServicePointManager entirely - the 5.1 trick below is a no-op there and
+# -SkipCertificateCheck (per-request, not process-wide) is used instead. It also raises a non-2xx
+# response as a different exception type (HttpResponseException, not WebException), so both the
+# certificate handling and the catch below branch on the running version.
+$isPwsh7Plus = $PSVersionTable.PSVersion.Major -ge 6
+
+if (-not $isPwsh7Plus -and -not ('E2ECertPolicy' -as [type])) {
     Add-Type -TypeDefinition @'
 using System.Net;
 public static class E2ECertPolicy {
@@ -51,7 +57,6 @@ public static class E2ECertPolicy {
 }
 '@
 }
-[E2ECertPolicy]::Trust()
 
 # NOT /health. The ingress routes / to the web pod, and frontend/nginx.conf ends in
 # `try_files $uri $uri/ /index.html`, so /health answers 200 with the SPA whether or not the API
@@ -60,13 +65,46 @@ public static class E2ECertPolicy {
 # routing works.
 Write-Host "==> Checking the cluster at $baseUrl" -ForegroundColor Cyan
 $status = $null
+
+# ServicePointManager is process-wide state, so on 5.1 it is saved and restored around this one
+# request rather than left relaxed for the rest of the session (PowerShell 7's
+# -SkipCertificateCheck is already scoped to the single call and needs none of this).
+$previousCallback = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
+$previousProtocol = [System.Net.ServicePointManager]::SecurityProtocol
 try {
-    $response = Invoke-WebRequest -Uri "$baseUrl/api/auth/me" -UseBasicParsing -TimeoutSec 15
+    if ($isPwsh7Plus) {
+        $response = Invoke-WebRequest -Uri "$baseUrl/api/auth/me" -UseBasicParsing -TimeoutSec 15 `
+            -SkipCertificateCheck
+    }
+    else {
+        [E2ECertPolicy]::Trust()
+        $response = Invoke-WebRequest -Uri "$baseUrl/api/auth/me" -UseBasicParsing -TimeoutSec 15
+    }
     $status = [int]$response.StatusCode
 }
-catch [System.Net.WebException] {
-    # A 401 is the expected answer and Windows PowerShell raises it as an exception.
-    if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+catch {
+    # A 401 is the expected answer. Windows PowerShell 5.1 raises it as System.Net.WebException;
+    # PowerShell 7's HttpClient-backed Invoke-WebRequest raises the differently-shaped
+    # Microsoft.PowerShell.Commands.HttpResponseException instead - and that type does not even
+    # resolve under 5.1 (a literal `catch [Microsoft.PowerShell.Commands.HttpResponseException]`
+    # throws TypeNotFound there when an exception needs matching against it), so it is matched by
+    # name below rather than with a second typed catch clause. Anything else is a real failure
+    # and is rethrown rather than swallowed.
+    $webEx = $_.Exception
+    $isHttpResponseException =
+        $webEx.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException'
+    if ($webEx -is [System.Net.WebException] -or $isHttpResponseException) {
+        if ($webEx.Response) { $status = [int]$webEx.Response.StatusCode }
+    }
+    else {
+        throw
+    }
+}
+finally {
+    if (-not $isPwsh7Plus) {
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $previousCallback
+        [System.Net.ServicePointManager]::SecurityProtocol = $previousProtocol
+    }
 }
 
 if ($status -ne 401) {

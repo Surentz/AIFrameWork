@@ -28,7 +28,9 @@ function run(command: string, args: readonly string[]): void {
 
 const argv = process.argv.slice(2);
 const passthrough: string[] = [];
-let target = 'local';
+// Respect an inherited E2E_TARGET (e.g. `E2E_TARGET=kind npm run e2e` on bash/pwsh) so it is not
+// silently downgraded to 'local'; an explicit --target below still wins over either.
+let target = process.env.E2E_TARGET ?? 'local';
 
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i];
@@ -64,6 +66,11 @@ const playwrightArgs = ['test', ...passthrough];
 
 // Anything we do not manage has production-shaped configuration: caching on, the real rate
 // limit, and a database that keeps whatever earlier runs left behind.
+//
+// Appended after passthrough, not prepended: Playwright's CLI takes the last of a repeated
+// flag, so if a caller also passes their own --grep-invert, THIS one wins and theirs is
+// silently dropped. That is the safer direction to fail in (off-target still excludes
+// @local-only specs) but it is easy to misread as the other way around.
 if (target !== 'local') {
   playwrightArgs.push('--grep-invert', '@local-only');
 }
