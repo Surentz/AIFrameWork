@@ -12,20 +12,31 @@ public sealed class OrderTests
     {
         var id = Guid.NewGuid();
         var userId = Guid.NewGuid();
+        var product = new OrderedProduct(Guid.NewGuid(), "Widget", 19.95m);
 
-        var order = Order.Place(id, userId, "SKU-1", 3, PlacedAt);
+        var order = Order.Place(id, userId, 3, PlacedAt, product, "SKU-1");
 
         order.Id.Should().Be(id);
         order.UserId.Should().Be(userId);
         order.Sku.Should().Be("SKU-1");
         order.Quantity.Should().Be(3);
         order.PlacedAt.Should().Be(PlacedAt);
+        order.Product.Should().Be(product);
+    }
+
+    [Fact]
+    public void Place_WithNoProduct_Throws()
+    {
+        var act = () => Order.Place(Guid.NewGuid(), Guid.NewGuid(), 1, PlacedAt, null!, "SKU-1");
+
+        act.Should().Throw<DomainException>().WithMessage("*product*");
     }
 
     [Fact]
     public void Place_WithNoUser_Throws()
     {
-        var act = () => Order.Place(Guid.NewGuid(), Guid.Empty, "SKU-1", 1, PlacedAt);
+        var act = () => Order.Place(
+            Guid.NewGuid(), Guid.Empty, 1, PlacedAt, AnOrderedProduct.Any(), "SKU-1");
 
         act.Should().Throw<DomainException>().WithMessage("*user*");
     }
@@ -35,7 +46,8 @@ public sealed class OrderTests
     [InlineData(-1)]
     public void Place_WithNonPositiveQuantity_Throws(int quantity)
     {
-        var act = () => Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-1", quantity, PlacedAt);
+        var act = () => Order.Place(
+            Guid.NewGuid(), Guid.NewGuid(), quantity, PlacedAt, AnOrderedProduct.Any(), "SKU-1");
 
         act.Should().Throw<DomainException>().WithMessage("*quantity*");
     }
@@ -45,7 +57,8 @@ public sealed class OrderTests
     [InlineData("   ")]
     public void Place_WithBlankSku_Throws(string sku)
     {
-        var act = () => Order.Place(Guid.NewGuid(), Guid.NewGuid(), sku, 1, PlacedAt);
+        var act = () => Order.Place(
+            Guid.NewGuid(), Guid.NewGuid(), 1, PlacedAt, AnOrderedProduct.Any(), sku);
 
         act.Should().Throw<DomainException>().WithMessage("*sku*");
     }
@@ -55,7 +68,8 @@ public sealed class OrderTests
     {
         var id = Guid.NewGuid();
 
-        var order = Order.Place(id, Guid.NewGuid(), "SKU-1", 3, PlacedAt);
+        var order = Order.Place(
+            id, Guid.NewGuid(), 3, PlacedAt, AnOrderedProduct.Any(), "SKU-1");
 
         order.DomainEvents.Should().ContainSingle()
             .Which.Should().BeEquivalentTo(new OrderPlaced(id, "SKU-1", 3));

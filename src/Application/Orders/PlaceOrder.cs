@@ -35,8 +35,11 @@ public sealed class PlaceOrderHandler(
                 ErrorKind.Unauthorized, "auth.failed", "That session is no longer valid."));
         }
 
+        // TEMPORARY, replaced in the next commit when the handler resolves the real product.
+        // Kept for one commit only so that the signature change is reviewable on its own.
         var order = Order.Place(
-            Guid.NewGuid(), userId, command.Sku, command.Quantity, clock.UtcNow);
+            Guid.NewGuid(), userId, command.Quantity, clock.UtcNow,
+            new OrderedProduct(Guid.NewGuid(), command.Sku, 0m), command.Sku);
 
         await orders.AddAsync(order, cancellationToken).ConfigureAwait(false);
 

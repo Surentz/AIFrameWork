@@ -22,6 +22,13 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         // model fails to build at first use.
         builder.Ignore(o => o.DomainEvents);
 
+        // TEMPORARY, replaced by an OwnsOne mapping in the next commit. Order.Product is new
+        // (this commit only makes Order carry the snapshot in memory); left unconfigured, EF's
+        // conventions try to auto-discover OrderedProduct as its own entity type and then fail
+        // to bind its constructor, breaking model build for every test that touches the database.
+        // Ignoring it here keeps the model buildable until the real mapping lands.
+        builder.Ignore(o => o.Product);
+
         // The list endpoint filters by owner and orders by (PlacedAt DESC, Id DESC). The owner
         // is the leading column because it is an equality predicate; the previous
         // IX_Orders_PlacedAt_Id_Desc cannot serve this query and is dropped.

@@ -21,7 +21,7 @@ public sealed class GetOrderHandlerTests
     {
         var id = Guid.NewGuid();
         _repository.GetAsync(id, UserId, Arg.Any<CancellationToken>())
-            .Returns(Order.Place(id, UserId, "SKU-1", 4, PlacedAt));
+            .Returns(Order.Place(id, UserId, 4, PlacedAt, AnOrderedProduct.Any(), "SKU-1"));
         var handler = new GetOrderHandler(_repository, _currentUser);
 
         var result = await handler.HandleAsync(new GetOrder(id), CancellationToken.None);

@@ -18,7 +18,7 @@ public sealed class OrderRepositoryTests(PostgresFixture fixture)
         {
             var repository = new OrderRepository(context);
             await repository.AddAsync(
-                Order.Place(id, owner, "SKU-1", 5, PlacedAt), CancellationToken.None);
+                Order.Place(id, owner, 5, PlacedAt, AnOrderedProduct.Any(), "SKU-1"), CancellationToken.None);
             await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         }
 
@@ -39,7 +39,7 @@ public sealed class OrderRepositoryTests(PostgresFixture fixture)
         await using (var context = fixture.CreateContext())
         {
             var repository = new OrderRepository(context);
-            await repository.AddAsync(Order.Place(id, owner, "SKU-2", 1, PlacedAt), CancellationToken.None);
+            await repository.AddAsync(Order.Place(id, owner, 1, PlacedAt, AnOrderedProduct.Any(), "SKU-2"), CancellationToken.None);
         }
 
         await using var verify = fixture.CreateContext();
@@ -68,7 +68,7 @@ public sealed class OrderRepositoryTests(PostgresFixture fixture)
         await using (var context = fixture.CreateContext())
         {
             await new OrderRepository(context).AddAsync(
-                Order.Place(id, owner, "SKU-PRIVATE", 1, PlacedAt), CancellationToken.None);
+                Order.Place(id, owner, 1, PlacedAt, AnOrderedProduct.Any(), "SKU-PRIVATE"), CancellationToken.None);
             await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         }
 

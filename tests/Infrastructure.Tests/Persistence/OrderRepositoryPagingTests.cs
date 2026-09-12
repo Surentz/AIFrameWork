@@ -47,7 +47,7 @@ public sealed class OrderRepositoryPagingTests(PostgresFixture fixture)
     {
         await using var context = fixture.CreateContext();
         await new OrderRepository(context).AddAsync(
-            Order.Place(id, owner, sku, 1, placedAt), CancellationToken.None);
+            Order.Place(id, owner, 1, placedAt, AnOrderedProduct.Any(), sku), CancellationToken.None);
         await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         return id;
     }
