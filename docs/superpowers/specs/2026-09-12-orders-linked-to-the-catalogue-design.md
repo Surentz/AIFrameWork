@@ -170,10 +170,16 @@ Three helpers keep it mechanical rather than a rewrite:
   "place an order" setup is one call;
 - the same in `frontend/e2e/fixtures/api.ts`, which already has `createProduct` from ADR 0013.
 
-One sharp edge: **`frontend/e2e/specs/orders/validation.spec.ts` posts `SKU-E2E-INVALID` with
-quantity 0** to assert the quantity message. After this change it would fail on the sku instead
-and still pass — green for the wrong reason. It needs a real product so it keeps testing what its
-name claims.
+A sharp edge that turned out not to be one, recorded because the reasoning is worth keeping:
+**`frontend/e2e/specs/orders/validation.spec.ts` posts `SKU-E2E-INVALID` with quantity 0** to
+assert the quantity message, and this spec originally claimed that after the catalogue check it
+would fail on the *sku* instead and pass for the wrong reason. That is wrong. `Behaviors.cs`'s
+validation step runs ahead of the handler and returns a failure `Result` the moment
+FluentValidation fails, so a quantity of 0 never reaches the catalogue lookup at all. The spec
+was given a real product anyway — harmless, and it stops depending on that ordering — but the
+test was never at risk. The general lesson stands even though this instance did not: a test whose
+setup becomes invalid under a new rule can start passing for a new reason, and the validation
+pipeline's ordering is what decides whether it does.
 
 ## Testing
 
