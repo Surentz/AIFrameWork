@@ -1,4 +1,5 @@
 using AiFramework.Domain.Orders;
+using AiFramework.Domain.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -22,12 +23,23 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         // model fails to build at first use.
         builder.Ignore(o => o.DomainEvents);
 
-        // TEMPORARY, replaced by an OwnsOne mapping in the next commit. Order.Product is new
-        // (this commit only makes Order carry the snapshot in memory); left unconfigured, EF's
-        // conventions try to auto-discover OrderedProduct as its own entity type and then fail
-        // to bind its constructor, breaking model build for every test that touches the database.
-        // Ignoring it here keeps the model buildable until the real mapping lands.
-        builder.Ignore(o => o.Product);
+        // Owned rather than three loose nullable scalars, so "all three columns or none" is
+        // structural instead of a convention this class has to police. EF decides the dependent
+        // is absent by looking at its REQUIRED properties - OrderedProduct's three are all
+        // non-nullable CLR types - which is why this does not trip
+        // OptionalDependentWithAllNullPropertiesWarning, and why adding a nullable property to
+        // OrderedProduct later would.
+        builder.OwnsOne(o => o.Product, product =>
+        {
+            product.Property(p => p.ProductId).HasColumnName("ProductId");
+            product.Property(p => p.Name)
+                .HasColumnName("ProductName")
+                .HasMaxLength(Product.MaxNameLength);
+            product.Property(p => p.UnitPrice).HasColumnName("UnitPrice").HasPrecision(18, 2);
+        });
+
+        // Rows written before the catalogue link have all three columns null.
+        builder.Navigation(o => o.Product).IsRequired(false);
 
         // The list endpoint filters by owner and orders by (PlacedAt DESC, Id DESC). The owner
         // is the leading column because it is an equality predicate; the previous
