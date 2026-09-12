@@ -1,5 +1,7 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Products;
 using AiFramework.Domain.Orders;
+using AiFramework.Domain.Products;
 using FluentValidation;
 
 namespace AiFramework.Application.Orders;
@@ -22,7 +24,10 @@ public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrder>
 }
 
 public sealed class PlaceOrderHandler(
-    IOrderRepository orders, IClock clock, ICurrentUser currentUser)
+    IOrderRepository orders,
+    IProductRepository products,
+    IClock clock,
+    ICurrentUser currentUser)
     : ICommandHandler<PlaceOrder, Guid>
 {
     public async Task<Result<Guid>> HandleAsync(PlaceOrder command, CancellationToken cancellationToken)
@@ -35,11 +40,31 @@ public sealed class PlaceOrderHandler(
                 ErrorKind.Unauthorized, "auth.failed", "That session is no longer valid."));
         }
 
-        // TEMPORARY, replaced in the next commit when the handler resolves the real product.
-        // Kept for one commit only so that the signature change is reviewable on its own.
+        var sku = Product.NormalizeSku(command.Sku);
+
+        // Check-then-insert with no uniqueness guard behind it, unlike CreateProduct's, whose
+        // unique index is the real defence. The asymmetry is deliberate: the only race here is a
+        // product deleted between this read and the insert, and the catalogue has no delete. Add
+        // one and this is the site to revisit.
+        var product = await products.GetBySkuAsync(sku, cancellationToken).ConfigureAwait(false);
+
+        if (product is null)
+        {
+            // Validation rather than NotFound: from the caller's position this is a bad value in
+            // a submitted field, and it lands beside the input as a 400, the way an invalid
+            // quantity already does.
+            return Result.Failure<Guid>(new Error(
+                ErrorKind.Validation, "orders.unknown_sku",
+                $"No product with sku '{sku}' is in the catalogue."));
+        }
+
         var order = Order.Place(
-            Guid.NewGuid(), userId, command.Quantity, clock.UtcNow,
-            new OrderedProduct(Guid.NewGuid(), command.Sku, 0m), command.Sku);
+            Guid.NewGuid(),
+            userId,
+            command.Quantity,
+            clock.UtcNow,
+            new OrderedProduct(product.Id, product.Name, product.Price),
+            product.Sku);
 
         await orders.AddAsync(order, cancellationToken).ConfigureAwait(false);
 

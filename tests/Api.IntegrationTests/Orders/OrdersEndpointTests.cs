@@ -33,9 +33,10 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_WithAValidRequest_Returns201()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client);
 
         var response = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-1", Quantity = 2 });
+            "/api/orders", new { Sku = sku, Quantity = 2 });
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
@@ -44,14 +45,15 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_ThenGet_ReturnsTheOrder()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client);
         var created = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-2", Quantity = 7 });
+            "/api/orders", new { Sku = sku, Quantity = 7 });
         var id = await created.Content.ReadFromJsonAsync<Guid>();
 
         var response = await client.GetFromJsonAsync<OrderResponseDto>($"/api/orders/{id}");
 
         response.Should().NotBeNull();
-        response.Sku.Should().Be("SKU-2");
+        response.Sku.Should().Be(sku);
         response.Quantity.Should().Be(7);
     }
 
@@ -59,9 +61,10 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_WithZeroQuantity_Returns400()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client);
 
         var response = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-3", Quantity = 0 });
+            "/api/orders", new { Sku = sku, Quantity = 0 });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
@@ -154,8 +157,9 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     {
         using var owner = await factory.CreateAuthenticatedClientAsync();
         using var stranger = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(owner);
         var created = await owner.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-PRIVATE", Quantity = 1 });
+            "/api/orders", new { Sku = sku, Quantity = 1 });
         var id = await created.Content.ReadFromJsonAsync<Guid>();
 
         var response = await stranger.GetAsync($"/api/orders/{id}");

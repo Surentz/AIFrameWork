@@ -25,9 +25,10 @@ public sealed class ProblemDetailsContractTests(ApiFactory factory)
     public async Task AValidationFailure_CarriesTheFieldsTheFrontendReads()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client);
 
         var response = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-PROBLEM", Quantity = 0 });
+            "/api/orders", new { Sku = sku, Quantity = 0 });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 

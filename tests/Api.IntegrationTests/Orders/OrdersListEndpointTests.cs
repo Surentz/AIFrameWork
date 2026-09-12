@@ -12,23 +12,26 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     public async Task GetOrders_AfterPlacingAnOrder_ReturnsItInTheList()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client);
         var created = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-LIST-1", Quantity = 3 });
+            "/api/orders", new { Sku = sku, Quantity = 3 });
         created.StatusCode.Should().Be(HttpStatusCode.Created);
         var id = await created.Content.ReadFromJsonAsync<Guid>();
 
         var page = await client.GetFromJsonAsync<OrderPageDto>("/api/orders?limit=100");
 
         page.Should().NotBeNull();
-        page.Items.Should().Contain(i => i.Id == id && i.Sku == "SKU-LIST-1");
+        page.Items.Should().Contain(i => i.Id == id && i.Sku == sku);
     }
 
     [Fact]
     public async Task GetOrders_WithALimitOfOne_ReturnsOneItemAndACursor()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        await client.PostAsJsonAsync("/api/orders", new { Sku = "SKU-LIST-2", Quantity = 1 });
-        await client.PostAsJsonAsync("/api/orders", new { Sku = "SKU-LIST-3", Quantity = 1 });
+        var skuA = await CatalogueSetup.CreateProductAsync(client);
+        var skuB = await CatalogueSetup.CreateProductAsync(client);
+        await client.PostAsJsonAsync("/api/orders", new { Sku = skuA, Quantity = 1 });
+        await client.PostAsJsonAsync("/api/orders", new { Sku = skuB, Quantity = 1 });
 
         var page = await client.GetFromJsonAsync<OrderPageDto>("/api/orders?limit=1");
 
@@ -42,15 +45,17 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
 
-        // Unique per run, not "SKU-LIST-N": this shared database also holds rows from every
+        // Each order gets its own product: this shared database also holds rows from every
         // other test in ApiFactoryCollection, so the ids returned - not the row count - are
         // what this test can safely pin down.
-        var suffix = Guid.NewGuid().ToString("N");
+        var skuA = await CatalogueSetup.CreateProductAsync(client);
+        var skuB = await CatalogueSetup.CreateProductAsync(client);
+        var skuC = await CatalogueSetup.CreateProductAsync(client);
         var createdA = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = $"SKU-CURSOR-A-{suffix}", Quantity = 1 });
+            "/api/orders", new { Sku = skuA, Quantity = 1 });
         var idA = await createdA.Content.ReadFromJsonAsync<Guid>();
         var createdB = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = $"SKU-CURSOR-B-{suffix}", Quantity = 1 });
+            "/api/orders", new { Sku = skuB, Quantity = 1 });
         var idB = await createdB.Content.ReadFromJsonAsync<Guid>();
 
         var pageOne = await client.GetFromJsonAsync<OrderPageDto>("/api/orders?limit=1");
@@ -63,7 +68,7 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
         // paging a static table would pass identically under correct keyset paging and under
         // broken offset paging. Only a row inserted between the two HTTP calls tells them apart.
         await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = $"SKU-CURSOR-C-{suffix}", Quantity = 1 });
+            "/api/orders", new { Sku = skuC, Quantity = 1 });
 
         var pageTwo = await client.GetFromJsonAsync<OrderPageDto>(
             $"/api/orders?limit=1&cursor={Uri.EscapeDataString(cursor)}");
@@ -107,8 +112,9 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     {
         using var owner = await factory.CreateAuthenticatedClientAsync();
         using var stranger = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(owner);
         var created = await owner.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-LIST-PRIVATE", Quantity = 1 });
+            "/api/orders", new { Sku = sku, Quantity = 1 });
         created.StatusCode.Should().Be(HttpStatusCode.Created);
         var id = await created.Content.ReadFromJsonAsync<Guid>();
 
