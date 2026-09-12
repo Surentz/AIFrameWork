@@ -1,7 +1,22 @@
+# Two Ingress resources, not one, because affinity annotations apply to an Ingress as a whole
+# and there are two backends behind this host.
+#
+# With both paths on a single Ingress, ingress-nginx issued a sticky cookie for EACH backend,
+# both named 'aiframework.route': one scoped Path=/api (hashing an api pod) and one scoped
+# Path=/ (hashing a web pod). A browser stores those as two distinct cookies and sends BOTH on
+# every /api request, at which point nginx's affinity stops resolving to the api pod and the
+# request is load-balanced instead. That silently defeats ADR 0010: a PlaceOrder and the
+# GetOrders that follows it land on different pods, and because HybridCache is L1-only the
+# reading pod serves its own stale page - the new order simply does not appear. Reproduced as a
+# ~25% failure rate on the read-your-own-write path, and as intermittent failures of
+# frontend/e2e/specs/orders/place-order.spec.ts against the kind cluster.
+#
+# Splitting them means exactly one 'aiframework.route' cookie exists, so it always names an api
+# pod. The web backend is stateless nginx serving a static bundle and needs no stickiness at all.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: aiframework
+  name: aiframework-api
   annotations:
     # Cookie affinity is what keeps query-cache eviction correct. HybridCache is L1-only, so
     # a PlaceOrder handled by one pod cannot evict an entry held by the other; pinning a user
@@ -21,8 +36,6 @@ spec:
     - host: aiframework.localtest.me
       http:
         paths:
-          # /api first: Prefix rules are matched longest-first, but keeping the order explicit
-          # makes the intent readable.
           - path: /api
             pathType: Prefix
             backend:
@@ -30,6 +43,23 @@ spec:
                 name: api
                 port:
                   number: 8080
+---
+# Deliberately carries NO affinity annotations - see the header above. Adding any here
+# re-creates the second 'aiframework.route' cookie and the bug with it.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aiframework-web
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - aiframework.localtest.me
+      secretName: aiframework-tls
+  rules:
+    - host: aiframework.localtest.me
+      http:
+        paths:
           - path: /
             pathType: Prefix
             backend:
