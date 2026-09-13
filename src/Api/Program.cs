@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using AiFramework.Api;
 using AiFramework.Api.Auth;
+using AiFramework.Api.Observability;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Users;
 using AiFramework.Infrastructure;
@@ -30,6 +31,14 @@ if (string.IsNullOrWhiteSpace(connectionString))
     // Npgsql on the first request.
     throw new InvalidOperationException("ConnectionStrings:Default is not configured.");
 }
+
+// Registered before everything else so the tracer provider exists for the whole pipeline —
+// including the auth handler's OnRedirectToLogin/OnValidatePrincipal callbacks below, which run
+// inside a request's own Activity. Export is configuration-gated and off by default; the tracer
+// provider itself is not, because it is what makes Activity.Current non-null, which is what
+// makes the traceId already written into every ProblemDetails below resolve to something real.
+// See docs/superpowers/plans/2026-09-13-centralized-logging.md and ADR 0014.
+builder.AddObservability();
 
 builder.Services.AddControllers();
 

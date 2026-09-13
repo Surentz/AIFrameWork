@@ -66,6 +66,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // shared Postgres container.
         builder.UseSetting("Cache:Enabled", "false");
 
+        // Belt and braces: appsettings.json already defaults this to false, so every test host
+        // would get an unexported (but still active) tracer provider either way. This is
+        // defence against someone flipping that default later — without it, every integration
+        // test in this project would attempt OTLP delivery to a collector that is not there.
+        builder.UseSetting("Observability:Otlp:Enabled", "false");
+
         // Split out to a method of its own so ConfigureWebHost stays under MA0051's line limit
         // now that it also carries the Cache:Enabled setting above — the split is purely
         // mechanical, the ConfigureServices callback itself is unchanged.
