@@ -82,8 +82,11 @@ second normalization step, and without `Order` needing to know the normalization
 ### An unknown sku is a validation failure
 
 `ErrorKind.Validation`, code `orders.unknown_sku`, message naming the normalized sku. Not
-`NotFound`: from the caller's position this is a bad value in a submitted field, and it maps to
-the 400 the form renders beside the input, exactly as an invalid quantity does today.
+`NotFound`: from the caller's position this is a bad value in a submitted field. In practice the
+form renders it as a generic banner rather than beside the field — `PlaceOrder`'s error carries no
+per-property `Details`, unlike an invalid quantity's FluentValidation failure — which is accepted
+rather than fixed: the picker makes this error near-unreachable in the first place, which was
+always the stronger argument for it than field-level placement.
 
 The check-then-insert has no uniqueness guard behind it, unlike `CreateProduct`'s, whose comment
 explains that the unique index is the real defence. That asymmetry is deliberate, not an
@@ -119,7 +122,11 @@ genuinely overlapped.
 
 **Additive-only is also what satisfies ADR 0010.** Through Phase B and the rollout that follows,
 the previous generation's pods keep inserting orders that set none of these columns. Nullable
-columns let those inserts succeed instead of erroring for the length of the rollout.
+columns let those inserts succeed instead of erroring for the length of the rollout — but nothing
+revisits those rows afterward. There is no follow-up backfill once the rollout completes, so an
+order placed during that window stays snapshot-less permanently, exactly like a genuinely
+pre-catalogue order. That is accepted, not an oversight: it is a short, bounded window, and the
+alternative is a second migration for a handful of rows nobody has asked to fix.
 
 ### The form offers the catalogue instead of accepting a string
 
