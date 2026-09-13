@@ -11,6 +11,9 @@ public static class MessagingRegistration
     /// no closure allocation — while TCommand and TResponse still come from the enclosing
     /// generic method's type parameters, letting <see cref="CommandDispatcher"/> invoke the
     /// right handler with no reflection.
+    /// <see cref="Behaviors.LoggedAsync{TRequest,TResponse}"/> is the outermost wrapper, so a
+    /// logged duration covers validation, the handler, commit and eviction together — the inner
+    /// lambda it wraps is itself <c>static</c>, for the same no-closure reason as this method.
     /// </summary>
     public static IServiceCollection AddCommand<TCommand, TResponse, THandler>(
         this IServiceCollection services)
@@ -20,25 +23,25 @@ public static class MessagingRegistration
         ArgumentNullException.ThrowIfNull(services);
 
         static async Task<object?> InvokeAsync(
-            IServiceProvider sp, object command, CancellationToken ct)
-        {
-            var typed = (TCommand)command;
+            IServiceProvider sp, object command, CancellationToken ct) =>
+            await Behaviors.LoggedAsync<TCommand, TResponse>(
+                sp, "Command", (TCommand)command, static async (sp, typed, ct) =>
+                {
+                    var failed = await Behaviors.ValidateAsync<TCommand, TResponse>(sp, typed, ct)
+                        .ConfigureAwait(false);
+                    if (failed is not null)
+                    {
+                        return failed;
+                    }
 
-            var failed = await Behaviors.ValidateAsync<TCommand, TResponse>(sp, typed, ct)
-                .ConfigureAwait(false);
-            if (failed is not null)
-            {
-                return failed;
-            }
+                    var handler = sp.GetRequiredService<ICommandHandler<TCommand, TResponse>>();
+                    var result = await handler.HandleAsync(typed, ct).ConfigureAwait(false);
 
-            var handler = sp.GetRequiredService<ICommandHandler<TCommand, TResponse>>();
-            var result = await handler.HandleAsync(typed, ct).ConfigureAwait(false);
+                    await Behaviors.CommitAsync(sp, result, ct).ConfigureAwait(false);
+                    await Behaviors.EvictAsync(sp, typed, result, ct).ConfigureAwait(false);
 
-            await Behaviors.CommitAsync(sp, result, ct).ConfigureAwait(false);
-            await Behaviors.EvictAsync(sp, typed, result, ct).ConfigureAwait(false);
-
-            return result;
-        }
+                    return result;
+                }, ct).ConfigureAwait(false);
 
         services.AddScoped<ICommandHandler<TCommand, TResponse>, THandler>();
         return services.AddSingleton(new CommandDescriptor(typeof(TCommand), InvokeAsync));
@@ -50,6 +53,9 @@ public static class MessagingRegistration
     /// via <see cref="QueryDispatcher"/>. Unlike the command path this runs no validation —
     /// query handlers validate their own inputs — but it does run the caching behavior, which
     /// is a no-op for a query that has not opted in with ICacheable.
+    /// <see cref="Behaviors.LoggedAsync{TRequest,TResponse}"/> wraps the cache, not the other
+    /// way round, so a logged duration reflects what the caller actually waited for — a cache
+    /// hit included.
     /// </summary>
     public static IServiceCollection AddQuery<TQuery, TResponse, THandler>(
         this IServiceCollection services)
@@ -60,8 +66,10 @@ public static class MessagingRegistration
 
         static async Task<object?> InvokeAsync(
             IServiceProvider sp, object query, CancellationToken ct) =>
-            await Behaviors.CachedAsync<TQuery, TResponse>(sp, (TQuery)query, ct)
-                .ConfigureAwait(false);
+            await Behaviors.LoggedAsync<TQuery, TResponse>(
+                sp, "Query", (TQuery)query,
+                static (sp, typed, ct) => Behaviors.CachedAsync<TQuery, TResponse>(sp, typed, ct),
+                ct).ConfigureAwait(false);
 
         services.AddScoped<IQueryHandler<TQuery, TResponse>, THandler>();
         return services.AddSingleton(new QueryDescriptor(typeof(TQuery), InvokeAsync));
