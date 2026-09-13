@@ -101,7 +101,7 @@ Invoke-Step 'Loading images into kind' {
         aiframework-web:local --name $cluster
 }
 
-$overlay = Join-Path $repoRoot (
+$overlay = Join-Path $repoRoot $(
     if ($WithObservability) { 'k8s/overlays/local-observability' } else { 'k8s/overlays/local' }
 )
 
