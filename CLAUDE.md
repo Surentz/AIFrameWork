@@ -444,7 +444,8 @@ on the SDK to (confirmed empirically that it will not: see that method's own rem
 that cost to discover).
 
 See `docs/superpowers/plans/2026-09-13-centralized-logging.md` for the full design and the
-phased rollout. No ADR yet — this section is the record until one is written.
+phased rollout, and ADR 0014 for the decision itself — MEL + a pipeline behavior over Serilog or
+a base class, OTLP export over a store-specific sink.
 
 
 ## CI
