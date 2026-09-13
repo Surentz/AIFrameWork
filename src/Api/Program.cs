@@ -10,6 +10,7 @@ using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Persistence;
+using AiFramework.Infrastructure.Resilience;
 using JasperFx;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -231,6 +232,11 @@ builder.Services.AddHealthChecks()
 // ServiceCollection in unit tests. Same shape as Wolverine:Durable and RateLimiting:Auth above:
 // Api reads its own configuration and hands the values to Infrastructure.
 builder.Services.Configure<CacheOptions>(builder.Configuration.GetSection("Cache"));
+
+// Same reason, same shape: AddResilience registers and validates ResilienceOptions but does not
+// bind, so it stays resolvable from a bare ServiceCollection in a unit test. Api reads its own
+// configuration and hands the values to Infrastructure. ADR 0014.
+builder.Services.Configure<ResilienceOptions>(builder.Configuration.GetSection("Resilience"));
 
 // ADR 0005 spike: Wolverine's durable event path, alongside the existing outbox rather than
 // replacing it. UseWolverine hooks the host builder, so this cannot go through AddInfrastructure.

@@ -9,6 +9,7 @@ using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Messaging;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
+using AiFramework.Infrastructure.Resilience;
 using AiFramework.Infrastructure.Security;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -92,6 +93,10 @@ public static class InfrastructureRegistration
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         services.AddCaching();
+
+        // Beside AddCaching, and inert until a typed client attaches a pipeline to it:
+        // this registers and validates the retry budget, nothing more. ADR 0014.
+        services.AddResilience();
 
         services.AddOutbox();
 
