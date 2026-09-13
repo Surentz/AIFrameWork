@@ -1,6 +1,7 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure.Outbox;
@@ -9,22 +10,38 @@ namespace AiFramework.Infrastructure.Outbox;
 /// Processes exactly one claimed item and records the outcome. All the decision logic lives
 /// here rather than in the worker loop, so it is testable without a host or a channel.
 /// </summary>
-public sealed class OutboxWorkItemProcessor(
+public sealed partial class OutboxWorkItemProcessor(
     AiFrameworkDbContext context,
     DomainEventRegistry registry,
     IServiceProvider services,
     IOptions<OutboxOptions> options,
-    IClock clock)
+    IClock clock,
+    ILogger<OutboxWorkItemProcessor> logger)
 {
     private readonly OutboxOptions _options = options.Value;
 
     public async Task ProcessAsync(OutboxWorkItem item, CancellationToken cancellationToken)
     {
+        // The raw ILogger.BeginScope<TState> overload, not the LoggerExtensions.BeginScope(this
+        // ILogger, string, object?[]) convenience one — CA1848 flags the latter the same way it
+        // flags LogInformation/LogWarning called directly instead of through a [LoggerMessage]
+        // delegate. Mirrors Behaviors.LoggedAsync's identical scope on the command/query
+        // dispatch path. MessageId is stable across every redelivery of the same event (see
+        // src/Application/CLAUDE.md), which is what makes it the key for "show me every attempt
+        // at this message" across the three log calls below.
+        using var scope = logger.BeginScope(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["MessageId"] = item.Id,
+            ["EventType"] = item.EventName,
+            ["Attempt"] = item.Attempt,
+        });
+
         if (!registry.TryGet(item.EventName, out var descriptor))
         {
-            await CompleteAsync(item, OutboxStatus.Dead,
-                $"No registration for event name '{item.EventName}'.", cancellationToken)
+            var reason = $"No registration for event name '{item.EventName}'.";
+            await CompleteAsync(item, OutboxStatus.Dead, reason, cancellationToken)
                 .ConfigureAwait(false);
+            LogDeadLettered(logger, item.Id, item.EventName, reason);
             return;
         }
 
@@ -38,7 +55,8 @@ public sealed class OutboxWorkItemProcessor(
         // the row InFlight with its lease still set. OutboxPoller.ClaimAsync reclaims any
         // InFlight row whose LeasedUntil has passed, so a cancelled (e.g. shutting-down) worker
         // does not need to record a failure itself; the row is picked up again once the lease
-        // expires.
+        // expires. Nothing is logged on this path either, for the same reason: it is not this
+        // item's outcome, it is the process shutting down.
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await FailAsync(item, exception, cancellationToken).ConfigureAwait(false);
@@ -46,6 +64,7 @@ public sealed class OutboxWorkItemProcessor(
         }
 
         await CompleteAsync(item, OutboxStatus.Processed, null, cancellationToken).ConfigureAwait(false);
+        LogDispatched(logger, item.Id, item.EventName);
     }
 
     private async Task FailAsync(OutboxWorkItem item, Exception exception, CancellationToken cancellationToken)
@@ -54,6 +73,7 @@ public sealed class OutboxWorkItemProcessor(
         {
             await CompleteAsync(item, OutboxStatus.Dead, exception.Message, cancellationToken)
                 .ConfigureAwait(false);
+            LogDeadLettered(logger, item.Id, item.EventName, exception.Message);
             return;
         }
 
@@ -71,6 +91,9 @@ public sealed class OutboxWorkItemProcessor(
                 .SetProperty(m => m.LastError, Truncate(exception.Message)),
                 cancellationToken)
             .ConfigureAwait(false);
+
+        LogRetryScheduled(
+            logger, item.Id, item.EventName, item.Attempt, nextAttemptAt, exception.Message);
     }
 
     // ProcessedAt records when the row reached a terminal state, not that the handler
@@ -93,4 +116,31 @@ public sealed class OutboxWorkItemProcessor(
 
     private static string Truncate(string value) =>
         value.Length <= 2048 ? value : value[..2048];
+
+    // Debug, matching Behaviors.LoggedAsync's MessagingLog.Succeeded: the routine outcome stays
+    // quiet by default, so the store is not filled with "it worked" for every delivered event.
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Outbox message {MessageId} ({EventType}) dispatched.")]
+    private static partial void LogDispatched(ILogger logger, Guid messageId, string eventType);
+
+    // Information, not Warning: a retry is the self-healing path working as designed (a
+    // transient database blip, say), worth knowing without paging anyone. Dead-lettering below
+    // is the one that should.
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Outbox message {MessageId} ({EventType}) failed on attempt {Attempt}; " +
+            "retrying at {NextAttemptAt}. {Reason}")]
+    private static partial void LogRetryScheduled(
+        ILogger logger,
+        Guid messageId,
+        string eventType,
+        int attempt,
+        DateTimeOffset nextAttemptAt,
+        string reason);
+
+    // Warning: a message giving up after MaxAttempts — or one whose event name was never
+    // registered at all — is the single most operationally interesting event the outbox
+    // produces, and before this it was silent.
+    [LoggerMessage(
+        Level = LogLevel.Warning, Message = "Outbox message {MessageId} ({EventType}) dead-lettered. {Reason}")]
+    private static partial void LogDeadLettered(ILogger logger, Guid messageId, string eventType, string reason);
 }

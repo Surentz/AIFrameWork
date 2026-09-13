@@ -2,10 +2,12 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Domain.Abstractions;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
+using AiFramework.Infrastructure.Tests.Messaging;
 using AiFramework.Infrastructure.Tests.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure.Tests.Outbox;
@@ -53,9 +55,23 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
     // Amendment 2: ValidateScopes = true so a scoped-from-root resolution throws instead of
     // silently succeeding. Every test below resolves the processor through a fresh
     // IServiceScope, never from the root provider directly, so this is exercised for real.
-    private ServiceProvider BuildProvider(OutboxOptions? options = null)
+    private ServiceProvider BuildProvider(OutboxOptions? options = null, CapturingLoggerProvider? logs = null)
     {
         var services = new ServiceCollection();
+        // OutboxWorkItemProcessor now resolves ILogger<OutboxWorkItemProcessor> via its primary
+        // constructor, like every other consumer of ILogger<T> in this project's Build helpers.
+        // SetMinimumLevel(Debug) only when a capturing provider is actually attached: it is what
+        // Behaviors.LoggedAsync's own tests needed to observe the Debug-level "dispatched"
+        // record, since Microsoft.Extensions.Logging defaults its filter to Information — see
+        // LoggingBehaviorTests.Build for the fuller explanation.
+        services.AddLogging(builder =>
+        {
+            if (logs is not null)
+            {
+                builder.SetMinimumLevel(LogLevel.Debug);
+                builder.AddProvider(logs);
+            }
+        });
         services.AddSingleton<HandlerSink>();
         services.AddSingleton<ContextSink>();
         services.AddDomainEvent<Pinged>("test.pinged");
@@ -135,6 +151,56 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task ProcessAsync_WhenTheHandlerSucceeds_LogsDispatchedAtDebug()
+    {
+        var id = await SeedAsync("test.pinged", """{"text":"hi"}""", 1);
+        using var logs = new CapturingLoggerProvider();
+        await using var provider = BuildProvider(logs: logs);
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(new OutboxWorkItem(id, "test.pinged", """{"text":"hi"}""", 1), CancellationToken.None);
+
+        logs.Records.Should().ContainSingle(r =>
+            r.Level == LogLevel.Debug
+            && r.Message.Contains("dispatched", StringComparison.Ordinal)
+            && r.Message.Contains(id.ToString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenTheHandlerThrowsAndWillRetry_LogsRetryScheduledAtInformation()
+    {
+        var id = await SeedAsync("test.boom", "{}", 1);
+        using var logs = new CapturingLoggerProvider();
+        await using var provider = BuildProvider(logs: logs);
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(new OutboxWorkItem(id, "test.boom", "{}", 1), CancellationToken.None);
+
+        logs.Records.Should().ContainSingle(r =>
+            r.Level == LogLevel.Information
+            && r.Message.Contains("retrying", StringComparison.Ordinal)
+            && r.Message.Contains("handler exploded", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_OnTheFinalAttempt_LogsDeadLetteredAtWarning()
+    {
+        var id = await SeedAsync("test.boom", "{}", 5);
+        using var logs = new CapturingLoggerProvider();
+        await using var provider = BuildProvider(new OutboxOptions { MaxAttempts = 5 }, logs);
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(new OutboxWorkItem(id, "test.boom", "{}", 5), CancellationToken.None);
+
+        logs.Records.Should().ContainSingle(r =>
+            r.Level == LogLevel.Warning
+            && r.Message.Contains("dead-lettered", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ProcessAsync_WithAnUnknownEventName_MarksTheRowDeadImmediately()
     {
         var id = await SeedAsync("test.unregistered", "{}", 1);
@@ -147,6 +213,23 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
         await using var verify = fixture.CreateContext();
         var row = await verify.Outbox.SingleAsync(m => m.Id == id);
         row.Status.Should().Be(OutboxStatus.Dead, "no number of retries invents a registration");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithAnUnknownEventName_LogsDeadLetteredAtWarning()
+    {
+        var id = await SeedAsync("test.unregistered", "{}", 1);
+        using var logs = new CapturingLoggerProvider();
+        await using var provider = BuildProvider(logs: logs);
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(new OutboxWorkItem(id, "test.unregistered", "{}", 1), CancellationToken.None);
+
+        logs.Records.Should().ContainSingle(r =>
+            r.Level == LogLevel.Warning
+            && r.Message.Contains("dead-lettered", StringComparison.Ordinal)
+            && r.Message.Contains("No registration", StringComparison.Ordinal));
     }
 
     // Amendment 1: renamed from "...PassesTheMessageIdAsTheDedupeKey" and rewritten to assert

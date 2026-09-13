@@ -88,7 +88,14 @@ event, it is persisted with the aggregate, and it is delivered at least once aft
   `MaxAttempts`.
 - `OutboxWorkItemProcessor` owns the outcome of one claimed item: dispatch, retry with backoff,
   or dead-letter. All of that decision logic lives here rather than in a `BackgroundService` loop
-  so it is testable without a host.
+  so it is testable without a host. It logs all three outcomes — dispatched (Debug, the routine
+  case, matching `Behaviors.LoggedAsync`'s own "success is Debug" convention), retry scheduled
+  (Information — the self-healing path working as designed), and dead-lettered (Warning — the
+  one an operator actually wants to see, whether from `MaxAttempts` exhausting or from an
+  unregistered event name). A `logger.BeginScope` carries `MessageId`, `EventType` and `Attempt`
+  onto everything logged from inside `ProcessAsync`, the same raw `ILogger.BeginScope<TState>`
+  pattern `Behaviors.LoggedAsync` uses and for the identical CA1848 reason — see that method's
+  remarks.
 - The two `BackgroundService` pumps in `OutboxHostedServices.cs` (`OutboxPollerService`,
   `OutboxWorkerService`) are deliberately thin: they own scope creation and the channel hop, and
   delegate the actual work to `OutboxPoller`/`OutboxWorkItemProcessor` above. `OutboxHostedServices.cs`
