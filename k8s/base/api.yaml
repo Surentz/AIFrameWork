@@ -67,6 +67,18 @@ spec:
               path: /health/ready
               port: 8080
             periodSeconds: 10
+            # Explicit, where the other two probes accept Kubernetes' 1s default. This one now
+            # calls AddDbContextCheck's CanConnectAsync, which goes through the
+            # EnableRetryOnFailure execution strategy like every other database access, so a
+            # down Postgres no longer fails this probe on the FIRST attempt - it fails after up
+            # to three retries. In this cluster that is fast: a Postgres Service with no ready
+            # endpoints refuses the connection near-instantly, so three retries plus up to 1s of
+            # backoff between them comfortably fits inside 5s. The pathological case - a
+            # network path that blackholes rather than refuses - is bounded separately by the
+            # connection string's own Timeout=5, not by this value; without it, a single stalled
+            # attempt could sit for Npgsql's 15s default and three would sit for three times
+            # that, which no probe timeout here would paper over. ADR 0014.
+            timeoutSeconds: 5
           # A memory limit but deliberately no CPU limit. Memory is the one the kubelet cannot
           # reclaim gracefully, so a ceiling turns a leak into a restart instead of an evicted
           # neighbour. A CPU limit, by contrast, throttles: the request already guarantees a

@@ -64,14 +64,26 @@ public sealed class WolverineOutboxAtomicityTests(ApiFactory factory)
                 .GetRequiredService<IDbContextOutbox<AiFrameworkDbContext>>();
             var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
 
-            context.Set<Order>().Add(
-                Order.Place(orderId, Guid.NewGuid(), 2, DateTimeOffset.UtcNow, AnOrderedProduct.Any(), "SKU-ATOMIC-COMMIT"));
+            // AddInfrastructure's EnableRetryOnFailure (ADR 0014) means this DbContext now
+            // refuses a user-initiated transaction outside an execution strategy - and
+            // SaveChangesAndFlushMessagesAsync opens exactly one internally, to hold the message
+            // until the order commits. Discovered by this exact test going red once
+            // EnableRetryOnFailure landed ("does not support user-initiated transactions").
+            // This is the shape a real handler adopting IDbContextOutbox<T> would need too, so
+            // wrapping it here proves the pattern instead of hiding a test-only workaround from
+            // whoever adopts it for real - see WolverineEventPath.cs's own comment on
+            // UseEntityFrameworkCoreTransactions and Infrastructure/CLAUDE.md's EF rules.
+            await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                context.Set<Order>().Add(
+                    Order.Place(orderId, Guid.NewGuid(), 2, DateTimeOffset.UtcNow, AnOrderedProduct.Any(), "SKU-ATOMIC-COMMIT"));
 
-            await outbox.PublishAsync(new OrderPlacedNotification(orderId, "SKU-ATOMIC-COMMIT", 2));
+                await outbox.PublishAsync(new OrderPlacedNotification(orderId, "SKU-ATOMIC-COMMIT", 2));
 
-            // One call commits the order and releases the message. That is the whole point:
-            // the two cannot diverge, because there is only one transaction.
-            await outbox.SaveChangesAndFlushMessagesAsync(CancellationToken.None);
+                // One call commits the order and releases the message. That is the whole point:
+                // the two cannot diverge, because there is only one transaction.
+                await outbox.SaveChangesAndFlushMessagesAsync(CancellationToken.None);
+            });
         });
 
         recorder.WasHandled(orderId).Should().BeTrue(

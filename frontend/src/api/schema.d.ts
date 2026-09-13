@@ -37,6 +37,73 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/rates": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * The current rate to convert one unit of from into
+         *     to. 503 is this endpoint's distinctive failure: the provider's own
+         *     retry budget (ADR 0014) has already been exhausted by the time one reaches a caller here.
+         */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly from?: string;
+                    readonly to?: string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ExchangeRateResponse"];
+                        readonly "application/json": components["schemas"]["ExchangeRateResponse"];
+                        readonly "text/json": components["schemas"]["ExchangeRateResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                readonly 503: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/products": {
         readonly parameters: {
             readonly query?: never;
@@ -747,6 +814,14 @@ export interface components {
             readonly description?: null | string;
             /** Format: double */
             readonly price: number | string;
+        };
+        readonly ExchangeRateResponse: {
+            readonly from: string;
+            readonly to: string;
+            /** Format: double */
+            readonly rate: number | string;
+            /** Format: date */
+            readonly asOf: string;
         };
         readonly LoginRequest: {
             readonly username: string;

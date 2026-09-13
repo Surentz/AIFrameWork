@@ -89,6 +89,18 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
     /// counter is moving anyway. Giving up silently is safe — the caller still gets the uniform
     /// failure, and this must never surface a different answer to the client.
     /// </summary>
+    /// <remarks>
+    /// This "lost race" retry cannot distinguish a genuine concurrent writer from
+    /// AddInfrastructure's own EnableRetryOnFailure retrying the FIRST write transparently: if
+    /// that write committed but its acknowledgment was lost to a transient fault, the retried
+    /// <c>UPDATE ... WHERE FailedSignInAttempts = expected</c> matches zero rows for the same
+    /// reason a real concurrent writer would — the counter has already moved — and
+    /// TryRecordFailedSignInAsync reports it as a lost race either way. The consequence: this
+    /// method's OWN retry then re-reads the already-advanced row and advances it again, so one
+    /// failed sign-in can increment the counter twice. That is the safe direction for a lockout —
+    /// it locks an account slightly earlier, never later — so it is accepted rather than
+    /// distinguished. ADR 0014.
+    /// </remarks>
     private async Task RecordFailureAsync(User user, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var expected = user.FailedSignInAttempts;
