@@ -350,6 +350,10 @@ TTL, not the eviction, is what bounds how long an edit stays invisible to other 
 accepted rather than worked around: an unscoped cache path would give up the one property that
 makes this cache safe to use without thinking. See ADR 0013.
 
+`PlaceOrder` snapshots the product's name and price onto the order, so a later `UpdateProduct`
+cannot change what an existing order says it cost — and cannot stale a cached order page either.
+That is what keeps product writes out of the order cache's eviction path entirely.
+
 No test waits for a TTL to lapse; `HybridCache` expires on its own clock, which `IClock` cannot
 reach. The only TTL arithmetic is `CacheDuration.Clamp`, tested directly.
 

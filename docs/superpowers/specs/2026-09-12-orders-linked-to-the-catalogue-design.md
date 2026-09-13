@@ -1,7 +1,7 @@
 # Orders linked to the catalogue
 
 **Date:** 2026-09-12
-**Status:** Approved, not yet implemented
+**Status:** Implemented
 
 ## Context
 
