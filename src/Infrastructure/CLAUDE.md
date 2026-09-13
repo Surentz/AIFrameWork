@@ -69,6 +69,48 @@ beside the command ones. Off by configuration everywhere it is not the subject �
   disposed before the work completes if that request aborts. Do not opt in a query whose handler
   holds resources across the await, and do not assume the scope outlives the factory.
 
+## Resilience
+
+`Resilience/` holds `ResilienceOptions`, `ResilienceRegistration` (`AddResilience`,
+`AddExchangeRateClient`), and the one typed client that exists today, `ExchangeRateClient`. Both
+outbound HTTP and the Npgsql provider retry transient faults now — see root `CLAUDE.md`'s
+Resilience section for the three that will cost you an afternoon. This section is the rules for
+writing the *next* typed client.
+
+- **The pipeline lives under the port, never over it.** Polly decides whether to retry by
+  inspecting an outcome — an exception, or the raw `HttpResponseMessage` — never a `Result<T>`,
+  which already reads as success to anything downstream of the port. The adapter (like
+  `ExchangeRateClient`) is the only place a resilience-wrapped `HttpClient` call may happen, and
+  it converts the outcome to `Result<T>` only *after* the whole pipeline — retry, circuit
+  breaker, both timeouts — has run its course. **Never construct a failed `Result` and return it
+  from inside a delegate Polly still wraps** — that is exactly the shape that silently disables
+  every retry, with no exception and no failing test.
+- **The standard handler's strategy order is not to be rearranged**: rate limiter, then total
+  request timeout, then retry, then circuit breaker, then per-attempt timeout, outermost to
+  innermost. The total timeout sits outside the retry so the retry budget can never outlive the
+  caller's patience; the attempt timeout sits inside it so one hung socket cannot consume the
+  whole budget. `AddStandardResilienceHandler()` composes this correctly by default — hand-rolled
+  pipelines are where this gets rearranged by accident.
+- **A non-GET call must carry an idempotency key or disable retry** — there is no third option.
+  `AddStandardResilienceHandler` retries by status code, not by verb, so it will happily replay a
+  POST that already succeeded at the far end. "Disable retry" is not `MaxRetryAttempts = 0` —
+  Polly's own validation on that property requires at least 1 and throws from inside the
+  pipeline-build callback the first time a request is made. The actual mechanism is rejecting
+  every outcome in the retry predicate (`options.Retry.ShouldHandle = _ => ValueTask.FromResult(false)`),
+  the same one `ResilienceOptions.Enabled` uses — see its own remarks for the full story.
+- **`FakeTimeProvider.AutoAdvanceAmount` does not work for testing Polly delays.** Each retry or
+  timeout schedules exactly one timer via `TimeProvider.CreateTimer` and awaits its single
+  callback; nothing re-reads the clock in a loop for `AutoAdvanceAmount` to catch, so it is never
+  consulted and the timer never fires. Register a `FakeTimeProvider` as the DI `TimeProvider`
+  (Polly resolves it from the container like anything else), then drive it by kicking the call
+  off unawaited and looping `clock.Advance(step)` with an `await Task.Yield()` between each call
+  — the yield is required specifically under xUnit, whose test execution context posts the timer
+  callback's continuation rather than running it inline. `ExchangeRateClientTests.cs`'s
+  `AdvanceUntilCompleteAsync` is the reference implementation; copy it rather than rediscovering
+  either finding from a hang.
+
+See ADR 0014.
+
 ## Outbox
 
 `Outbox/` implements the event half of the messaging design: an aggregate raises a domain
@@ -116,6 +158,21 @@ event, it is persisted with the aggregate, and it is delivered at least once aft
 - Project with `Select` before materialising — never `ToListAsync()` then filter in memory.
 - Never call `SaveChangesAsync` inside a loop.
 - Migrations are append-only. Never hand-edit one; the protect-migrations hook blocks it.
+- **`AddInfrastructure` configures `EnableRetryOnFailure`,** so every repository read,
+  `SaveChangesAsync`, and `ExecuteUpdateAsync` retries a transient fault automatically. The
+  consequence: **an explicit transaction must go through the execution strategy** —
+  `context.Database.CreateExecutionStrategy().ExecuteAsync(...)` — never a bare
+  `BeginTransactionAsync`, which throws once a retrying strategy is configured (it cannot retry
+  a block it does not own). Nothing in `src/` opens one directly today, which is why this was
+  cheap to adopt rather than a retrofit — but it already bit once, indirectly:
+  `IDbContextOutbox<T>.SaveChangesAndFlushMessagesAsync` (Wolverine's own EF Core integration,
+  `EventPath/WolverineEventPath.cs`) opens a transaction internally, and
+  `WolverineOutboxAtomicityTests` had to be wrapped in the execution strategy the moment this
+  landed. Any future handler that adopts `IDbContextOutbox<T>` needs the same wrapping.
+  `OutboxPoller.ClaimAsync` is the one deliberate exception: it bypasses the strategy by
+  building a raw `NpgsqlCommand` on the bare connection, because a failed claim is already
+  recovered twice over by the next poll cycle and the `LeasedUntil` reclaim — see the comment on
+  that method rather than repeating it here. ADR 0014.
 
 ## Tests
 

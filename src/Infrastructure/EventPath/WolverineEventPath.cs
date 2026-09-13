@@ -133,6 +133,14 @@ public static class WolverineEventPath
         // replace this repo's own AddDbContext registration (and force its options to a
         // singleton lifetime). This way the existing registration in
         // InfrastructureRegistration — interceptor and all — is untouched.
+        //
+        // That registration now also configures EnableRetryOnFailure (ADR 0014), and the two
+        // interact: SaveChangesAndFlushMessagesAsync opens its own transaction internally, which
+        // a retrying execution strategy refuses to run un-wrapped
+        // ("does not support user-initiated transactions"). WolverineOutboxAtomicityTests hit
+        // this directly and now wraps its call in
+        // context.Database.CreateExecutionStrategy().ExecuteAsync(...) — any future handler that
+        // adopts IDbContextOutbox<T> for real needs the same wrapping, not just this test.
         opts.UseEntityFrameworkCoreTransactions();
 
         // Local queues are BufferedInMemory unless enrolled, which means a message sitting in

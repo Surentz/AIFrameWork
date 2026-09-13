@@ -66,6 +66,19 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // shared Postgres container.
         builder.UseSetting("Cache:Enabled", "false");
 
+        // Off for every test in this project, for the same reason the cache is off above: a
+        // test asserting an ErrorKind.Unavailable failure must not first sit through the retry
+        // pipeline's own backoff delays. RatesEndpointTests still exercises the real pipeline —
+        // Resilience:Enabled only suppresses retrying (ADR 0014), not the request itself.
+        builder.UseSetting("Resilience:Enabled", "false");
+
+        // Port 1 on loopback: nothing is ever listening there, so the connection is refused
+        // immediately by the kernel with no DNS lookup and no real wall-clock wait — the
+        // opposite of pointing at the live provider, which this suite must never reach.
+        // RatesEndpointTests proves the resulting 503 + Retry-After; no test here needs a
+        // successful rate, so nothing more elaborate than "reliably unreachable" is required.
+        builder.UseSetting("Resilience:ExchangeRateBaseAddress", "http://127.0.0.1:1");
+
         // Split out to a method of its own so ConfigureWebHost stays under MA0051's line limit
         // now that it also carries the Cache:Enabled setting above — the split is purely
         // mechanical, the ConfigureServices callback itself is unchanged.
