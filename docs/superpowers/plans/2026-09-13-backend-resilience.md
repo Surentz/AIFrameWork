@@ -125,18 +125,31 @@ Before anything can fail, decide what failure looks like.
   endpoint is the cheapest way to assert the mapping without a real provider)
 
 **Steps:**
-- [ ] Add `Unavailable` to `ErrorKind` with an XML comment saying what it means and, more
+- [x] Add `Unavailable` to `ErrorKind` with an XML comment saying what it means and, more
       importantly, what it does not: an expected, *retryable* upstream failure, not a bug.
       A bug is an exception and belongs in `GlobalExceptionHandler`'s 500 branch.
-- [ ] Map it to `StatusCodes.Status503ServiceUnavailable` in `ResultExtensions.Problem`.
-- [ ] Set `Retry-After` on the 503 — the first response *header* this method writes. Use
+- [x] Map it to `StatusCodes.Status503ServiceUnavailable` in `ResultExtensions.Problem`.
+- [x] Set `Retry-After` on the 503 — the first response *header* this method writes. Use
       `Math.Ceiling`, and say why in a comment: `AuthRateLimitTests` already proves that
       truncating produces `Retry-After: 0`, which sends a well-behaved client straight back in.
-- [ ] Leave every other `ErrorKind` mapping untouched.
+      Extended beyond the plan: `Error` gained an optional `RetryAfter` (`TimeSpan?`) so a
+      producer with a better number can supply one, with a documented 5s floor when it does not.
+- [x] Leave every other `ErrorKind` mapping untouched.
 
 **Verify:** `dotnet test tests/Api.IntegrationTests` — a failed `Result` carrying
 `ErrorKind.Unavailable` produces 503, `application/problem+json`, a `traceId`, and a
 `Retry-After` strictly greater than zero.
+
+**Done.** `ResultExtensionsTests.cs` (new, unit-level, no host) covers all five `ErrorKind`
+mappings plus the Retry-After fallback/rounding/non-positive-override branches — 15 tests, all
+green. `TestEndpointsStartupFilter` gained a third probe path
+(`/api/test/problem/unavailable`) since no real handler produces `Unavailable` yet, executing
+the exact `result.Problem(HttpContext)` call site a controller uses via
+`ObjectResult.ExecuteResultAsync`; `Diagnostics/ProblemMappingTests.cs` proves the header
+reaches the wire over real HTTP — this one needs the shared Postgres Testcontainer for
+`CreateAuthenticatedClientAsync` and could not run in this container (no Docker daemon), but it
+builds clean and its only recorded failure mode here is `DockerUnavailableException`, the same
+as every other Testcontainers-backed test. Debug and Release both build with zero warnings.
 
 ---
 
