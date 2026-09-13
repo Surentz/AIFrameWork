@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
+import { formatPrice } from '../products/types';
 import { useOrder } from './queries';
 import './orders.css';
 
@@ -31,13 +32,35 @@ export function OrderDetail(): React.JSX.Element {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">{data.sku}</h1>
+          <h1 className="page-title">{data.productName ?? data.sku}</h1>
           <p className="page-subtitle">Order detail</p>
         </div>
       </div>
 
       <div className="card">
         <dl className="order-facts">
+          <div>
+            <dt>Sku</dt>
+            <dd>
+              {data.productId === undefined || data.productId === null ? (
+                data.sku
+              ) : (
+                <Link to={`/products/${data.productId}`}>{data.sku}</Link>
+              )}
+            </dd>
+          </div>
+          {data.unitPrice !== undefined && data.unitPrice !== null && (
+            <>
+              <div>
+                <dt>Unit price</dt>
+                <dd>{formatPrice(data.unitPrice)}</dd>
+              </div>
+              <div>
+                <dt>Total</dt>
+                <dd>{formatPrice(Number(data.unitPrice) * Number(data.quantity))}</dd>
+              </div>
+            </>
+          )}
           <div>
             <dt>Quantity</dt>
             <dd>{data.quantity}</dd>

@@ -50,4 +50,68 @@ describe('OrderDetail', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(`No order with id '${id}'.`);
   });
+
+  it('shows the product name and unit price when the order has a snapshot', async () => {
+    server.use(
+      http.get('/api/orders/:id', () =>
+        HttpResponse.json({
+          id,
+          sku: 'SKU-1',
+          quantity: 2,
+          placedAt: '2026-09-01T12:00:00Z',
+          productId: 'p0000000-0000-4000-8000-000000000001',
+          productName: 'Widget',
+          unitPrice: 12.5,
+        }),
+      ),
+    );
+
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'Widget' })).toBeInTheDocument();
+    // A regex, not '12.50': toLocaleString follows the runtime locale, so the decimal
+    // separator is not ours to assume. Two decimal places is the part that is. Same pattern
+    // as ProductList.test.tsx.
+    expect(await screen.findByText(/^12[.,]50$/)).toBeInTheDocument();
+    expect(screen.getByText(/^25[.,]00$/)).toBeInTheDocument();
+
+    const skuLink = screen.getByRole('link', { name: 'SKU-1' });
+    expect(skuLink).toHaveAttribute('href', '/products/p0000000-0000-4000-8000-000000000001');
+  });
+
+  it('falls back to the sku when the order predates the catalogue', async () => {
+    // The default handler returns anOrder, which OMITS productId/productName/unitPrice
+    // (undefined). The next test covers the API's other shape for the same case: explicit null.
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'SKU-1' })).toBeInTheDocument();
+    expect(screen.queryByText('Unit price')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'SKU-1' })).not.toBeInTheDocument();
+  });
+
+  it('falls back to the sku when the snapshot fields are explicit null', async () => {
+    // The real API sends a literal JSON null for these fields on a legacy order, not an omitted
+    // key - OrderResponse's members are `Guid?`/`string?`/`decimal?`, which System.Text.Json
+    // serializes as `null`, never absent. Proves the `=== null` half of each guard, which the
+    // previous test (relying on the fixture omitting the fields) does not exercise.
+    server.use(
+      http.get('/api/orders/:id', () =>
+        HttpResponse.json({
+          id,
+          sku: 'SKU-1',
+          quantity: 2,
+          placedAt: '2026-09-01T12:00:00Z',
+          productId: null,
+          productName: null,
+          unitPrice: null,
+        }),
+      ),
+    );
+
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'SKU-1' })).toBeInTheDocument();
+    expect(screen.queryByText('Unit price')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'SKU-1' })).not.toBeInTheDocument();
+  });
 });

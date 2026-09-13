@@ -83,7 +83,7 @@ export function OrderList(): React.JSX.Element {
               <tr key={order.id}>
                 <td>
                   <Link className="orders__sku" to={`/orders/${order.id}`}>
-                    {order.sku}
+                    {order.productName ?? order.sku}
                   </Link>
                 </td>
                 <td className="orders__num">{order.quantity}</td>

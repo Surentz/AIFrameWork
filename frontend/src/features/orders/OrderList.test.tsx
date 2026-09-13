@@ -95,4 +95,22 @@ describe('OrderList', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load orders.');
   });
+
+  it('shows the product name instead of the sku when the order has a snapshot', async () => {
+    // The other tests all use anOrder, which carries no productName - so they already exercise
+    // the fallback. This is the one place the positive case (name shown INSTEAD of sku) is proved.
+    server.use(
+      http.get('/api/orders', () =>
+        HttpResponse.json({
+          items: [{ ...anOrder, productName: 'Widget' }],
+          nextCursor: null,
+        }),
+      ),
+    );
+
+    renderList();
+
+    expect(await screen.findByRole('link', { name: 'Widget' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'SKU-1' })).not.toBeInTheDocument();
+  });
 });
