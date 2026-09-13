@@ -251,6 +251,7 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses port 5234 |
 | Run e2e tests (against Kubernetes) | `deploy/e2e-k8s.ps1` — deploy it first with "Start Kubernetes" |
 | Open last e2e report | `scripts/e2e-report.ps1` |
+| Pull latest | `scripts/update-branch.ps1` — fast-forwards whatever branch is currently checked out |
 
 The `.ps1` scripts it calls are the source of truth and work the same run directly.
 

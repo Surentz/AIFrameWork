@@ -20,10 +20,11 @@ echo   6. Stop Kubernetes       (deletes the kind cluster - Postgres data goes w
 echo   7. Run e2e tests         (local stack - stop the dev loop first, it uses port 5234)
 echo   8. Run e2e tests         (against Kubernetes - deploy it first with option 5)
 echo   9. Open last e2e report
-echo   10. Exit
+echo   10. Pull latest          (fast-forwards whatever branch is currently checked out)
+echo   11. Exit
 echo.
 set "choice="
-set /p choice="Choose an option (1-10): "
+set /p choice="Choose an option (1-11): "
 
 if "%choice%"=="1" goto install_prereqs
 if "%choice%"=="2" goto start_dev
@@ -34,7 +35,8 @@ if "%choice%"=="6" goto stop_k8s
 if "%choice%"=="7" goto run_e2e
 if "%choice%"=="8" goto run_e2e_k8s
 if "%choice%"=="9" goto open_report
-if "%choice%"=="10" goto end
+if "%choice%"=="10" goto update_branch
+if "%choice%"=="11" goto end
 
 echo.
 echo Not a valid option: %choice%
@@ -75,6 +77,10 @@ goto done
 
 :open_report
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\scripts\e2e-report.ps1"
+goto done
+
+:update_branch
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\scripts\update-branch.ps1"
 goto done
 
 :done
