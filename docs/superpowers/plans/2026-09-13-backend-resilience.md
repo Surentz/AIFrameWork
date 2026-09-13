@@ -363,42 +363,72 @@ despite simulating retries, an exhausted retry budget, and a 20-second `Retry-Af
 
 **Files:**
 - Create: `src/Api/Rates/RatesController.cs`, `src/Api/Rates/RateDtos.cs`
-- Modify: `src/Infrastructure/InfrastructureRegistration.cs` (register the query)
 - Create: `tests/Api.IntegrationTests/Rates/RatesEndpointTests.cs`
 - Modify: `tests/Api.IntegrationTests/ApiFactory.cs`
 
 **Steps:**
-- [ ] `services.AddQuery<GetExchangeRate, ExchangeRateView, GetExchangeRateHandler>()` in
-      `AddMessaging()` — the completeness test fails the build without it.
-- [ ] `GET /api/rates?from=EUR&to=USD`, `[Authorize]` (the query is `ICacheable`, and one
+- [x] `services.AddQuery<GetExchangeRate, ExchangeRateView, GetExchangeRateHandler>()` in
+      `AddMessaging()` — already done in Tasks 4/5, not a separate step here: registering the
+      query could not wait for this task, per Tasks 4/5's own "found, not planned" note.
+- [x] `GET /api/rates?from=EUR&to=USD`, `[Authorize]` (the query is `ICacheable`, and one
       dispatched with no caller throws by design — the same reason `ProductsController` gives).
-- [ ] `[ProducesResponseType]` for 200, 400, 401 and **503**. The 503 attribute is what puts
-      the new status into the committed contract.
-- [ ] DTOs use `required` + `init`, per `Api/CLAUDE.md`.
-- [ ] `ApiFactory`: `Resilience:Enabled=false` and a stub base address, with a comment giving
-      both reasons — a test must not sit through a backoff, and the suite must never reach the
-      live provider.
-- [ ] Integration tests: 401 unauthenticated; 400 on a bad currency code; 503 with
-      `Retry-After` when the stubbed provider is down.
+- [x] `[ProducesResponseType]` for 200, 400 and **503**. (401 needs no attribute of its own —
+      `[Authorize]` alone puts it in the contract, the same as every other authorized endpoint.)
+- [x] DTOs use `required` + `init`, per `Api/CLAUDE.md`.
+- [x] `ApiFactory`: `Resilience:Enabled=false` plus `Resilience:ExchangeRateBaseAddress` set to
+      `http://127.0.0.1:1` — loopback, nothing ever listening, so the connection is refused
+      immediately with no DNS lookup and no real wall-clock wait. Chosen over a hand-built stub
+      HTTP server: no test in this task needs a *successful* rate, only a reliably unreachable
+      one, and "refused instantly" is simpler and faster than standing up something to refuse it.
+- [x] Integration tests: 401 unauthenticated; 400 on a malformed currency code (proven not to
+      reach the unreachable address, since validation happens first); 400 on a missing one; 503
+      with `Retry-After` when the provider is unreachable (using `ResultExtensions.Problem`'s
+      Task 2 fallback floor, since the connection-refused failure carries no header of its own
+      for the adapter to forward).
 
 **Verify:** `dotnet test tests/Api.IntegrationTests`.
+
+**Done, verified with a real Postgres container and Docker available throughout.** All 115 Api
+tests pass (111 + 4 new `RatesEndpointTests`), the 503 test included, completing in well under a
+second including one real (instantly-refused) loopback connection attempt. Debug and Release
+both green; Api tests re-run clean under `-c Release`; `codegen write` produces no diff.
 
 ---
 
 ### Task 7: Regenerate the contract
 
 **Steps:**
-- [ ] `dotnet restore src/Api` (separate first step — `dotnet msbuild` does not restore
+- [x] `dotnet restore src/Api` (separate first step — `dotnet msbuild` does not restore
       implicitly, and folding it into `-t:"Restore;Build;..."` fails with CS9137).
-- [ ] ```bash
+- [x] ```bash
       ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
         Wolverine__Durable=false \
         dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
       ```
-- [ ] `npm run generate:api --prefix frontend`
-- [ ] Commit both generated files.
-- [ ] `dotnet run --project src/Api -- codegen write` — **expect no diff.** No Wolverine handler
-      changed, but CI re-runs it and fails on any, so confirm rather than assume.
+      Ran clean; the background outbox poller logs a connection-refused warning against the
+      placeholder connection string, exactly as CLAUDE.md says to expect — it is never opened,
+      only required to be non-empty.
+- [x] `npm run generate:api --prefix frontend`. Node in this container is 22.22.2, below the
+      documented 24.15.0 floor — `npm install` was expected to fail outright per root
+      `CLAUDE.md`, and instead succeeded (427 packages, 0 vulnerabilities) along with the
+      generation script itself. Not a claim that the floor is wrong; only that this specific
+      narrow operation happened not to hit whichever `npm`/Node-version interaction the floor
+      documents, on this exact machine, today.
+- [x] Commit both generated files: `openapi/AiFramework.Api.json` gained the `/api/rates` path
+      (200/400/503) and the `ExchangeRateResponse` schema; `frontend/src/api/schema.d.ts`
+      regenerated from it, mechanically, with no hand edits.
+- [x] `dotnet run --project src/Api -- codegen write` — confirmed no diff, twice (before and
+      after this task's changes). Nothing here touches a Wolverine handler.
+
+**One thing this step surfaced that needed reverting, not committing:** `npm install` rewrote
+`frontend/package-lock.json`, dropping `libc` metadata fields on several optional platform
+packages — an artifact of running under npm 10.9.7 (bundled with this Node 22) rather than
+whatever shipped with the pinned Node 24.20.0, not a real dependency change. Reverted with
+`git checkout -- frontend/package-lock.json` before committing; only `schema.d.ts` was kept.
+
+**Verify:** frontend `npm run lint` (clean, `--max-warnings 0`), `npm run build` (97 modules,
+495ms), `npm test -- --run` (14 files, 55 tests, all passing — no frontend code consumes
+`/api/rates` yet, so this is confirming no regression, not new coverage).
 
 **Verify:** `git diff --stat` shows `openapi/AiFramework.Api.json` and
 `frontend/src/api/schema.d.ts` carrying the new 503 and the rates path, and
