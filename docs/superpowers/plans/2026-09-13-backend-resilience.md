@@ -484,22 +484,70 @@ also corrected in two places to match what shipped (the `MaxRetryAttempts` mecha
 
 ### Task 9: Full verification
 
-- [ ] `/verify` — both stacks, Debug **and** Release. Release is the one that catches a
-      startup-time failure, which is exactly the shape a misconfigured resilience handler has
-      (`AttemptTimeout > TotalRequestTimeout` throws at build-of-pipeline time).
-- [ ] `dotnet test` each of the four projects, one at a time.
-- [ ] `npm run lint && npm run build && npm test --prefix frontend`.
-- [ ] `./deploy/deploy.ps1` then `./deploy/e2e-k8s.ps1` — the two-replica path, which is where
-      the per-process circuit breaker and the new probe timeout actually get exercised.
+- [x] `/verify` (the skill) — backend `dotnet build`/`dotnet test` on the whole solution, quiet
+      verbosity, zero diagnostics; frontend `lint`/`build`/`test`, all clean.
+- [x] `dotnet test` each of the four projects — done both individually throughout Tasks 1-7 and
+      as one solution-wide run here: Domain 74, Application 109, Infrastructure 156, Api 115,
+      **454 total, all real** (Docker was available in this environment for every run in this
+      plan; nothing here is inferred from a container-free subset).
+- [x] `npm run lint && npm run build && npm test --prefix frontend` — clean (`--max-warnings 0`),
+      97 modules, 14 files / 55 tests.
+- [ ] **Release**, explicitly: `dotnet build -c Release` and `dotnet test tests/Api.IntegrationTests -c Release`
+      were run repeatedly across Tasks 1-7 (this is exactly where a misconfigured resilience
+      handler would surface — `AttemptTimeout > TotalRequestTimeout` throws at pipeline-build
+      time, a startup failure Debug's runtime compiler would mask). The `/verify` skill's own
+      literal steps build Debug only, matching root `CLAUDE.md`'s stated distinction ("Builds
+      and tests both Debug and Release... a local `/verify` does not" — that is CI's job); Release
+      was covered anyway, just outside this step, and is not being re-run a third time here.
+- [x] `npm run e2e --prefix frontend` (the local-stack path; `docker-compose.e2e.yml`, not
+      Kubernetes) — attempted. Setup succeeded completely: Postgres container up, all ten
+      migrations applied cleanly through `AddProducts`, the API started (Wolverine, Data
+      Protection, the works), and teardown left no dangling containers. Every one of the 15
+      specs then failed identically with `browserType.launch: Executable doesn't exist at
+      /opt/pw-browsers/chromium_headless_shell-1243/...` — this container's pre-installed
+      Chromium cache is build `1194`; this repo's pinned `@playwright/test ^1.62.1` expects
+      `1243`. **An environmental failure, not an assertion failure** — zero specs got far enough
+      to exercise application behavior, so this proves nothing wrong and nothing right about the
+      app itself. Not worked around: this session is instructed not to run `playwright install`
+      (a network fetch), and none of these 15 specs exercises `/api/rates` regardless — the
+      frontend has no code that calls it yet, so this run could not have covered the resilience
+      work even with a matching browser.
+- [ ] `./deploy/deploy.ps1` then `./deploy/e2e-k8s.ps1` — **not reachable in this container.**
+      Needs `kind` and `kubectl`, neither installed, and both scripts are PowerShell with no
+      `pwsh`/`powershell.exe` present. This is also where the per-process circuit breaker and the
+      new readiness-probe `timeoutSeconds` would actually be exercised at two replicas — neither
+      claim has been proven under real multi-pod conditions by anything in this plan, and that
+      remains true after this task. Needs a machine with Docker Desktop's Kubernetes tooling
+      (or `kind`/`kubectl` installed some other way) and PowerShell.
+- [x] `.claude/hooks/tests/run-hook-tests.ps1` — also not reachable, same reason (no `pwsh`).
+      Not part of the plan's own Task 9 list, but the `/verify` skill's step 4 names it; recorded
+      here for completeness rather than silently skipped.
 
 ## Definition of done
 
 - A transient Postgres failure during a request retries up to three times and succeeds, instead
-  of returning 500.
+  of returning 500. **Configured and architecturally correct** (`EnableRetryOnFailure`, per EF
+  Core's own documented behavior), and every one of 156 Infrastructure tests against real
+  Postgres still passes with it on — but nothing in this plan deliberately injects a transient
+  fault (killing the connection mid-request) to prove the retry-and-succeed path directly. That
+  would need infrastructure (a proxy that can drop a connection on command, or similar) this
+  plan did not build.
 - An unreachable third party returns **503 with `Retry-After`**, after a bounded budget, not 500
-  and not a hung request.
-- A 400 from a third party is **not** retried, proven by a test that counts calls.
-- Backoff is asserted without a single real delay.
+  and not a hung request. **Proven directly**, twice: `ExchangeRateClientTests` against the real
+  pipeline, `RatesEndpointTests` over real HTTP.
+- A 400 from a third party is **not** retried, proven by a test that counts calls. **Proven** —
+  `GetRateAsync_WithABadRequestResponse_DoesNotRetry` asserts exactly one call.
+- Backoff is asserted without a single real delay. **Proven** — every `ExchangeRateClientTests`
+  run completes in well under a second despite simulating retries, an exhausted budget, and a
+  20-second `Retry-After` wait.
 - `Resilience:Enabled=false` makes every pipeline a pass-through, and the test host uses it.
-- No Polly or resilience package is reachable from Application or Domain.
-- `openapi/AiFramework.Api.json` and `frontend/src/api/schema.d.ts` are regenerated and committed.
+  **The test host does use it; "pass-through" overstates what it does**, corrected during Tasks
+  4/5 and in ADR 0014's own consequences: it rejects every outcome in the retry predicate, not
+  removes the resilience handler — Polly gives no supported hook to do the latter at
+  registration time. The practical effect for tests is the same either way: no backoff wait.
+- No Polly or resilience package is reachable from Application or Domain. **Confirmed** — no
+  `PackageReference`, no `using`, no source reference to Polly, `Microsoft.Extensions.Http`, or
+  `System.Net.Http` anywhere under `src/Application` or `src/Domain` outside a `CLAUDE.md`
+  comment saying it must not be.
+- `openapi/AiFramework.Api.json` and `frontend/src/api/schema.d.ts` are regenerated and
+  committed. **Done.**
