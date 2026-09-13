@@ -116,6 +116,17 @@ event, it is persisted with the aggregate, and it is delivered at least once aft
 - Project with `Select` before materialising — never `ToListAsync()` then filter in memory.
 - Never call `SaveChangesAsync` inside a loop.
 - Migrations are append-only. Never hand-edit one; the protect-migrations hook blocks it.
+- **`AddInfrastructure` configures `EnableRetryOnFailure`,** so every repository read,
+  `SaveChangesAsync`, and `ExecuteUpdateAsync` retries a transient fault automatically. The
+  consequence: **an explicit transaction must go through the execution strategy** —
+  `context.Database.CreateExecutionStrategy().ExecuteAsync(...)` — never a bare
+  `BeginTransactionAsync`, which throws once a retrying strategy is configured (it cannot retry
+  a block it does not own). Nothing in `src/` opens one today, which is why this is cheap to
+  adopt now rather than after the first one exists. `OutboxPoller.ClaimAsync` is the one
+  exception, and deliberately: it bypasses the strategy by building a raw `NpgsqlCommand` on
+  the bare connection, because a failed claim is already recovered twice over by the next poll
+  cycle and the `LeasedUntil` reclaim — see the comment on that method rather than repeating it
+  here. ADR 0014.
 
 ## Tests
 

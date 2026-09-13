@@ -79,7 +79,27 @@ public static class InfrastructureRegistration
         services.AddSingleton<DomainEventRegistry>();
         services.AddSingleton<DomainEventsInterceptor>();
         services.AddDbContext<AiFrameworkDbContext>((sp, options) => options
-            .UseNpgsql(connectionString)
+            // Covers every repository read, every SaveChangesAsync the unit-of-work behavior
+            // issues, and every ExecuteUpdateAsync - a transient fault (a Postgres pod
+            // restarting under the kind cluster of ADR 0010) now retries instead of failing the
+            // request. maxRetryDelay is 1s, not EF's 30s default, because AddDbContextCheck's
+            // CanConnectAsync goes through this same strategy and backs /health/ready, whose
+            // probe has no timeoutSeconds set - the Kubernetes default of 1s would otherwise let
+            // Kubernetes time the probe out mid-retry instead of the strategy ever finishing it.
+            // k8s/base/api.yaml sets an explicit timeoutSeconds to give the strategy room to
+            // actually run. ADR 0014.
+            //
+            // One consequence worth knowing before it is discovered by surprise: with a
+            // retrying execution strategy configured, EF throws if a caller opens an explicit
+            // transaction (BeginTransactionAsync) without wrapping it in
+            // Database.CreateExecutionStrategy().ExecuteAsync(...) - the strategy cannot retry a
+            // block it does not own. Nothing in src/ does that today (the one BeginTransactionAsync
+            // call is in a test, against its own context), so this costs nothing yet; see
+            // Infrastructure/CLAUDE.md's EF rules for the standing rule it becomes.
+            .UseNpgsql(connectionString, npgsql => npgsql.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(1),
+                errorCodesToAdd: null))
             .AddInterceptors(sp.GetRequiredService<DomainEventsInterceptor>()));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IOrderRepository, OrderRepository>();

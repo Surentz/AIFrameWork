@@ -160,29 +160,58 @@ as every other Testcontainers-backed test. Debug and Release both build with zer
 - Modify: `src/Infrastructure/Outbox/OutboxPoller.cs` (comment only)
 - Modify: `k8s/base/api.yaml`, `k8s/overlays/local/secret.yaml`
 - Modify: `src/Infrastructure/CLAUDE.md`
+- Modify (discovered, not planned): `src/Infrastructure/EventPath/WolverineEventPath.cs`,
+  `tests/Api.IntegrationTests/EventPath/WolverineOutboxAtomicityTests.cs`
 
 **Steps:**
-- [ ] `UseNpgsql(connectionString, npgsql => npgsql.EnableRetryOnFailure(maxRetryCount: 3,
+- [x] `UseNpgsql(connectionString, npgsql => npgsql.EnableRetryOnFailure(maxRetryCount: 3,
       maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))`, with a comment deriving
       the 1-second cap from the readiness probe rather than stating it as taste.
-- [ ] Comment above `OutboxPoller.ClaimAsync`'s raw `NpgsqlCommand`: it bypasses the execution
+- [x] Comment above `OutboxPoller.ClaimAsync`'s raw `NpgsqlCommand`: it bypasses the execution
       strategy by construction, and that is deliberate — the next poll cycle and the
       `LeasedUntil` clause already recover a failed claim twice over.
-- [ ] `k8s/base/api.yaml`: `timeoutSeconds: 5` on the readiness probe, with a comment saying
+- [x] `k8s/base/api.yaml`: `timeoutSeconds: 5` on the readiness probe, with a comment saying
       the Kubernetes default is 1s and that `CanConnectAsync` now goes through the strategy.
-- [ ] `k8s/overlays/local/secret.yaml`: add `Timeout=5` to the connection string, with a
+- [x] `k8s/overlays/local/secret.yaml`: add `Timeout=5` to the connection string, with a
       comment that Npgsql's 15s default is the real floor on a blackholed host, not the retry
       delay.
-- [ ] `src/Infrastructure/CLAUDE.md`, under **EF rules**: explicit transactions must go through
+- [x] `src/Infrastructure/CLAUDE.md`, under **EF rules**: explicit transactions must go through
       `CreateExecutionStrategy().ExecuteAsync(...)`; a bare `BeginTransactionAsync` now throws.
       Note there are none in `src/` today, which is why this is cheap to adopt now.
-- [ ] `src/Application/Users/SignIn.cs`: one comment on `RecordSignInOutcomeAsync`'s call site
-      recording that a retried `ExecuteUpdateAsync` can double-count a failure, and that
-      over-counting is ADR 0008's preferred direction.
+- [x] `src/Application/Users/SignIn.cs`: one comment on `RecordFailureAsync`'s call site (the
+      plan named this method `RecordSignInOutcomeAsync`; the actual method is
+      `RecordFailureAsync`, calling `IUserRepository.TryRecordFailedSignInAsync`) recording that
+      a retried `ExecuteUpdateAsync` can double-count a failure, and that over-counting is
+      ADR 0008's preferred direction. Traced through the actual compare-and-swap implementation
+      (`WHERE FailedSignInAttempts = expected`) rather than asserted generically: EF's own retry
+      of an already-committed-but-unacknowledged write is indistinguishable, from
+      `TryRecordFailedSignInAsync`'s single boolean return, from a genuine concurrent writer —
+      both read as "the counter already moved" — so `RecordFailureAsync`'s own one-retry-on-loss
+      logic re-reads and re-advances a counter EF's strategy had already advanced once.
+
+**Found, not planned:** `EnableRetryOnFailure` broke
+`WolverineOutboxAtomicityTests.PublishedThroughTheOutbox_ThenSaved_IsDeliveredAndTheOrderIsPersisted`,
+which calls Wolverine's `IDbContextOutbox<AiFrameworkDbContext>.SaveChangesAndFlushMessagesAsync`
+directly — that method opens its own transaction internally, and a retrying execution strategy
+refuses to run one un-wrapped ("does not support user-initiated transactions"). ADR 0005's spike
+is not called from any production handler today, so this was not a production regression, but it
+is exactly the shape a real handler adopting `IDbContextOutbox<T>` would hit. Fixed by wrapping
+the test's call in `context.Database.CreateExecutionStrategy().ExecuteAsync(...)` — proving the
+required pattern rather than hiding it behind a test-only workaround — with a matching comment
+on `WolverineEventPath.cs`'s `UseEntityFrameworkCoreTransactions()` call so the interaction is
+documented at its source, not only where a test happened to trip over it.
 
 **Verify:** `dotnet test tests/Infrastructure.Tests` (Testcontainers path still green — the
 strategy changes how a failure is handled, not how a success behaves), then
 `dotnet test tests/Api.IntegrationTests`.
+
+**Done, verified with a real Postgres container** (Docker was available in this environment,
+unlike Tasks 1–2): all 425 tests across all four projects pass — Domain 74, Application 96,
+Infrastructure 144 (including every Testcontainers-backed `Persistence`/`Outbox` test), Api 111
+(including `WolverineOutboxAtomicityTests` and `WolverineCodegenTests`). Debug and Release both
+build with zero warnings; Api.IntegrationTests also re-run clean under `-c Release`.
+`dotnet run --project src/Api -- codegen write` produces no diff, as expected — nothing here
+touches a Wolverine handler.
 
 ---
 
