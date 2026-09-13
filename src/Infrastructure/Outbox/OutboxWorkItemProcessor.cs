@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,13 @@ public sealed partial class OutboxWorkItemProcessor(
     IClock clock,
     ILogger<OutboxWorkItemProcessor> logger)
 {
+    // A single static source for the process's lifetime, matching the standard OpenTelemetry
+    // .NET idiom (no DI — instrumentation libraries new one up the same way). Collected only
+    // when something subscribes to the name: ObservabilityRegistration's
+    // WithTracing(t => t.AddSource("AiFramework.Outbox")) is what does that; with no listener,
+    // StartActivity below returns null and every use of it here is a safe no-op.
+    private static readonly ActivitySource ActivitySource = new("AiFramework.Outbox");
+
     private readonly OutboxOptions _options = options.Value;
 
     public async Task ProcessAsync(OutboxWorkItem item, CancellationToken cancellationToken)
@@ -35,6 +43,18 @@ public sealed partial class OutboxWorkItemProcessor(
             ["EventType"] = item.EventName,
             ["Attempt"] = item.Attempt,
         });
+
+        // Restores the trace the domain event was raised under — item.TraceParent is what
+        // DomainEventsInterceptor captured from the request's own Activity.Current, at the one
+        // point that still had it. Wrapping the whole method, not just Dispatch below, is what
+        // makes the three MessagingLog-style calls in this class — and anything a handler itself
+        // logs — carry the SAME TraceId as the request that caused them, via the ambient-Activity
+        // stamping IncludeScopes/OpenTelemetry logging already does for every other log record in
+        // the solution (see ObservabilityRegistration). A row with no stored TraceParent — one
+        // written before this column existed, or raised with no ambient Activity at all — starts
+        // a fresh, unparented Activity instead of none at all, so delivery is still traced even
+        // when it cannot be linked back to a cause.
+        using var activity = StartDeliveryActivity(item);
 
         if (!registry.TryGet(item.EventName, out var descriptor))
         {
@@ -116,6 +136,28 @@ public sealed partial class OutboxWorkItemProcessor(
 
     private static string Truncate(string value) =>
         value.Length <= 2048 ? value : value[..2048];
+
+    /// <summary>
+    /// Starts the delivery Activity, parented to the stored traceparent when there is one and
+    /// parsing it succeeds. ActivityContext.TryParse rejects a malformed or truncated string
+    /// (HasMaxLength(64) on TraceParent leaves room, but corruption is still conceivable) rather
+    /// than throwing, which is exactly the failure mode that must not be allowed to take an
+    /// outbox delivery down — falling back to an unparented Activity is strictly better than
+    /// losing this delivery over a trace id that cannot be reconstructed.
+    /// </summary>
+    private static Activity? StartDeliveryActivity(OutboxWorkItem item)
+    {
+        var activity = item.TraceParent is not null
+            && ActivityContext.TryParse(item.TraceParent, null, out var parentContext)
+                ? ActivitySource.StartActivity("outbox.deliver", ActivityKind.Consumer, parentContext)
+                : ActivitySource.StartActivity("outbox.deliver", ActivityKind.Consumer);
+
+        activity?.SetTag("outbox.message_id", item.Id);
+        activity?.SetTag("outbox.event_type", item.EventName);
+        activity?.SetTag("outbox.attempt", item.Attempt);
+
+        return activity;
+    }
 
     // Debug, matching Behaviors.LoggedAsync's MessagingLog.Succeeded: the routine outcome stays
     // quiet by default, so the store is not filled with "it worked" for every delivered event.

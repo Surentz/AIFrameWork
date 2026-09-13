@@ -421,6 +421,11 @@ never log "handling X" or "returning failure" by hand, the behavior already repo
 - The outbox's `OutboxWorkItemProcessor` logs its three outcomes the same way: dispatched at
   `Debug`, a scheduled retry at `Information`, dead-lettering at `Warning` — see
   `src/Infrastructure/CLAUDE.md`'s Outbox section.
+- **Trace continuity crosses the outbox boundary too.** A domain event delivered later, by a
+  background pump, restores the W3C traceparent the raising request captured — so a delivery's
+  own logs, and anything a handler logs, carry the same `TraceId` as the `POST` that caused them,
+  not a fresh unrelated one. `OutboxMessage.TraceParent` and `OutboxWorkItemProcessor`'s delivery
+  `Activity`; see `src/Infrastructure/CLAUDE.md`'s Outbox section for the mechanism.
 - `Application` may inject `ILogger<T>` for something genuinely domain-meaningful a handler alone
   knows, never for control flow the behavior already reports. See
   `src/Application/CLAUDE.md`'s own Logging section for the fuller reasoning, including why that

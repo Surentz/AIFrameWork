@@ -62,27 +62,34 @@ public static class ObservabilityRegistration
             .ConfigureResource(resource => resource.AddService(
                 serviceName: options.ServiceName,
                 serviceInstanceId: string.IsNullOrWhiteSpace(instanceId) ? null : instanceId))
-            .WithTracing(tracing =>
-            {
-                tracing.AddAspNetCoreInstrumentation()
-                    .AddHttpClientInstrumentation()
-                    // Wolverine 6 already tags the current span in its generated handlers (see
-                    // OrderPlacedNotificationHandler1430415712 under Internal/Generated); nothing
-                    // was collecting those tags until this line.
-                    .AddSource("Wolverine")
-                    .AddInfrastructureTracing();
-
-                if (options.Otlp.Enabled && options.Otlp.Traces)
-                {
-                    tracing.AddOtlpExporter(exporter =>
-                    {
-                        exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
-                        exporter.Endpoint = BuildOtlpEndpoint(options.Otlp.Endpoint, "v1/traces");
-                    });
-                }
-            });
+            .WithTracing(tracing => ConfigureTracing(tracing, options));
 
         return builder;
+    }
+
+    /// <summary>Split out of AddObservability purely to stay under MA0051's line limit.</summary>
+    private static void ConfigureTracing(TracerProviderBuilder tracing, ObservabilityOptions options)
+    {
+        tracing.AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            // Wolverine 6 already tags the current span in its generated handlers (see
+            // OrderPlacedNotificationHandler1430415712 under Internal/Generated); nothing was
+            // collecting those tags until this line.
+            .AddSource("Wolverine")
+            // OutboxWorkItemProcessor's delivery Activity — without this, StartActivity there
+            // always returns null (no listener), and outbox trace continuity silently does
+            // nothing.
+            .AddSource("AiFramework.Outbox")
+            .AddInfrastructureTracing();
+
+        if (options.Otlp.Enabled && options.Otlp.Traces)
+        {
+            tracing.AddOtlpExporter(exporter =>
+            {
+                exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
+                exporter.Endpoint = BuildOtlpEndpoint(options.Otlp.Endpoint, "v1/traces");
+            });
+        }
     }
 
     /// <summary>

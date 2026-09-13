@@ -16,6 +16,13 @@ internal sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outb
         builder.Property(m => m.Payload).IsRequired();
         builder.Property(m => m.OccurredAt).IsRequired();
 
+        // Nullable: a row written before this column existed has none, and a row raised with no
+        // ambient Activity legitimately has none either — neither is an error. A W3C traceparent
+        // under the default (version 00) format is exactly 55 characters
+        // ("00-" + 32 hex + "-" + 16 hex + "-" + 2 hex); the slack to 64 is the same margin
+        // User.MaxSecurityStampLength gives a fixed-shape hex value, for a future format change.
+        builder.Property(m => m.TraceParent).HasMaxLength(64);
+
         // Persisted as a string, not an ordinal: the claim query in OutboxPoller is raw SQL
         // comparing against 'Pending' and 'InFlight'. An ordinal column would match nothing
         // and the poller would spin against a full table. A string also survives a reorder

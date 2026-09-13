@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiFramework.Application.Abstractions;
 using AiFramework.Domain.Abstractions;
 using AiFramework.Infrastructure.Outbox;
@@ -35,6 +36,12 @@ public sealed class ContextCapturingHandler(ContextSink sink) : IDomainEventHand
         // "the instance resolved from a given scope" — a same-count or non-empty check on Seen
         // alone cannot distinguish the processor's scope from any other scope, or from root.
         sink.Handlers.Add(this);
+        // The ambient Activity a REAL handler would see — this is what
+        // ProcessAsync_WithAStoredTraceParent_RestoresItAsTheDeliveryActivitysParent asserts on,
+        // to prove trace continuity from inside dispatch itself rather than from the Activity
+        // OutboxWorkItemProcessor started, which would pass even if the parent context were
+        // wired to the wrong place.
+        sink.ActivityContexts.Add(Activity.Current?.Context ?? default);
         return Task.CompletedTask;
     }
 }
@@ -45,6 +52,8 @@ public sealed class ContextSink
     public ICollection<DomainEventContext> Seen { get; } = [];
 
     public ICollection<ContextCapturingHandler> Handlers { get; } = [];
+
+    public ICollection<ActivityContext> ActivityContexts { get; } = [];
 }
 
 [Collection(nameof(PostgresCollection))]
@@ -274,5 +283,43 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
 
         provider.GetRequiredService<ContextSink>().Handlers
             .Should().ContainSingle().Which.Should().BeSameAs(expectedHandler);
+    }
+
+    /// <summary>
+    /// Task 5 (docs/superpowers/plans/2026-09-13-centralized-logging.md): proves trace
+    /// continuity from INSIDE dispatch, via ContextCapturingHandler's own ambient
+    /// Activity.Current — not by inspecting the Activity OutboxWorkItemProcessor started, which
+    /// would pass even if that Activity's parent context were wired to the wrong value. An
+    /// ActivityListener is required for StartActivity to produce anything at all: with no
+    /// listener subscribed to "AiFramework.Outbox" (there is none in this bare ServiceProvider —
+    /// no OpenTelemetry SDK here, unlike the real host), it always returns null regardless of
+    /// what item.TraceParent holds.
+    /// </summary>
+    [Fact]
+    public async Task ProcessAsync_WithAStoredTraceParent_RestoresItAsTheDeliveryActivitysParent()
+    {
+        var expectedTraceId = ActivityTraceId.CreateRandom();
+        var traceParent = $"00-{expectedTraceId}-{ActivitySpanId.CreateRandom()}-01";
+
+        var id = await SeedAsync("test.contextual", "{}", 1);
+        await using var provider = BuildProvider();
+        using var scope = provider.CreateScope();
+
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => string.Equals(source.Name, "AiFramework.Outbox", StringComparison.Ordinal),
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(
+                new OutboxWorkItem(id, "test.contextual", "{}", 1, traceParent), CancellationToken.None);
+
+        provider.GetRequiredService<ContextSink>().ActivityContexts
+            .Should().ContainSingle().Which.TraceId.Should().Be(expectedTraceId,
+                "the handler's own ambient Activity.Current must carry the SAME TraceId as the " +
+                "request that raised the event, not a fresh unrelated one — that is the whole " +
+                "point of restoring the stored traceparent as the delivery Activity's parent");
     }
 }
