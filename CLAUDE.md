@@ -99,7 +99,16 @@ or `System.ComponentModel.DataAnnotations`.
 
 ```powershell
 ./scripts/dev.ps1                                            # all of the below, in three windows
+./scripts/dev.ps1 -WithSeq                                   # same, plus Seq at localhost:55341
 ```
+
+`-WithSeq` starts `docker-compose.yml`'s `observability` profile alongside Postgres and points
+the launched API at it (`Observability__Otlp__Enabled`/`__Endpoint`, set on the API's own
+process environment, never baked into `appsettings.Development.json` — every developer's `dotnet
+run` would otherwise try to export to a collector nobody started). `scripts/stop-dev.ps1` always
+passes `--profile observability` to `docker compose down`, whether or not `-WithSeq` was used —
+confirmed empirically, not assumed, that a bare `docker compose down` does NOT stop a
+profile-started container even when it is currently running. See the "Logging" section below.
 
 Or by hand:
 
@@ -203,7 +212,8 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 |---|---|
 | Install/check prerequisites | `scripts/install-prereqs.ps1` — see below |
 | Start dev loop | `scripts/dev.ps1` — the plain local dev loop |
-| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/Vite ports, `docker compose down` |
+| Start dev loop + Seq | `scripts/dev.ps1 -WithSeq` — same, plus Seq at `localhost:55341` |
+| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/Vite ports, tears down the database (and Seq, if it was started) |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
 | Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses port 5234 |
@@ -354,6 +364,50 @@ No test waits for a TTL to lapse; `HybridCache` expires on its own clock, which 
 reach. The only TTL arithmetic is `CacheDuration.Clamp`, tested directly.
 
 See ADR 0009.
+
+## Logging
+
+Every command and query is logged automatically. `Behaviors.LoggedAsync`
+(`src/Infrastructure/Messaging/Behaviors.cs`) wraps every dispatch — `AddCommand` runs
+`Logged(Validate -> handler -> Commit -> Evict)`, `AddQuery` runs `Logged(Cached(handler))` — so
+no handler writes a logging call to get its outcome and duration recorded, and no handler should:
+never log "handling X" or "returning failure" by hand, the behavior already reports that.
+
+- **Success is `Debug`.** Every query goes through this pipeline; at a higher default level a
+  single page load would already be "it worked" noise. A failed `Result` is levelled by its
+  `ErrorKind` — `Validation`/`NotFound` stay at `Debug` (the caller being wrong, not the system),
+  `Conflict`/`Unauthorized` are `Information`, anything else is `Warning`. A thrown exception logs
+  `Faulted` at `Warning` and rethrows unchanged — `GlobalExceptionHandler` still owns turning it
+  into a 500 and logging the exception object itself at `Error`; `LoggedAsync` never logs the
+  exception, or it would double-report the same failure.
+- **The behavior logs `typeof(TRequest).Name`, never the request instance.** `SignIn`,
+  `RegisterUser` and `ChangePassword` carry a plaintext password field — logging the request
+  object would write every password in the system to the log store, permanently.
+  `SensitiveCommandLoggingTests` (`tests/Infrastructure.Tests/Messaging`) exists to catch that
+  class of regression, the same way a cache key missing its user scope is caught by a test rather
+  than by review alone.
+- The outbox's `OutboxWorkItemProcessor` logs its three outcomes the same way: dispatched at
+  `Debug`, a scheduled retry at `Information`, dead-lettering at `Warning` — see
+  `src/Infrastructure/CLAUDE.md`'s Outbox section.
+- `Application` may inject `ILogger<T>` for something genuinely domain-meaningful a handler alone
+  knows, never for control flow the behavior already reports. See
+  `src/Application/CLAUDE.md`'s own Logging section for the fuller reasoning, including why that
+  is convention-and-review-enforced rather than backed by an architecture test.
+
+**Config keys use double underscores, same as `Cache__Enabled` elsewhere in this file:**
+`Observability__Otlp__Enabled` and `Observability__Otlp__Endpoint`, never a single underscore,
+which binds nothing and warns nothing. `Observability:Otlp:Enabled` defaults to `false`
+everywhere — appsettings.json, every test host, CI — so nothing tries to export to a collector
+that was never started; the tracer provider itself is still registered unconditionally, which is
+what makes `Activity.Current` non-null and the `traceId` already written into every
+`ProblemDetails` resolve to a real, correlatable value. `Observability:Otlp:Endpoint` is the OTLP
+receiver's **root**, with no `/v1/logs`/`/v1/traces` suffix —
+`ObservabilityRegistration.BuildOtlpEndpoint` appends the right one per signal, and does not rely
+on the SDK to (confirmed empirically that it will not: see that method's own remarks for what
+that cost to discover).
+
+See `docs/superpowers/plans/2026-09-13-centralized-logging.md` for the full design and the
+phased rollout. No ADR yet — this section is the record until one is written.
 
 
 ## CI

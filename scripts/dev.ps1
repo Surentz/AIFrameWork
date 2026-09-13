@@ -13,7 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-    [switch]$SkipMigrations
+    [switch]$SkipMigrations,
+    # Starts Seq (docker-compose.yml's "observability" profile) alongside Postgres, and points
+    # the launched API at it via Observability__Otlp__Enabled / Observability__Otlp__Endpoint.
+    # Off by default: appsettings.json already defaults Otlp:Enabled to false, so a plain
+    # dev.ps1 run costs nothing extra and never tries to export to a collector that isn't there.
+    [switch]$WithSeq
 )
 
 Set-StrictMode -Version Latest
@@ -24,6 +29,9 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # docker-compose.yml publishes Postgres on DEV_PG_PORT, defaulting to 55433. The connection
 # string below has to agree with it or the migration step silently targets the wrong database.
 $pgPort = if ($env:DEV_PG_PORT) { $env:DEV_PG_PORT } else { '55433' }
+
+# Same default docker-compose.yml's SEQ_PORT falls back to. Only read when -WithSeq is set.
+$seqPort = if ($env:SEQ_PORT) { $env:SEQ_PORT } else { '55341' }
 
 # Fixed, not configurable: 5234 comes from src/Api/Properties/launchSettings.json and 5173 from
 # frontend/vite.config.ts. (API_PORT moves where Vite *proxies to*, not where the API listens,
@@ -66,10 +74,15 @@ Invoke-Step 'Checking the ports are free' {
     $global:LASTEXITCODE = 0
 }
 
-# --wait blocks on the healthcheck in docker-compose.yml, so Postgres is genuinely accepting
-# connections when this returns — no polling of our own required.
+# --wait blocks on the healthcheck in docker-compose.yml, so Postgres (and Seq, with -WithSeq)
+# is genuinely accepting connections when this returns — no polling of our own required.
 Invoke-Step 'Starting the dev database' {
-    docker compose --project-directory $repoRoot up -d --wait
+    if ($WithSeq) {
+        docker compose --project-directory $repoRoot --profile observability up -d --wait
+    }
+    else {
+        docker compose --project-directory $repoRoot up -d --wait
+    }
 }
 
 if ($SkipMigrations) {
@@ -97,10 +110,32 @@ else {
 
 # -NoExit keeps the window open if the process dies, so a startup failure is readable instead of
 # a window that blinks out of existence.
+#
+# -WithSeq sets Observability__Otlp__Enabled/__Endpoint on THIS process's environment before
+# Start-Process spawns the API's window — Start-Process inherits the parent environment at spawn
+# time, the same mechanism every double-underscore setting in this repo already relies on
+# (ConnectionStrings__Default above, Cache__Enabled in k8s/overlays/local/config.yaml). Set here
+# rather than baked into appsettings.Development.json, deliberately: that file is committed and
+# read by every developer, and flipping Otlp:Enabled on by default there would mean a plain
+# `dotnet run` — no Seq, no -WithSeq — quietly attempting exports to a collector that was never
+# started. The env var is removed again immediately after spawning, same as ConnectionStrings__
+# Default's own cleanup above, so it does not leak into commands run later in this same window.
 Invoke-Step 'Launching the API' {
-    Start-Process powershell -WorkingDirectory $repoRoot -ArgumentList @(
-        '-NoExit', '-Command', 'dotnet run --project src/Api'
-    )
+    if ($WithSeq) {
+        $env:Observability__Otlp__Enabled = 'true'
+        $env:Observability__Otlp__Endpoint = "http://localhost:$seqPort/ingest/otlp"
+    }
+    try {
+        Start-Process powershell -WorkingDirectory $repoRoot -ArgumentList @(
+            '-NoExit', '-Command', 'dotnet run --project src/Api'
+        )
+    }
+    finally {
+        if ($WithSeq) {
+            Remove-Item Env:\Observability__Otlp__Enabled -ErrorAction SilentlyContinue
+            Remove-Item Env:\Observability__Otlp__Endpoint -ErrorAction SilentlyContinue
+        }
+    }
     $global:LASTEXITCODE = 0
 }
 
@@ -155,6 +190,9 @@ Write-Host ''
 Write-Host "  App              http://localhost:$webPort" -ForegroundColor Green
 Write-Host "  API reference    http://localhost:$apiPort/scalar/v1" -ForegroundColor Green
 Write-Host "  Postgres         localhost:$pgPort" -ForegroundColor Green
+if ($WithSeq) {
+    Write-Host "  Seq              http://localhost:$seqPort" -ForegroundColor Green
+}
 Write-Host ''
 Write-Host '  Both tabs open by themselves. Ctrl-C in a window stops that process;' -ForegroundColor DarkGray
-Write-Host '  `docker compose down` stops the database.' -ForegroundColor DarkGray
+Write-Host '  scripts\stop-dev.ps1 stops the database (and Seq, if it was started).' -ForegroundColor DarkGray

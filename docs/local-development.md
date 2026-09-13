@@ -8,6 +8,7 @@ the reference; the script and the IDE sections build on it.
 ```powershell
 ./scripts/dev.ps1                  # database, migrations, API, dev server
 ./scripts/dev.ps1 -SkipMigrations  # when you know the schema is current
+./scripts/dev.ps1 -WithSeq         # same, plus Seq (structured logs) at localhost:55341
 ```
 
 It checks Docker is running and that 5234 and 5173 are free, starts Postgres and waits for its
@@ -20,7 +21,11 @@ The migration step is the part worth having: it sets `ConnectionStrings__Default
 afternoon" in the root `CLAUDE.md`. Without it, `database update` aims at the
 `design_time_only` placeholder rather than your dev database.
 
-`docker compose down` stops the database; the two windows are yours to Ctrl-C.
+`scripts/stop-dev.ps1` stops the database (and Seq, if `-WithSeq` started it); the two windows
+are yours to Ctrl-C. A bare `docker compose down` also stops the database, but **not** Seq if it
+is running — Seq sits behind a compose profile, and `down` with no `--profile` flag only tears
+down the active profile set for that invocation, not whatever an earlier `up` left running. Use
+`docker compose --profile observability down` (what `stop-dev.ps1` always passes) to be sure.
 
 ## The command line
 
