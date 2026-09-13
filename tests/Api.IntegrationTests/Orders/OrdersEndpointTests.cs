@@ -194,6 +194,10 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
             "/api/orders", new { Sku = "SKU-NOT-IN-THE-CATALOGUE", Quantity = 2 });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("title").GetString()
+            .Should().Be("orders.unknown_sku");
     }
 
     public sealed record OrderResponseDto(Guid Id, string Sku, int Quantity, DateTimeOffset PlacedAt);

@@ -9,6 +9,4 @@ namespace AiFramework.Infrastructure.Tests;
 internal static class AnOrderedProduct
 {
     public static OrderedProduct Any() => new(Guid.NewGuid(), "Widget", 9.99m);
-
-    public static OrderedProduct For(string sku) => new(Guid.NewGuid(), sku, 9.99m);
 }

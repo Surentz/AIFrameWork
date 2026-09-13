@@ -6,7 +6,7 @@ export const quantityField = (p: Page): Locator => p.getByLabel('Quantity');
 export const submitButton = (p: Page): Locator => p.getByRole('button', { name: 'Place order' });
 
 /** A row's link in the list. */
-export const orderLink = (p: Page, sku: string): Locator => p.getByRole('link', { name: sku });
+export const orderLink = (p: Page, name: string): Locator => p.getByRole('link', { name });
 
 /** The detail page's <h1> - the product name when the order carries a catalogue snapshot
     (every order placed since Task 4), the bare sku for a legacy order that predates it. */

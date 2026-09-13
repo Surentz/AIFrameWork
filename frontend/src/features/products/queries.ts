@@ -48,7 +48,7 @@ export function useAllProducts(): UseQueryResult<ProductListItem[], ApiError> {
       let cursor: string | undefined;
 
       do {
-        const page = await listProducts({ cursor });
+        const page = await listProducts({ cursor, limit: 100 });
         items.push(...page.items);
         cursor = page.nextCursor ?? undefined;
       } while (cursor !== undefined);

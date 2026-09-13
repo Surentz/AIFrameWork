@@ -71,7 +71,7 @@ export function OrderList(): React.JSX.Element {
           <caption className="visually-hidden">Orders</caption>
           <thead>
             <tr>
-              <th scope="col">Sku</th>
+              <th scope="col">Product</th>
               <th className="orders__num" scope="col">
                 Quantity
               </th>
