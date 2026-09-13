@@ -8,11 +8,14 @@ import { uniqueProductSku } from '../../support/identity.ts';
 // on the same pod for the new order to appear.
 test('places an order and sees it in the list', async ({ signedInPage, api, workerUser }) => {
   const sku = uniqueProductSku();
-  await api.createProduct(workerUser, { sku, name: 'Widget', price: '19.95' });
+  const name = 'Widget';
+  await api.createProduct(workerUser, { sku, name, price: '19.95' });
 
   await orders.placeOrder(signedInPage, { sku, quantity: 3 });
-  await expect(orders.detailHeading(signedInPage, sku)).toBeVisible();
+  // The heading is the product name once an order carries a catalogue snapshot - every order
+  // this spec places does, since PlaceOrder now requires one. See screens/orders.ts.
+  await expect(orders.detailHeading(signedInPage, name)).toBeVisible();
 
   await signedInPage.goto('/orders');
-  await expect(orders.orderLink(signedInPage, sku)).toBeVisible();
+  await expect(orders.orderLink(signedInPage, name)).toBeVisible();
 });

@@ -1,14 +1,18 @@
 import { useId, useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { formatPrice } from '../products/types';
+import { useAllProducts } from '../products/queries';
 import { usePlaceOrder } from './queries';
 import './orders.css';
 
 export function PlaceOrderForm(): React.JSX.Element {
+  const { data: products, isPending: productsPending, error: productsError } = useAllProducts();
   const [sku, setSku] = useState('');
   const [quantity, setQuantity] = useState(1);
   const navigate = useNavigate();
   const mutation = usePlaceOrder();
+  const selected = products?.find((p) => p.sku === sku);
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -34,27 +38,46 @@ export function PlaceOrderForm(): React.JSX.Element {
       <div className="page-header">
         <div>
           <h1 className="page-title">Place an order</h1>
-          <p className="page-subtitle">A sku and how many of it you want.</p>
+          <p className="page-subtitle">A product and how many of it you want.</p>
         </div>
       </div>
+
+      {productsError && (
+        <p className="alert" role="alert">
+          The products could not be loaded. {productsError.message}
+        </p>
+      )}
 
       <form className="card order-form" onSubmit={handleSubmit}>
         <div className="order-form__fields">
           <div className="field">
             <label className="field__label" htmlFor={skuId}>
-              Sku
+              Product
             </label>
-            <input
+            <select
               className="input"
               id={skuId}
-              placeholder="SKU-1"
               value={sku}
+              disabled={productsPending || products === undefined || products.length === 0}
               aria-invalid={skuErrors.length > 0}
               aria-describedby={skuErrors.length > 0 ? skuErrorId : undefined}
               onChange={(e) => {
                 setSku(e.target.value);
               }}
-            />
+            >
+              <option value="">Choose a product…</option>
+              {products?.map((product) => (
+                <option key={product.id} value={product.sku}>
+                  {product.name} — {product.sku} — {formatPrice(product.price)}
+                </option>
+              ))}
+            </select>
+            {products?.length === 0 && (
+              <p className="field__hint">
+                There are no products in the catalogue yet.{' '}
+                <Link to="/products/new">Add a product</Link> first.
+              </p>
+            )}
             {/* Rendered unconditionally: a live region inserted together with its text may
                 not be announced, so it has to already exist when the error arrives. */}
             <div className="field__errors" id={skuErrorId} aria-live="polite">
@@ -88,8 +111,18 @@ export function PlaceOrderForm(): React.JSX.Element {
             </div>
           </div>
 
+          {selected && quantity > 0 && (
+            <p className="order-form__total">
+              Total: {formatPrice(Number(selected.price) * quantity)}
+            </p>
+          )}
+
           <div>
-            <button className="btn btn--primary" type="submit" disabled={mutation.isPending}>
+            <button
+              className="btn btn--primary"
+              type="submit"
+              disabled={mutation.isPending || sku === '' || products?.length === 0}
+            >
               {mutation.isPending && <span className="spinner" aria-hidden="true" />}
               Place order
             </button>
