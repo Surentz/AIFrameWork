@@ -213,6 +213,20 @@ Invoke-Step 'Rolling out the application' {
     Assert-LastExitCode 'kubectl rollout status (api)'
     kubectl --context $context -n $namespace rollout status deployment/web --timeout=300s
     Assert-LastExitCode 'kubectl rollout status (web)'
+
+    # otel-collector's pod template carries no hash of its ConfigMap's content, exactly like
+    # api/web above, so an edit to k8s/components/observability/otel-collector.yaml's embedded
+    # config is applied to the ConfigMap object by phase C but never reaches the running
+    # collector process without this: `kubectl apply` alone sees an unchanged Deployment spec
+    # and triggers nothing, and the collector does not hot-reload its config file on a change to
+    # the mounted volume. Silent otherwise — the collector keeps running on stale config with no
+    # error anywhere.
+    if ($WithObservability) {
+        kubectl --context $context -n $namespace rollout restart deployment/otel-collector
+        Assert-LastExitCode 'kubectl rollout restart (otel-collector)'
+        kubectl --context $context -n $namespace rollout status deployment/otel-collector --timeout=300s
+        Assert-LastExitCode 'kubectl rollout status (otel-collector)'
+    }
 }
 
 $kindConfig = Get-Content (Join-Path $PSScriptRoot 'kind-cluster.yaml') -Raw

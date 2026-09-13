@@ -1,10 +1,13 @@
 namespace AiFramework.Api.Observability;
 
 /// <summary>
-/// Bound in Program.cs from the "Observability" section, the same way CacheOptions is bound
-/// there rather than inside its own registration extension — see
-/// src/Infrastructure/CLAUDE.md's note on why: a registration that binds configuration itself
-/// cannot be resolved from a bare ServiceCollection in a unit test.
+/// Bound from the "Observability" section inside AddObservability itself, unlike CacheOptions —
+/// see src/Infrastructure/CLAUDE.md's note on why CacheOptions is bound in Program.cs instead: a
+/// registration that binds configuration itself cannot be resolved from a bare ServiceCollection
+/// in a unit test. AddObservability does not have that constraint: it takes the
+/// WebApplicationBuilder directly (see its own remarks), so builder.Configuration is always
+/// available at the point it runs, and nothing resolves IOptions&lt;ObservabilityOptions&gt; from
+/// a bare ServiceCollection anywhere in this codebase's tests.
 /// </summary>
 public sealed class ObservabilityOptions
 {
