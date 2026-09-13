@@ -41,8 +41,15 @@ function Stop-PortOwner {
 Stop-PortOwner -Port $apiPort -Name 'API'
 Stop-PortOwner -Port $webPort -Name 'Vite dev server'
 
-Write-Host '==> Stopping the dev database' -ForegroundColor Cyan
-docker compose --project-directory $repoRoot down
+Write-Host '==> Stopping the dev database (and Seq, if it was started)' -ForegroundColor Cyan
+# --profile observability is passed UNCONDITIONALLY, not just when dev.ps1 -WithSeq was used.
+# Confirmed empirically: `docker compose down` with no --profile flag only tears down services
+# in the active (here, empty/default) profile set for THIS invocation — it does not stop a
+# container that a previous `up --profile observability` left running, even though `down` has no
+# -d/detach concept of "current" beyond that. Passing the profile here is what makes this
+# reliably clean up Seq regardless of which switch started it; harmless when Seq was never
+# started at all, since compose then simply has nothing in that profile to stop.
+docker compose --project-directory $repoRoot --profile observability down
 if ($LASTEXITCODE -ne 0) { throw "docker compose down failed with exit code $LASTEXITCODE." }
 
 Write-Host ''

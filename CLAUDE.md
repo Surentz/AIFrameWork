@@ -99,7 +99,16 @@ or `System.ComponentModel.DataAnnotations`.
 
 ```powershell
 ./scripts/dev.ps1                                            # all of the below, in three windows
+./scripts/dev.ps1 -WithSeq                                   # same, plus Seq at localhost:55341
 ```
+
+`-WithSeq` starts `docker-compose.yml`'s `observability` profile alongside Postgres and points
+the launched API at it (`Observability__Otlp__Enabled`/`__Endpoint`, set on the API's own
+process environment, never baked into `appsettings.Development.json` — every developer's `dotnet
+run` would otherwise try to export to a collector nobody started). `scripts/stop-dev.ps1` always
+passes `--profile observability` to `docker compose down`, whether or not `-WithSeq` was used —
+confirmed empirically, not assumed, that a bare `docker compose down` does NOT stop a
+profile-started container even when it is currently running. See the "Logging" section below.
 
 Or by hand:
 
@@ -152,6 +161,7 @@ this is additive.
 ```powershell
 ./deploy/deploy.ps1 -CreateCluster   # first run: creates the cluster and ingress-nginx
 ./deploy/deploy.ps1                  # later runs: rebuild, migrate, roll out
+./deploy/deploy.ps1 -WithObservability   # same, plus the OTel Collector -> OpenSearch stack
 ```
 
 Then open `https://aiframework.localtest.me` — that name resolves to `127.0.0.1` publicly,
@@ -172,8 +182,9 @@ Three things that will cost you time:
   place.
 - **Migrations run as a Job, before the rollout**, via a self-contained `dotnet ef migrations
   bundle` — which is what keeps the EF Design package out of the runtime image
-  (`src/Infrastructure/CLAUDE.md`'s 7.9MB → 37MB note). The script deletes the Job before
-  re-applying it, because a completed Job has immutable fields.
+  (`src/Infrastructure/CLAUDE.md`'s 7.9MB → 37MB note). The script deletes every Job before
+  re-applying it, because a completed Job has immutable fields — `-WithObservability` adds a
+  second one (`opensearch-ism-policy`) alongside `migrate`, handled the same way.
 
 The overlay's `secret.yaml` and `tls.yaml` commit real credentials — a Postgres password and a
 self-signed private key — on purpose: throwaway values for a localhost-only cluster that is
@@ -192,7 +203,37 @@ cookie, which silently disables affinity rather than erroring. See ADR 0010.
 durable Wolverine, caching on, two replicas, and the real rate limit, none of which the compose
 stack does. It gates readiness on `/api/auth/me`, not `/health`: the ingress routes `/health` to
 the web pod, whose `nginx.conf` serves the SPA for any unmatched path, so it answers 200 whether
-or not a single API pod is up. See ADR 0012.
+or not a single API pod is up. See ADR 0012. `-WithObservability` is deliberately **not** part of
+this gate — a log store has no business in the readiness path of an e2e run.
+
+### `-WithObservability`
+
+Opt-in, via a Kustomize Component (`k8s/components/observability`) that
+`k8s/overlays/local-observability/kustomization.yaml` alone references — `k8s/overlays/local`
+never does, so a plain `deploy.ps1` run is unaffected. It is also the largest thing in the
+cluster by a wide margin: OpenSearch wants real JVM heap, and Dashboards is a second Node process
+on top, so only reach for this when the logging pipeline itself is what you're rehearsing.
+
+- **The OTel Collector is not optional.** OpenSearch does not ingest OTLP natively — an
+  application pointed straight at it would deliver nothing, silently. The collector's
+  `opensearch` exporter is what bridges the two, confirmed empirically (a real .NET OTLP export,
+  through this repo's own `ObservabilityRegistration.BuildOtlpEndpoint`, landing in a live
+  OpenSearch index) while building this, not assumed from documentation.
+- **Index rollover comes from the exporter, not from OpenSearch.** `logs_index_time_format`/
+  `traces_index_time_format: yyyy.MM.dd` on the collector's `opensearch` exporter is what
+  produces one physical index per UTC day (`otel-logs-2026.09.13`, and so on) — without it
+  everything lands in one never-rolling index and the ISM retention policy below has nothing
+  dated to delete.
+- **The ISM policy attaches itself.** Its `ism_template` field — not a separate index template,
+  not a per-index `_ism/add` call — makes OpenSearch apply the policy to any new index matching
+  `otel-logs-*`/`otel-traces-*` the moment it is created, confirmed by creating a fresh matching
+  index and reading the policy back off `_plugins/_ism/explain`. `opensearch-ism-policy` is a
+  one-shot `Job`, not a `CronJob`: the policy is a standing cluster rule once set, so nothing is
+  gained by reapplying it on a schedule — a second `PUT` on an existing policy answers `409`, and
+  the Job's own script treats that as success rather than failure.
+- **`Observability__Otlp__Enabled`/`__Endpoint`** are added to the same `app-config` ConfigMap
+  `k8s/overlays/local/config.yaml` already defines, by a Kustomize patch inside the component —
+  double underscores, like every other key there.
 
 ### One-click start/stop
 
@@ -203,7 +244,8 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 |---|---|
 | Install/check prerequisites | `scripts/install-prereqs.ps1` — see below |
 | Start dev loop | `scripts/dev.ps1` — the plain local dev loop |
-| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/Vite ports, `docker compose down` |
+| Start dev loop + Seq | `scripts/dev.ps1 -WithSeq` — same, plus Seq at `localhost:55341` |
+| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/Vite ports, tears down the database (and Seq, if it was started) |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
 | Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses port 5234 |
@@ -358,6 +400,56 @@ No test waits for a TTL to lapse; `HybridCache` expires on its own clock, which 
 reach. The only TTL arithmetic is `CacheDuration.Clamp`, tested directly.
 
 See ADR 0009.
+
+## Logging
+
+Every command and query is logged automatically. `Behaviors.LoggedAsync`
+(`src/Infrastructure/Messaging/Behaviors.cs`) wraps every dispatch — `AddCommand` runs
+`Logged(Validate -> handler -> Commit -> Evict)`, `AddQuery` runs `Logged(Cached(handler))` — so
+no handler writes a logging call to get its outcome and duration recorded, and no handler should:
+never log "handling X" or "returning failure" by hand, the behavior already reports that.
+
+- **Success is `Debug`.** Every query goes through this pipeline; at a higher default level a
+  single page load would already be "it worked" noise. A failed `Result` is levelled by its
+  `ErrorKind` — `Validation`/`NotFound` stay at `Debug` (the caller being wrong, not the system),
+  `Conflict`/`Unauthorized` are `Information`, anything else is `Warning`. A thrown exception logs
+  `Faulted` at `Warning` and rethrows unchanged — `GlobalExceptionHandler` still owns turning it
+  into a 500 and logging the exception object itself at `Error`; `LoggedAsync` never logs the
+  exception, or it would double-report the same failure.
+- **The behavior logs `typeof(TRequest).Name`, never the request instance.** `SignIn`,
+  `RegisterUser` and `ChangePassword` carry a plaintext password field — logging the request
+  object would write every password in the system to the log store, permanently.
+  `SensitiveCommandLoggingTests` (`tests/Infrastructure.Tests/Messaging`) exists to catch that
+  class of regression, the same way a cache key missing its user scope is caught by a test rather
+  than by review alone.
+- The outbox's `OutboxWorkItemProcessor` logs its three outcomes the same way: dispatched at
+  `Debug`, a scheduled retry at `Information`, dead-lettering at `Warning` — see
+  `src/Infrastructure/CLAUDE.md`'s Outbox section.
+- **Trace continuity crosses the outbox boundary too.** A domain event delivered later, by a
+  background pump, restores the W3C traceparent the raising request captured — so a delivery's
+  own logs, and anything a handler logs, carry the same `TraceId` as the `POST` that caused them,
+  not a fresh unrelated one. `OutboxMessage.TraceParent` and `OutboxWorkItemProcessor`'s delivery
+  `Activity`; see `src/Infrastructure/CLAUDE.md`'s Outbox section for the mechanism.
+- `Application` may inject `ILogger<T>` for something genuinely domain-meaningful a handler alone
+  knows, never for control flow the behavior already reports. See
+  `src/Application/CLAUDE.md`'s own Logging section for the fuller reasoning, including why that
+  is convention-and-review-enforced rather than backed by an architecture test.
+
+**Config keys use double underscores, same as `Cache__Enabled` elsewhere in this file:**
+`Observability__Otlp__Enabled` and `Observability__Otlp__Endpoint`, never a single underscore,
+which binds nothing and warns nothing. `Observability:Otlp:Enabled` defaults to `false`
+everywhere — appsettings.json, every test host, CI — so nothing tries to export to a collector
+that was never started; the tracer provider itself is still registered unconditionally, which is
+what makes `Activity.Current` non-null and the `traceId` already written into every
+`ProblemDetails` resolve to a real, correlatable value. `Observability:Otlp:Endpoint` is the OTLP
+receiver's **root**, with no `/v1/logs`/`/v1/traces` suffix —
+`ObservabilityRegistration.BuildOtlpEndpoint` appends the right one per signal, and does not rely
+on the SDK to (confirmed empirically that it will not: see that method's own remarks for what
+that cost to discover).
+
+See `docs/superpowers/plans/2026-09-13-centralized-logging.md` for the full design and the
+phased rollout, and ADR 0015 for the decision itself — MEL + a pipeline behavior over Serilog or
+a base class, OTLP export over a store-specific sink.
 
 ## Resilience
 

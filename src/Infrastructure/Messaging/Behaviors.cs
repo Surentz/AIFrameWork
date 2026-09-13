@@ -1,14 +1,118 @@
+using System.Diagnostics;
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Caching;
 using FluentValidation;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure.Messaging;
 
 internal static class Behaviors
 {
+    /// <summary>
+    /// The outermost wrapper for every command and query dispatch — AddCommand/AddQuery call
+    /// this first, so its duration includes validation, the handler, commit and eviction for a
+    /// command, and the cache for a query. `next` takes (IServiceProvider, TRequest,
+    /// CancellationToken) as explicit parameters rather than being a capturing closure, so the
+    /// caller can pass a `static` lambda with nothing to allocate — the same reason
+    /// CachedAsync's HybridCache factory takes an explicit (sp, query) state tuple instead of
+    /// closing over them.
+    /// </summary>
+    /// <remarks>
+    /// try/finally, never try/catch: CA1031 is an error everywhere in this repository, and
+    /// GlobalExceptionHandler already logs every unhandled exception once it reaches the
+    /// boundary, with the exception object attached — catching and logging it again here would
+    /// both violate CA1031 and double-report the same failure. `faulted` starts true and is
+    /// cleared only once `next` has returned without throwing, which is what lets the finally
+    /// block below tell "threw" apart from "returned" with no catch of its own.
+    /// <para>
+    /// Logs `typeof(TRequest).Name` and never the request instance. SignIn, RegisterUser and
+    /// ChangePassword carry a plaintext password field — logging the request object, the
+    /// obvious "richer logs" a future edit might reach for, would write every password in the
+    /// system to the log store, permanently. SensitiveCommandLoggingTests exists to catch that
+    /// class of regression, the same way a cache key missing its user scope is caught by a test
+    /// rather than by review alone (ADR 0009).
+    /// </para>
+    /// </remarks>
+    internal static async Task<Result<TResponse>> LoggedAsync<TRequest, TResponse>(
+        IServiceProvider sp,
+        string kind,
+        TRequest request,
+        Func<IServiceProvider, TRequest, CancellationToken, Task<Result<TResponse>>> next,
+        CancellationToken ct)
+    {
+        var logger = sp.GetRequiredService<ILogger<TRequest>>();
+        var name = typeof(TRequest).Name;
+
+        // Resolved with GetService, not GetRequiredService: the outbox pumps dispatch with no
+        // HTTP context at all (see Application/Abstractions/Ports.cs), so there may be no
+        // ICurrentUser registration to find, and a null caller id is the normal case there, not
+        // a wiring error.
+        var userId = sp.GetService<ICurrentUser>()?.Id;
+        var startedAt = Stopwatch.GetTimestamp();
+        var faulted = true;
+
+        // The raw ILogger.BeginScope<TState> overload, not the LoggerExtensions.BeginScope(this
+        // ILogger, string, object?[]) convenience one — CA1848 flags the latter the same way it
+        // flags LogInformation/LogWarning/etc. called directly instead of through a
+        // [LoggerMessage] delegate. A Dictionary is enough structured state for IncludeScopes
+        // (ObservabilityRegistration.cs) to carry it onto every record a handler logs from
+        // inside this scope.
+        using var scope = logger.BeginScope(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["MessagingKind"] = kind,
+            ["MessagingName"] = name,
+            ["UserId"] = userId,
+        });
+
+        try
+        {
+            var result = await next(sp, request, ct).ConfigureAwait(false);
+            faulted = false;
+
+            var elapsedMs = (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+
+            if (result.IsSuccess)
+            {
+                MessagingLog.Succeeded(logger, kind, name, elapsedMs);
+            }
+            else
+            {
+                // CA1873: LevelFor(...) is a method call, and passing it inline would be
+                // evaluated even when the resulting level turns out to be disabled. Assigning it
+                // first costs nothing extra — the switch itself is trivial — but keeps every
+                // argument to the generated delegate a plain value.
+                var level = LevelFor(result.Error.Kind);
+                MessagingLog.Failed(logger, level, kind, name, result.Error.Code, elapsedMs);
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (faulted)
+            {
+                var elapsedMs = (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+                MessagingLog.Faulted(logger, kind, name, elapsedMs);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validation and NotFound are the caller being wrong, not the system, so they stay at the
+    /// level a normal request runs at. Conflict and Unauthorized are worth a closer look without
+    /// paging anyone. The default case is defensive: ErrorKind has exactly four members today,
+    /// but a future fifth one should not silently fall through to Debug.
+    /// </summary>
+    private static LogLevel LevelFor(ErrorKind kind) => kind switch
+    {
+        ErrorKind.Validation or ErrorKind.NotFound => LogLevel.Debug,
+        ErrorKind.Conflict or ErrorKind.Unauthorized => LogLevel.Information,
+        _ => LogLevel.Warning,
+    };
+
     /// <summary>
     /// Runs the command's validator if one is registered, short-circuiting to a failed Result
     /// before the handler runs. No validator registered means no validation — absence is not

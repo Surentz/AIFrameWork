@@ -1,0 +1,95 @@
+# Index lifecycle: without this, otel-logs-*/otel-traces-* (see otel-collector.yaml's
+# *_index_time_format) grow without bound until the kind node runs out of disk, which surfaces
+# as unrelated pods being evicted rather than as an obvious observability-stack problem.
+#
+# ism_template (not a separate index template plus a per-index `_ism/add` call) is what makes
+# this apply itself: confirmed empirically that a policy body carrying ism_template auto-attaches
+# to any NEW index matching its index_patterns at creation time, with nothing else to run per
+# day. GET /_plugins/_ism/explain/<index> on a freshly created matching index showed the policy
+# already attached, no delay, no separate step.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opensearch-ism-policy
+data:
+  policy.json: |
+    {
+      "policy": {
+        "description": "Delete otel-logs-*/otel-traces-* indices after 7 days.",
+        "default_state": "hot",
+        "states": [
+          {
+            "name": "hot",
+            "actions": [],
+            "transitions": [
+              { "state_name": "delete", "conditions": { "min_index_age": "7d" } }
+            ]
+          },
+          {
+            "name": "delete",
+            "actions": [ { "delete": {} } ],
+            "transitions": []
+          }
+        ],
+        "ism_template": [
+          { "index_patterns": ["otel-logs-*", "otel-traces-*"], "priority": 100 }
+        ]
+      }
+    }
+---
+# A one-shot Job, not a CronJob: the policy only needs to exist once - ism_template is a standing
+# cluster-level rule, not per-index state that decays - so nothing is gained by re-running this
+# on a schedule. Its content never changes between deploys, so a plain re-apply on every
+# deploy.ps1 run is a safe no-op (no diff for kubectl to act on); this is what lets it join
+# migrate-job.yaml's Job kind in deploy.ps1's phase-B batch with no special handling; only
+# migrate-job.yaml itself needs the delete-before-apply deploy.ps1 already does, because ITS
+# content (the image) changes on every deploy - this Job's never does.
+#
+# PUT on an existing policy ID answers 409 (version_conflict_engine_exception), confirmed
+# empirically by running this exact script twice against the same cluster - it is NOT naturally
+# idempotent on retry the way a plain "create or replace" call would be. 200/201/409 are all
+# treated as success below for that reason: 409 means the desired end state (the policy exists)
+# already holds, not that anything went wrong.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opensearch-ism-policy
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: apply-ism-policy
+          image: curlimages/curl:8.22.0
+          command: ['sh', '-c']
+          args:
+            - |
+              set -eu
+              # OpenSearch is not gated ahead of this the way postgres/migrate are in
+              # deploy.ps1 - nothing downstream depends on the policy existing within any
+              # particular window, only eventually, before the first index seven days from now.
+              # This loop is what makes that safe regardless of apply order.
+              for i in $(seq 1 60); do
+                if curl -sS -o /dev/null "http://opensearch:9200/"; then break; fi
+                sleep 5
+              done
+              code=$(curl -sS -o /tmp/resp -w '%{http_code}' -X PUT \
+                "http://opensearch:9200/_plugins/_ism/policies/otel-observability-retention" \
+                -H 'Content-Type: application/json' --data-binary @/config/policy.json)
+              cat /tmp/resp
+              echo
+              case "$code" in
+                200 | 201 | 409) exit 0 ;;
+                *)
+                  echo "unexpected status from the ISM policy PUT: $code" >&2
+                  exit 1
+                  ;;
+              esac
+          volumeMounts:
+            - name: policy
+              mountPath: /config
+      volumes:
+        - name: policy
+          configMap:
+            name: opensearch-ism-policy

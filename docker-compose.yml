@@ -21,5 +21,48 @@ services:
       # Named, unlike the e2e stack's throwaway container: dev data survives a `down`.
       - pgdata:/var/lib/postgresql/data
 
+  # Dev-only structured log UI, for the centralized logging framework
+  # (docs/superpowers/plans/2026-09-13-centralized-logging.md). Behind a profile so a bare
+  # `docker compose up` — what dev.ps1 runs by default — never starts it: a developer who has
+  # not asked for it should not pay for a second container, and `Observability:Otlp:Enabled`
+  # defaults to false everywhere anyway (appsettings.json), so nothing tries to export to it
+  # until dev.ps1 -WithSeq turns both on together. Start by hand with
+  # `docker compose --profile observability up -d seq`, or via that switch.
+  #
+  # `docker compose down` with no --profile flag will NOT stop this container once started —
+  # confirmed empirically, not assumed: compose's `down` only tears down the active profile set
+  # for THAT invocation, not whatever an earlier `up` left running. Stop it with
+  # `docker compose --profile observability down`, which scripts/stop-dev.ps1 always passes
+  # (harmless when Seq was never started — there is then nothing in that profile to stop).
+  seq:
+    image: datalust/seq:2026.1
+    profiles: ['observability']
+    environment:
+      ACCEPT_EULA: 'Y'
+      # No authentication, on purpose: a localhost-only container that is never deployed, the
+      # same judgement already applied to the dev Postgres password above and to
+      # docker-compose.e2e.yml's throwaway credentials. Confirmed empirically while wiring this
+      # up (see ObservabilityRegistration.BuildOtlpEndpoint's remarks) that Seq needs
+      # SEQ_FIRSTRUN_NOAUTHENTICATION or SEQ_FIRSTRUN_ADMINPASSWORD set at all — with neither,
+      # the container exits immediately rather than starting unauthenticated.
+      SEQ_FIRSTRUN_NOAUTHENTICATION: 'True'
+    ports:
+      # Port 80 in the container serves the UI, the query API, AND OTLP ingestion — all three
+      # over plain HTTP, nothing else to map. ObservabilityRegistration builds the ingest URL as
+      # "<this>/ingest/otlp" + "/v1/logs" or "/v1/traces"; confirmed against a live container,
+      # not assumed — see BuildOtlpEndpoint's remarks for why that distinction mattered here.
+      - '${SEQ_PORT:-55341}:80'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost/']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      # Named, like pgdata above: dev logs survive a `down`, and disposable — a
+      # `docker compose --profile observability down -v` (or deleting the volume by hand) is the
+      # reset, same as pgdata.
+      - seqdata:/data
+
 volumes:
   pgdata:
+  seqdata:

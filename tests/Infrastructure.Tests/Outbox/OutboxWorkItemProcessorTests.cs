@@ -1,11 +1,14 @@
+using System.Diagnostics;
 using AiFramework.Application.Abstractions;
 using AiFramework.Domain.Abstractions;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
+using AiFramework.Infrastructure.Tests.Messaging;
 using AiFramework.Infrastructure.Tests.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure.Tests.Outbox;
@@ -33,6 +36,12 @@ public sealed class ContextCapturingHandler(ContextSink sink) : IDomainEventHand
         // "the instance resolved from a given scope" — a same-count or non-empty check on Seen
         // alone cannot distinguish the processor's scope from any other scope, or from root.
         sink.Handlers.Add(this);
+        // The ambient Activity a REAL handler would see — this is what
+        // ProcessAsync_WithAStoredTraceParent_RestoresItAsTheDeliveryActivitysParent asserts on,
+        // to prove trace continuity from inside dispatch itself rather than from the Activity
+        // OutboxWorkItemProcessor started, which would pass even if the parent context were
+        // wired to the wrong place.
+        sink.ActivityContexts.Add(Activity.Current?.Context ?? default);
         return Task.CompletedTask;
     }
 }
@@ -43,6 +52,8 @@ public sealed class ContextSink
     public ICollection<DomainEventContext> Seen { get; } = [];
 
     public ICollection<ContextCapturingHandler> Handlers { get; } = [];
+
+    public ICollection<ActivityContext> ActivityContexts { get; } = [];
 }
 
 [Collection(nameof(PostgresCollection))]
@@ -53,9 +64,23 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
     // Amendment 2: ValidateScopes = true so a scoped-from-root resolution throws instead of
     // silently succeeding. Every test below resolves the processor through a fresh
     // IServiceScope, never from the root provider directly, so this is exercised for real.
-    private ServiceProvider BuildProvider(OutboxOptions? options = null)
+    private ServiceProvider BuildProvider(OutboxOptions? options = null, CapturingLoggerProvider? logs = null)
     {
         var services = new ServiceCollection();
+        // OutboxWorkItemProcessor now resolves ILogger<OutboxWorkItemProcessor> via its primary
+        // constructor, like every other consumer of ILogger<T> in this project's Build helpers.
+        // SetMinimumLevel(Debug) only when a capturing provider is actually attached: it is what
+        // Behaviors.LoggedAsync's own tests needed to observe the Debug-level "dispatched"
+        // record, since Microsoft.Extensions.Logging defaults its filter to Information — see
+        // LoggingBehaviorTests.Build for the fuller explanation.
+        services.AddLogging(builder =>
+        {
+            if (logs is not null)
+            {
+                builder.SetMinimumLevel(LogLevel.Debug);
+                builder.AddProvider(logs);
+            }
+        });
         services.AddSingleton<HandlerSink>();
         services.AddSingleton<ContextSink>();
         services.AddDomainEvent<Pinged>("test.pinged");
@@ -135,6 +160,56 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task ProcessAsync_WhenTheHandlerSucceeds_LogsDispatchedAtDebug()
+    {
+        var id = await SeedAsync("test.pinged", """{"text":"hi"}""", 1);
+        using var logs = new CapturingLoggerProvider();
+        await using var provider = BuildProvider(logs: logs);
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(new OutboxWorkItem(id, "test.pinged", """{"text":"hi"}""", 1), CancellationToken.None);
+
+        logs.Records.Should().ContainSingle(r =>
+            r.Level == LogLevel.Debug
+            && r.Message.Contains("dispatched", StringComparison.Ordinal)
+            && r.Message.Contains(id.ToString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenTheHandlerThrowsAndWillRetry_LogsRetryScheduledAtInformation()
+    {
+        var id = await SeedAsync("test.boom", "{}", 1);
+        using var logs = new CapturingLoggerProvider();
+        await using var provider = BuildProvider(logs: logs);
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(new OutboxWorkItem(id, "test.boom", "{}", 1), CancellationToken.None);
+
+        logs.Records.Should().ContainSingle(r =>
+            r.Level == LogLevel.Information
+            && r.Message.Contains("retrying", StringComparison.Ordinal)
+            && r.Message.Contains("handler exploded", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_OnTheFinalAttempt_LogsDeadLetteredAtWarning()
+    {
+        var id = await SeedAsync("test.boom", "{}", 5);
+        using var logs = new CapturingLoggerProvider();
+        await using var provider = BuildProvider(new OutboxOptions { MaxAttempts = 5 }, logs);
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(new OutboxWorkItem(id, "test.boom", "{}", 5), CancellationToken.None);
+
+        logs.Records.Should().ContainSingle(r =>
+            r.Level == LogLevel.Warning
+            && r.Message.Contains("dead-lettered", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ProcessAsync_WithAnUnknownEventName_MarksTheRowDeadImmediately()
     {
         var id = await SeedAsync("test.unregistered", "{}", 1);
@@ -147,6 +222,23 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
         await using var verify = fixture.CreateContext();
         var row = await verify.Outbox.SingleAsync(m => m.Id == id);
         row.Status.Should().Be(OutboxStatus.Dead, "no number of retries invents a registration");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithAnUnknownEventName_LogsDeadLetteredAtWarning()
+    {
+        var id = await SeedAsync("test.unregistered", "{}", 1);
+        using var logs = new CapturingLoggerProvider();
+        await using var provider = BuildProvider(logs: logs);
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(new OutboxWorkItem(id, "test.unregistered", "{}", 1), CancellationToken.None);
+
+        logs.Records.Should().ContainSingle(r =>
+            r.Level == LogLevel.Warning
+            && r.Message.Contains("dead-lettered", StringComparison.Ordinal)
+            && r.Message.Contains("No registration", StringComparison.Ordinal));
     }
 
     // Amendment 1: renamed from "...PassesTheMessageIdAsTheDedupeKey" and rewritten to assert
@@ -191,5 +283,43 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
 
         provider.GetRequiredService<ContextSink>().Handlers
             .Should().ContainSingle().Which.Should().BeSameAs(expectedHandler);
+    }
+
+    /// <summary>
+    /// Task 5 (docs/superpowers/plans/2026-09-13-centralized-logging.md): proves trace
+    /// continuity from INSIDE dispatch, via ContextCapturingHandler's own ambient
+    /// Activity.Current — not by inspecting the Activity OutboxWorkItemProcessor started, which
+    /// would pass even if that Activity's parent context were wired to the wrong value. An
+    /// ActivityListener is required for StartActivity to produce anything at all: with no
+    /// listener subscribed to "AiFramework.Outbox" (there is none in this bare ServiceProvider —
+    /// no OpenTelemetry SDK here, unlike the real host), it always returns null regardless of
+    /// what item.TraceParent holds.
+    /// </summary>
+    [Fact]
+    public async Task ProcessAsync_WithAStoredTraceParent_RestoresItAsTheDeliveryActivitysParent()
+    {
+        var expectedTraceId = ActivityTraceId.CreateRandom();
+        var traceParent = $"00-{expectedTraceId}-{ActivitySpanId.CreateRandom()}-01";
+
+        var id = await SeedAsync("test.contextual", "{}", 1);
+        await using var provider = BuildProvider();
+        using var scope = provider.CreateScope();
+
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => string.Equals(source.Name, "AiFramework.Outbox", StringComparison.Ordinal),
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(
+                new OutboxWorkItem(id, "test.contextual", "{}", 1, traceParent), CancellationToken.None);
+
+        provider.GetRequiredService<ContextSink>().ActivityContexts
+            .Should().ContainSingle().Which.TraceId.Should().Be(expectedTraceId,
+                "the handler's own ambient Activity.Current must carry the SAME TraceId as the " +
+                "request that raised the event, not a fresh unrelated one — that is the whole " +
+                "point of restoring the stored traceparent as the delivery Activity's parent");
     }
 }

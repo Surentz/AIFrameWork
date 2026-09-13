@@ -130,7 +130,27 @@ event, it is persisted with the aggregate, and it is delivered at least once aft
   `MaxAttempts`.
 - `OutboxWorkItemProcessor` owns the outcome of one claimed item: dispatch, retry with backoff,
   or dead-letter. All of that decision logic lives here rather than in a `BackgroundService` loop
-  so it is testable without a host.
+  so it is testable without a host. It logs all three outcomes — dispatched (Debug, the routine
+  case, matching `Behaviors.LoggedAsync`'s own "success is Debug" convention), retry scheduled
+  (Information — the self-healing path working as designed), and dead-lettered (Warning — the
+  one an operator actually wants to see, whether from `MaxAttempts` exhausting or from an
+  unregistered event name). A `logger.BeginScope` carries `MessageId`, `EventType` and `Attempt`
+  onto everything logged from inside `ProcessAsync`, the same raw `ILogger.BeginScope<TState>`
+  pattern `Behaviors.LoggedAsync` uses and for the identical CA1848 reason — see that method's
+  remarks.
+- **Trace continuity across the outbox boundary.** `OutboxMessage.TraceParent` (nullable — a row
+  written before this column existed, or raised with no ambient `Activity`, legitimately has
+  none) is `Activity.Current?.Id`, captured by `DomainEventsInterceptor` at the one point that
+  still has the request's own ambient `Activity`. `OutboxWorkItemProcessor` restores it as the
+  parent of a delivery `Activity` it starts from a private `ActivitySource("AiFramework.Outbox")`
+  — registered via `.AddSource("AiFramework.Outbox")` in `ObservabilityRegistration`, without
+  which `StartActivity` always returns null regardless of what `TraceParent` holds. The restored
+  `Activity` shares its parent's `TraceId` by construction (standard W3C trace-context
+  inheritance), which is what makes a delivery's own logs — and anything a handler itself logs —
+  carry the same `TraceId` as the request that caused them, pivotable in the log store the same
+  way `Behaviors.LoggedAsync`'s scope already does within one request. `ActivityContext.TryParse`
+  never throws on a malformed value; a delivery still proceeds, unparented, rather than being
+  lost over a trace id that cannot be reconstructed.
 - The two `BackgroundService` pumps in `OutboxHostedServices.cs` (`OutboxPollerService`,
   `OutboxWorkerService`) are deliberately thin: they own scope creation and the channel hop, and
   delegate the actual work to `OutboxPoller`/`OutboxWorkItemProcessor` above. `OutboxHostedServices.cs`

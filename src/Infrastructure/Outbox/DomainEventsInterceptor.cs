@@ -1,6 +1,7 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Domain.Abstractions;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace AiFramework.Infrastructure.Outbox;
@@ -45,6 +46,14 @@ public sealed class DomainEventsInterceptor(DomainEventRegistry registry, IClock
                         domainEvent, domainEvent.GetType(), OutboxJson.Options),
                     OccurredAt = occurredAt,
                     Status = OutboxStatus.Pending,
+                    // Captured here, not in OutboxWorkItemProcessor: this is the only point that
+                    // still has the REQUEST's own ambient Activity — by the time a worker claims
+                    // this row and processes it, that Activity is long gone, and .Id under the
+                    // default W3C format IS the traceparent string OutboxWorkItemProcessor later
+                    // parses back into an ActivityContext. Null is the normal case for a row
+                    // raised with no ambient Activity (a test, an outbox pump with no HTTP
+                    // context) — never a wiring error.
+                    TraceParent = Activity.Current?.Id,
                 });
             }
 

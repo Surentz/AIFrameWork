@@ -1,0 +1,31 @@
+# A Kustomize Component, not a plain set of resources folded into an overlay - the whole point is
+# that it is opt-in. k8s/overlays/local never references this; only
+# k8s/overlays/local-observability does, via components: rather than resources:. A developer
+# rehearsing the cookie-affinity behaviour of ADR 0010 should not pay for a log store to do it.
+# See docs/superpowers/plans/2026-09-13-centralized-logging.md, Task 7.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - otel-collector.yaml
+  - opensearch.yaml
+  - opensearch-dashboards.yaml
+  - ism-policy-job.yaml
+
+# Adds the two Otlp keys to the SAME app-config ConfigMap k8s/overlays/local/config.yaml already
+# defines, rather than this component declaring its own ConfigMap - one ConfigMap, one envFrom on
+# the api Deployment (k8s/base/api.yaml), unchanged. Left out of local/config.yaml itself so that
+# overlay stays correct with no collector running: Observability:Otlp:Enabled defaults to false
+# (appsettings.json) precisely so a missing collector means no export, not a crash, but there is
+# no reason to carry a dead "true" here when this component is not included at all.
+patches:
+  - target:
+      kind: ConfigMap
+      name: app-config
+    patch: |-
+      - op: add
+        path: /data/Observability__Otlp__Enabled
+        value: 'true'
+      - op: add
+        path: /data/Observability__Otlp__Endpoint
+        value: 'http://otel-collector.aiframework:4318'

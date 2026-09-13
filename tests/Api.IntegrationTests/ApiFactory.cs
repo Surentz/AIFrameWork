@@ -66,6 +66,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // shared Postgres container.
         builder.UseSetting("Cache:Enabled", "false");
 
+        // Belt and braces: appsettings.json already defaults this to false, so every test host
+        // would get an unexported (but still active) tracer provider either way. This is
+        // defence against someone flipping that default later — without it, every integration
+        // test in this project would attempt OTLP delivery to a collector that is not there.
+        builder.UseSetting("Observability:Otlp:Enabled", "false");
+
         // Off for every test in this project, for the same reason the cache is off above: a
         // test asserting an ErrorKind.Unavailable failure must not first sit through the retry
         // pipeline's own backoff delays. RatesEndpointTests still exercises the real pipeline —

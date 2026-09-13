@@ -9,7 +9,12 @@
 [CmdletBinding()]
 param(
     [switch]$CreateCluster,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    # Deploys k8s/overlays/local-observability instead of k8s/overlays/local — the OTel
+    # Collector, OpenSearch, and OpenSearch Dashboards, opt-in via a Kustomize Component. See
+    # k8s/components/observability/kustomization.yaml for why this needs a separate overlay
+    # rather than a flag inside the plain one.
+    [switch]$WithObservability
 )
 
 Set-StrictMode -Version Latest
@@ -96,7 +101,9 @@ Invoke-Step 'Loading images into kind' {
         aiframework-web:local --name $cluster
 }
 
-$overlay = Join-Path $repoRoot 'k8s/overlays/local'
+$overlay = Join-Path $repoRoot (
+    if ($WithObservability) { 'k8s/overlays/local-observability' } else { 'k8s/overlays/local' }
+)
 
 # Kustomize has no hook mechanism, so the migrate-before-rollout ordering that Helm would
 # express as a pre-upgrade hook has to be done here instead — the acknowledged cost of choosing
@@ -117,14 +124,28 @@ $rendered = $renderedLines -join "`n"
 $documents = [regex]::Split($rendered, '(?m)^---\r?$') | Where-Object { $_.Trim() -ne '' }
 
 $passA = New-Object System.Collections.Generic.List[string]  # everything but Job/Deployment/Ingress
-$passB = New-Object System.Collections.Generic.List[string]  # the migrate Job
+$passB = New-Object System.Collections.Generic.List[string]  # every Job: migrate, and -WithObservability's opensearch-ism-policy
 $passC = New-Object System.Collections.Generic.List[string]  # Deployments and the Ingress
+
+# Every Job's name, for the delete-before-apply below — not just "migrate" by itself.
+# -WithObservability adds a second one (k8s/components/observability/ism-policy-job.yaml), and
+# the same reason applies to it: a completed Job has immutable fields, so a plain re-apply on a
+# second deploy fails, migrate or not.
+$jobNames = New-Object System.Collections.Generic.List[string]
 
 foreach ($doc in $documents) {
     $kindMatch = [regex]::Match($doc, '(?m)^kind:\s*(\S+)')
     if (-not $kindMatch.Success) { throw 'Could not find a top-level kind: in a rendered document.' }
     switch ($kindMatch.Groups[1].Value) {
-        'Job' { $passB.Add($doc) }
+        'Job' {
+            $passB.Add($doc)
+            # Exactly two spaces: kubectl kustomize's output indents every metadata.* field
+            # this way, and "namespace:" cannot match here — "name:" (colon immediately after)
+            # is not a substring of "namespace:", whose fifth character is "s", not ":".
+            $nameMatch = [regex]::Match($doc, '(?m)^  name:\s*(\S+)$')
+            if (-not $nameMatch.Success) { throw 'Could not find metadata.name in a rendered Job document.' }
+            $jobNames.Add($nameMatch.Groups[1].Value)
+        }
         'Deployment' { $passC.Add($doc) }
         'Ingress' { $passC.Add($doc) }
         default { $passA.Add($doc) }
@@ -149,11 +170,17 @@ Invoke-Step 'Waiting for postgres' {
     kubectl --context $context -n $namespace rollout status statefulset/postgres --timeout=180s
 }
 
-# 3. Migrations, to completion, before any Deployment exists. Deleted first: a completed Job
-#    has immutable fields, so a plain re-apply fails on the second deployment.
+# 3. Every Job, deleted then reapplied — a completed Job has immutable fields, so a plain
+#    re-apply fails on the second deployment, for migrate and for -WithObservability's
+#    opensearch-ism-policy alike. Only migrate is actually waited on below: nothing in Phase C
+#    depends on the ISM policy existing within any particular window, only eventually (its own
+#    Job has a wait-for-OpenSearch retry loop of its own — see ism-policy-job.yaml), so blocking
+#    the deploy on it would only make this slower for no correctness gained.
 Invoke-Step 'Phase B: running migrations' {
-    kubectl --context $context -n $namespace delete job migrate --ignore-not-found
-    Assert-LastExitCode 'kubectl delete job migrate'
+    foreach ($jobName in $jobNames) {
+        kubectl --context $context -n $namespace delete job $jobName --ignore-not-found
+        Assert-LastExitCode "kubectl delete job $jobName"
+    }
     ($passB -join "`n---`n") | kubectl --context $context apply -f -
     Assert-LastExitCode 'kubectl apply (phase B)'
     kubectl --context $context -n $namespace wait --for=condition=complete job/migrate --timeout=180s
@@ -186,6 +213,20 @@ Invoke-Step 'Rolling out the application' {
     Assert-LastExitCode 'kubectl rollout status (api)'
     kubectl --context $context -n $namespace rollout status deployment/web --timeout=300s
     Assert-LastExitCode 'kubectl rollout status (web)'
+
+    # otel-collector's pod template carries no hash of its ConfigMap's content, exactly like
+    # api/web above, so an edit to k8s/components/observability/otel-collector.yaml's embedded
+    # config is applied to the ConfigMap object by phase C but never reaches the running
+    # collector process without this: `kubectl apply` alone sees an unchanged Deployment spec
+    # and triggers nothing, and the collector does not hot-reload its config file on a change to
+    # the mounted volume. Silent otherwise — the collector keeps running on stale config with no
+    # error anywhere.
+    if ($WithObservability) {
+        kubectl --context $context -n $namespace rollout restart deployment/otel-collector
+        Assert-LastExitCode 'kubectl rollout restart (otel-collector)'
+        kubectl --context $context -n $namespace rollout status deployment/otel-collector --timeout=300s
+        Assert-LastExitCode 'kubectl rollout status (otel-collector)'
+    }
 }
 
 $kindConfig = Get-Content (Join-Path $PSScriptRoot 'kind-cluster.yaml') -Raw
@@ -205,3 +246,13 @@ else {
 Write-Host ''
 Write-Host "Ready: $readyUrl" -ForegroundColor Green
 Write-Host 'The certificate is self-signed, so the browser will warn once.' -ForegroundColor DarkGray
+
+if ($WithObservability) {
+    # No Ingress for this — it is an opt-in rehearsal tool, not part of the application surface
+    # the TLS ingress fronts, so port-forward is the plain way in rather than adding a third host
+    # or path to k8s/base/ingress.yaml for it.
+    Write-Host ''
+    Write-Host 'OpenSearch Dashboards: kubectl --context ' -NoNewline -ForegroundColor DarkGray
+    Write-Host "$context -n $namespace port-forward svc/opensearch-dashboards 5601:5601" -ForegroundColor DarkGray
+    Write-Host '  then open http://localhost:5601' -ForegroundColor DarkGray
+}

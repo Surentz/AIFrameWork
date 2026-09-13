@@ -44,6 +44,10 @@ public sealed class BehaviorTests
         where THandler : class, ICommandHandler<Save, string>
     {
         var services = new ServiceCollection();
+        // Behaviors.LoggedAsync now wraps every dispatch and resolves ILogger<TCommand> with
+        // GetRequiredService, matching the AddLogging() call every other Build() helper in this
+        // directory already makes.
+        services.AddLogging();
         services.AddCommand<Save, string, THandler>();
         services.AddSingleton<CommandRegistry>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();

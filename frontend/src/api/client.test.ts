@@ -58,6 +58,34 @@ describe('the api client', () => {
     expect((error as ApiError).fieldErrors.Quantity).toEqual(['Quantity must be positive.']);
   });
 
+  it('exposes the traceId from the problem body, for matching it to a backend log record', async () => {
+    server.use(
+      http.get('/api/orders', () =>
+        HttpResponse.json(
+          { title: 'orders.limit_out_of_range', traceId: '00-abc-def-01' },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    const error = await listOrders({ limit: 0 }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).traceId).toBe('00-abc-def-01');
+  });
+
+  it('leaves traceId undefined when the problem body does not carry one', async () => {
+    server.use(
+      http.get('/api/orders', () =>
+        HttpResponse.json({ title: 'orders.limit_out_of_range' }, { status: 400 }),
+      ),
+    );
+
+    const error = await listOrders({ limit: 0 }).catch((e: unknown) => e);
+
+    expect((error as ApiError).traceId).toBeUndefined();
+  });
+
   it('lets a caller-supplied header override the default Content-Type', async () => {
     let seenContentType: string | null = null;
     server.use(

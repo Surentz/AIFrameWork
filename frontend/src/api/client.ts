@@ -2,6 +2,7 @@ interface ProblemDetails {
   readonly title?: string;
   readonly detail?: string;
   readonly errors?: Record<string, string[]>;
+  readonly traceId?: string;
 }
 
 export class ApiError extends Error {
@@ -9,12 +10,21 @@ export class ApiError extends Error {
   readonly title: string;
   readonly fieldErrors: Readonly<Record<string, readonly string[]>>;
 
+  /**
+   * Every ProblemDetails from ResultExtensions.Problem and GlobalExceptionHandler carries one
+   * (see AiFramework.Api), so an operator can find the matching backend log record — but a
+   * non-JSON error body still falls back to `{}` below, so this stays optional rather than
+   * defaulting to an empty string that would read as a real, searchable id.
+   */
+  readonly traceId: string | undefined;
+
   constructor(status: number, problem: ProblemDetails) {
     super(problem.detail ?? problem.title ?? `Request failed with status ${String(status)}.`);
     this.name = 'ApiError';
     this.status = status;
     this.title = problem.title ?? 'error';
     this.fieldErrors = problem.errors ?? {};
+    this.traceId = problem.traceId;
   }
 }
 

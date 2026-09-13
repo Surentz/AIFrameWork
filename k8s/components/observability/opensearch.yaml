@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: opensearch
+spec:
+  clusterIP: None
+  selector:
+    app: opensearch
+  ports:
+    - port: 9200
+      targetPort: 9200
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opensearch
+spec:
+  serviceName: opensearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opensearch
+  template:
+    metadata:
+      labels:
+        app: opensearch
+    spec:
+      containers:
+        - name: opensearch
+          image: opensearchproject/opensearch:3.8.0
+          ports:
+            - containerPort: 9200
+          env:
+            - name: discovery.type
+              value: single-node
+            # No authentication, on purpose: a localhost-only kind cluster that is never
+            # deployed, the same judgement already applied to k8s/overlays/local/secret.yaml and
+            # tls.yaml, and to the dev Postgres password and docker-compose.e2e.yml. Never copy
+            # this into an overlay that targets a real environment.
+            - name: DISABLE_SECURITY_PLUGIN
+              value: 'true'
+            - name: OPENSEARCH_JAVA_OPTS
+              value: '-Xms512m -Xmx512m'
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9200
+            # Generous: OpenSearch's bundled plugin set (ML Commons, Security Analytics,
+            # anomaly detection, ...) takes real time to initialize even at rest, well beyond a
+            # plain "process is listening" check - observed 30-45s from container start to a
+            # first 200 while verifying this manifest.
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            # Deliberately well above -Xmx512m above, not just matching it: observed while
+            # verifying this manifest that the JVM heap alone is not the whole footprint - under
+            # memory pressure OpenSearch was seen to defensively set
+            # cluster.blocks.create_index, which silently breaks both new-day index rollover
+            # (otel-collector.yaml's *_index_time_format) and Dashboards, with the only visible
+            # symptom being Dashboards' own "index_create_block_exception" log line. Headroom
+            # above the heap for off-heap allocation (thread stacks, direct buffers, native
+            # plugin memory) is what avoids that, not a bigger heap.
+            limits:
+              memory: 1200Mi
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/opensearch/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests:
+            storage: 2Gi

@@ -23,6 +23,10 @@ public sealed class CommandDispatcherTests
     private static ServiceProvider BuildProvider()
     {
         var services = new ServiceCollection();
+        // Behaviors.LoggedAsync now wraps every dispatch and resolves ILogger<TCommand> with
+        // GetRequiredService, matching QueryDispatcherTests.Services()'s existing AddLogging()
+        // call for the same reason.
+        services.AddLogging();
         services.AddCommand<Ping, string, PingHandler>();
         services.AddSingleton<CommandRegistry>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();

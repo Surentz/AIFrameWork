@@ -44,6 +44,30 @@ Two markers in `Abstractions/Caching.cs` declare intent; Infrastructure alone ch
 
 See ADR 0009.
 
+## Logging
+
+Every command and query is already logged automatically — `Behaviors.LoggedAsync`
+(`src/Infrastructure/Messaging/Behaviors.cs`) wraps every dispatch, so a handler needs no logging
+call to get its outcome and duration recorded. Do not add one that duplicates what the behavior
+already reports: no "handling X", no "returning failure", no entry/exit logging.
+
+Unlike caching, `Microsoft.Extensions.Logging.Abstractions` is not banned here — it is
+interfaces only, ships with the shared framework, and is the canonical port shape, so a handler
+with something genuinely worth saying that the behavior cannot know (a business-meaningful
+event mid-handler, not a dispatch outcome) may inject `ILogger<T>` directly rather than
+inventing a bespoke port for it. No handler does today; keep it that way unless one truly needs
+to. What may **never** be referenced here is a logging *implementation* or *sink* package —
+`Microsoft.Extensions.Logging`, `Serilog`, an exporter, anything that chooses where a log record
+goes. That choice belongs to `Infrastructure`/`Api`, same as the store for caching.
+
+This is not hook-enforced — `Microsoft.Extensions.Logging.Abstractions` is not on the dependency
+hook's banned list for this layer either, the same gap the caching restriction above already
+has. It is carried by review and by `dotnet-reviewer`, not by a test: an architecture test
+proving "no *implementation* package is referenced" would be checking a hypothetical against a
+layer that references no logging package at all today, same as the caching case, so no such
+test exists for the same reason `CachingRegistrationTests` never grew a matching one for
+`Microsoft.Extensions.Caching.Hybrid`.
+
 ## Resilience
 
 **No resilience package may be referenced from this layer** — the same rule as caching, for the

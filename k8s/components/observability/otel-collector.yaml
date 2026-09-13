@@ -1,0 +1,101 @@
+# The OTel Collector is the bridge OpenSearch needs: it does NOT ingest OTLP natively, and a
+# config pointing the application straight at OpenSearch would silently deliver nothing. Confirmed
+# empirically while building this (not assumed): a real .NET OTLP/HTTP exporter, using this
+# repo's own ObservabilityRegistration.BuildOtlpEndpoint, delivered a log record through this
+# exact receiver+processor+exporter shape into a real OpenSearch index. See
+# docs/superpowers/plans/2026-09-13-centralized-logging.md, Task 7.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+data:
+  # Mounted at exactly the path the image's default entrypoint already reads without any
+  # command/args override - confirmed by running the unmodified image with only this file bind-
+  # mounted there.
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch: {}
+
+    exporters:
+      # opensearchexporter (github.com/open-telemetry/opentelemetry-collector-contrib), not a
+      # generic "elasticsearch"-shaped one - the two have diverged enough that config keys are
+      # not interchangeable.
+      opensearch:
+        http:
+          endpoint: http://opensearch:9200
+        # *_index_time_format is what makes this "otel-logs-2026.09.13"-style, one physical
+        # index per UTC day - confirmed empirically, including the exact token set (yyyy/MM/dd,
+        # not Go's 2006-01-02). Without it, everything lands in one never-rolling "otel-logs"
+        # index and the ISM policy in ism-policy-job.yaml (which targets "otel-logs-*") has
+        # nothing dated to delete.
+        logs_index: otel-logs
+        logs_index_time_format: 'yyyy.MM.dd'
+        traces_index: otel-traces
+        traces_index_time_format: 'yyyy.MM.dd'
+
+    service:
+      pipelines:
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [opensearch]
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [opensearch]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.160.0
+          ports:
+            - containerPort: 4318
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ['ALL']
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
