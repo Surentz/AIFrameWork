@@ -1,4 +1,4 @@
-# 0014. Centralized logging with Microsoft.Extensions.Logging and OpenTelemetry
+# 0015. Centralized logging with Microsoft.Extensions.Logging and OpenTelemetry
 
 **Date:** 2026-09-13
 **Status:** Accepted

@@ -68,10 +68,22 @@ layer that references no logging package at all today, same as the caching case,
 test exists for the same reason `CachingRegistrationTests` never grew a matching one for
 `Microsoft.Extensions.Caching.Hybrid`.
 
+## Resilience
+
+**No resilience package may be referenced from this layer** — the same rule as caching, for the
+same reason. A port like `IExchangeRateProvider` (`Rates/IExchangeRateProvider.cs`) declares what
+the use case needs and returns `Result<T>`; Infrastructure's adapter owns the `HttpClient`, the
+retry, the timeouts, and translates the transport's failure into that `Result` before this layer
+ever sees it. A handler that receives a failed `Result` from a port never retries, translates, or
+catches anything itself — the port's own failure, whatever kind it is, passes straight through.
+
+See ADR 0014.
+
 ## Never appears here
 
 - `Microsoft.EntityFrameworkCore` — this layer depends on the port, not on EF
 - `Microsoft.AspNetCore`
+- `Microsoft.Extensions.Http.Resilience`, `Polly`, or `System.Net.Http.HttpClient`
 - Any `AiFramework.Infrastructure` or `.Api` namespace
 
 Blocked by the dependency-rule hook.

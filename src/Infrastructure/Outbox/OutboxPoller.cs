@@ -29,6 +29,15 @@ public sealed class OutboxPoller(
     /// worker that died mid-handler. Attempts increments HERE, at claim time — if it only
     /// incremented on failure, a message that hard-crashes the process would loop forever.
     /// </summary>
+    /// <remarks>
+    /// This method gets NOTHING from AddInfrastructure's EnableRetryOnFailure, deliberately: it
+    /// builds a raw NpgsqlCommand directly on <c>context.Database.GetDbConnection()</c>, which
+    /// bypasses EF's execution strategy entirely rather than merely forgetting to opt in. That
+    /// is the right call, not a gap to close, because a failed claim is already recovered twice
+    /// over without it — the next poll cycle re-runs it, and the LeasedUntil clause above
+    /// reclaims any row a dead worker was holding. Wrapping this in the execution strategy would
+    /// buy at most one second of latency on a path that heals itself either way. ADR 0014.
+    /// </remarks>
     public async Task<IReadOnlyList<OutboxWorkItem>> ClaimAsync(CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;

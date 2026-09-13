@@ -17,6 +17,92 @@
         }
       }
     },
+    "/api/rates": {
+      "get": {
+        "tags": [
+          "Rates"
+        ],
+        "summary": "The current rate to convert one unit of from into\nto. 503 is this endpoint's distinctive failure: the provider's own\nretry budget (ADR 0014) has already been exhausted by the time one reaches a caller here.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeRateResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeRateResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeRateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/products": {
       "post": {
         "tags": [
@@ -966,6 +1052,35 @@
         },
         "description": "Business-rule validation (non-empty, max length, price range and scale) is owned by\n`CreateProductValidator` in the validation behavior — not duplicated here as\nDataAnnotations. See `src/Api/CLAUDE.md`."
       },
+      "ExchangeRateResponse": {
+        "required": [
+          "from",
+          "to",
+          "rate",
+          "asOf"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "rate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
       "LoginRequest": {
         "required": [
           "username",
@@ -1300,6 +1415,9 @@
   "tags": [
     {
       "name": "AiFramework.Api"
+    },
+    {
+      "name": "Rates"
     },
     {
       "name": "Products"

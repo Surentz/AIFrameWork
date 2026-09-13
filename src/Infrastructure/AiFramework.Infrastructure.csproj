@@ -34,7 +34,7 @@
       L2 tier that can be added later without touching a call site. L1 only today. See ADR 0009.
     -->
     <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.9.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <!--
       For PasswordHasher<T> alone (Security/PasswordHasher.cs). This is the plain hashing
       primitive - PBKDF2, versioned format, constant-time compare - not the ASP.NET Core Identity
@@ -43,10 +43,24 @@
     -->
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.11" />
     <!-- BackgroundService/IHostedService for the outbox pumps (OutboxHostedServices.cs). -->
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <!--
+      AddStandardResilienceHandler for ExchangeRateClient (Resilience/ExchangeRateClient.cs) -
+      rate limiter, total timeout, retry, circuit breaker, and per-attempt timeout composed in
+      the right order, with Polly v8 (Polly.Core, transitive) underneath. Same 10.x train as
+      Caching.Hybrid above. See ADR 0014.
+
+      Its own transitive graph (via Microsoft.Extensions.Http.Diagnostics ->
+      Microsoft.Extensions.Telemetry -> Microsoft.Extensions.AmbientMetadata.Application) floors
+      DependencyInjection.Abstractions, Hosting.Abstractions, and Options.ConfigurationExtensions
+      at 10.0.12 - one patch above the 10.0.11 this project otherwise pins everything else at.
+      NU1605 (package downgrade) is a build error here, so all three explicit pins below moved
+      to 10.0.12 together rather than left to float and silently drift apart per-project.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <!-- IOptions binding for CacheOptions (Caching/CachingRegistration.cs). Explicit rather
          than transitive, for the same reason Relational is pinned above. -->
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <!--
       Database spans for the tracing pipeline. Matches Npgsql.EntityFrameworkCore.PostgreSQL's
