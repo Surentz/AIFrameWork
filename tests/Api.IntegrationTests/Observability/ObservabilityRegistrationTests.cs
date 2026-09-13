@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AiFramework.Api.Observability;
 using FluentAssertions;
 
 namespace AiFramework.Api.IntegrationTests.Observability;
@@ -43,5 +44,26 @@ public sealed partial class ObservabilityRegistrationTests(ApiFactory factory)
             "with a tracer provider registered, Activity.Current.Id replaces the bare " +
             "TraceIdentifier every one of GlobalExceptionHandler, ResultExtensions and " +
             "Program.cs's OnRejected falls back to when none is");
+    }
+
+    /// <summary>
+    /// BuildOtlpEndpoint's two jobs, confirmed empirically against a real Seq container per its
+    /// own remarks: append the signal path (never rely on the SDK to), and do it without
+    /// dropping or duplicating a slash regardless of how the configured root is spelled.
+    /// </summary>
+    [Theory]
+    [InlineData("http://localhost:4318", "v1/logs", "http://localhost:4318/v1/logs")]
+    [InlineData("http://localhost:4318/", "v1/logs", "http://localhost:4318/v1/logs")]
+    [InlineData(
+        "http://localhost:55341/ingest/otlp", "v1/traces", "http://localhost:55341/ingest/otlp/v1/traces")]
+    [InlineData(
+        "http://otel-collector.aiframework:4318/", "v1/traces",
+        "http://otel-collector.aiframework:4318/v1/traces")]
+    public void BuildOtlpEndpoint_AppendsExactlyOneSlashBetweenRootAndSignalPath(
+        string receiverRoot, string signalPath, string expected)
+    {
+        var endpoint = ObservabilityRegistration.BuildOtlpEndpoint(receiverRoot, signalPath);
+
+        endpoint.Should().Be(new Uri(expected));
     }
 }

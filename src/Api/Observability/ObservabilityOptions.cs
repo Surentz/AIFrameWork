@@ -26,6 +26,14 @@ public sealed class OtlpOptions
 {
     public bool Enabled { get; set; }
 
+    /// <summary>
+    /// The OTLP/HTTP receiver's ROOT — a collector's bare "http://host:4318", or Seq's
+    /// "http://host:port/ingest/otlp" — with NO "/v1/logs" or "/v1/traces" suffix.
+    /// ObservabilityRegistration.BuildOtlpEndpoint appends the right one for each signal; do not
+    /// put a signal path here, and do not rely on the OTLP SDK to append one itself — it does
+    /// not, once Endpoint is set explicitly, which this application always does. See
+    /// BuildOtlpEndpoint's remarks for how that was confirmed.
+    /// </summary>
     public string Endpoint { get; set; } = "http://localhost:4318";
 
     public bool Traces { get; set; } = true;
