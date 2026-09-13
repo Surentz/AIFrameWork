@@ -1,7 +1,7 @@
 # 0014. Retry and resilience policies on the request path
 
 **Date:** 2026-09-13
-**Status:** Approved, not yet implemented
+**Status:** Accepted
 
 ## Context
 
@@ -62,7 +62,9 @@ third option. `AddStandardResilienceHandler` retries by status code, not by verb
 happily replay a POST that already succeeded at the far end. The reference integration
 established with this decision is read-only by construction, which is why this is written down
 as a rule rather than solved as code: the first payment or email integration is where it bites,
-and "the provider is probably idempotent" is not an answer.
+and "the provider is probably idempotent" is not an answer. "Disable retry" is not
+`MaxRetryAttempts = 0` — Polly's own validation on that property forbids zero; see Consequences
+below for the mechanism that actually works.
 
 ## Consequences
 
@@ -111,6 +113,26 @@ arbitrary status.
 into a seven-second success, and the caller sees slowness rather than a fault. This is the trade
 retry always makes; the total timeout bounds it and the standard handler's metrics make it
 visible, but it cannot be avoided, only watched.
+
+**`MaxRetryAttempts = 0` does not mean "never retry" — found while implementing, not designed.**
+Polly's own `RetryStrategyOptions<T>.MaxRetryAttempts` validation requires at least 1 and throws
+`OptionsValidationException` from inside the pipeline-build callback the first time a request is
+made, not at startup. The "disable retry" mechanism this decision actually ships is
+`options.Retry.ShouldHandle = _ => ValueTask.FromResult(false)` — `MaxRetryAttempts` stays at
+whatever it is configured to, and the predicate just means it is never consulted. Both
+`ExchangeRateClient`'s own `Enabled` switch and any future non-idempotent write integration that
+needs "never retry" use this, not the property that reads as the obvious answer.
+
+**Testing Polly's delays needs a `FakeTimeProvider` driven by hand, with a yield xUnit
+specifically requires.** `FakeTimeProvider.AutoAdvanceAmount` does nothing here: each retry or
+timeout schedules exactly one timer via `TimeProvider.CreateTimer` and awaits its single
+callback, and nothing re-reads the clock in a loop for `AutoAdvanceAmount` to catch. The pattern
+that works — kick the call off unawaited, then loop calling `clock.Advance(step)`, which fires
+any due timer synchronously — was confirmed correct against the real production registration
+code in a plain console repro, and then hung indefinitely the first time it ran inside xUnit:
+the test execution context posts the timer callback's continuation rather than running it
+inline, and nothing pumps that post without an actual `await Task.Yield()` between advances.
+`ExchangeRateClientTests.cs`'s `AdvanceUntilCompleteAsync` is the reference implementation.
 
 ## Alternatives considered
 

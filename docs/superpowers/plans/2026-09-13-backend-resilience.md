@@ -95,25 +95,33 @@ test host has something to neutralise.
 - Create: `tests/Infrastructure.Tests/Resilience/ResilienceRegistrationTests.cs`
 
 **Steps:**
-- [ ] `ResilienceOptions` with `Enabled` (default `true`), `TotalRequestTimeout` (30s),
+- [x] `ResilienceOptions` with `Enabled` (default `true`), `TotalRequestTimeout` (30s),
       `AttemptTimeout` (10s), `MaxRetryAttempts` (3), `BaseDelay` (2s), and
       `ExchangeRateBaseAddress` (`https://api.frankfurter.dev/v1` — changed from the
       `.app` domain named in the design docs above once implementation found `.app` already
       past its own Deprecation header and redirecting; see ResilienceOptions.cs's remarks).
-- [ ] `AddResilience()` registers and validates the options, and **does not bind
+- [x] `AddResilience()` registers and validates the options, and **does not bind
       configuration** — copy `CachingRegistration`'s `<remarks>` reasoning verbatim in spirit:
       binding here would make `IOptions<ResilienceOptions>` require an `IConfiguration` that a
       bare `ServiceCollection` in a unit test does not have.
-- [ ] Validate what would otherwise fail quietly: `AttemptTimeout <= TotalRequestTimeout`
+- [x] Validate what would otherwise fail quietly: `AttemptTimeout <= TotalRequestTimeout`
       (the standard handler throws at startup otherwise, and the message is obscure),
-      `MaxRetryAttempts >= 0`, `BaseDelay > TimeSpan.Zero`, base address is absolute.
-- [ ] Call `AddResilience()` from `AddInfrastructure`, beside `AddCaching()`.
-- [ ] `Program.cs`: `builder.Services.Configure<ResilienceOptions>(builder.Configuration.GetSection("Resilience"))`,
+      `MaxRetryAttempts >= 1` (not `>= 0` as first written here — Polly's own retry-strategy
+      validation forbids zero; found and corrected in Tasks 4/5, see that section), `BaseDelay
+      > TimeSpan.Zero`, base address is an absolute http/https URI.
+- [x] Call `AddResilience()` from `AddInfrastructure`, beside `AddCaching()`.
+- [x] `Program.cs`: `builder.Services.Configure<ResilienceOptions>(builder.Configuration.GetSection("Resilience"))`,
       next to the existing `CacheOptions` line and with the same one-line reason.
-- [ ] `appsettings.json`: a `"Resilience"` block mirroring the defaults.
+- [x] `appsettings.json`: a `"Resilience"` block mirroring the defaults.
 
 **Verify:** `dotnet test tests/Infrastructure.Tests` — the options resolve from a bare
 `ServiceCollection`; each invalid value fails validation with its own message.
+
+**Done, verified with SDK 10.0.400 installed in this container.** 22 registration tests, all
+passing; Debug and Release both build with zero warnings. See the commit for this task for the
+one real bug the tests themselves caught: the base-address validator initially checked only
+`UriKind.Absolute`, which a relative path like `/rates` satisfies on Linux by parsing as an
+absolute `file://` URI — fixed to check the scheme too.
 
 ---
 
@@ -443,16 +451,34 @@ whatever shipped with the pinned Node 24.20.0, not a real dependency change. Rev
 - Modify: `CLAUDE.md`, `src/Application/CLAUDE.md`, `src/Infrastructure/CLAUDE.md`
 
 **Steps:**
-- [ ] ADR 0014 — the decision, the consequences, and the alternatives, in the house shape.
-- [ ] Root `CLAUDE.md`: a **Resilience** section beside **Caching**, carrying the three things
+- [x] ADR 0014 — the decision, the consequences, and the alternatives, in the house shape.
+      Status flipped `Approved, not yet implemented` → `Accepted`, matching every other ADR in
+      `docs/adr/`. Two consequences added that weren't knowable at design time: `MaxRetryAttempts
+      = 0` doesn't mean "never retry" (Polly's own validation forbids it), and testing Polly's
+      delays needs a hand-driven `FakeTimeProvider` with a `Task.Yield()` xUnit specifically
+      requires — see Tasks 4/5's own "two real defects" note for the full story of each.
+- [x] Root `CLAUDE.md`: a **Resilience** section beside **Caching**, carrying the three things
       that will cost someone an afternoon — Polly cannot see a failed `Result`; explicit
       transactions now need the execution strategy; retry is off under test the way the cache is.
-- [ ] `src/Application/CLAUDE.md`: no resilience package in this layer, and a port returns
-      `Result<T>` with the transport's failure already translated.
-- [ ] `src/Infrastructure/CLAUDE.md`: a **Resilience** section — the pipeline lives under the
-      port, the strategy order is not to be rearranged, and the non-GET idempotency rule.
+- [x] `src/Application/CLAUDE.md`: no resilience package in this layer, and a port returns
+      `Result<T>` with the transport's failure already translated. "Never appears here" also
+      gained `Microsoft.Extensions.Http.Resilience`, `Polly`, and `HttpClient` explicitly,
+      matching how that list already names EF Core and ASP.NET Core packages by name.
+- [x] `src/Infrastructure/CLAUDE.md`: a **Resilience** section — the pipeline lives under the
+      port, the strategy order is not to be rearranged, the non-GET idempotency rule (and its
+      corrected "how", now that `MaxRetryAttempts = 0` is known not to work), and the
+      `FakeTimeProvider`/xUnit finding, pointing at `ExchangeRateClientTests.cs`'s
+      `AdvanceUntilCompleteAsync` as the reference implementation to copy. The existing EF rules
+      bullet on the execution strategy was also updated to name `WolverineOutboxAtomicityTests`
+      as the concrete case that already hit it, rather than leaving the rule abstract.
 
 **Verify:** `.claude/hooks/verify-build.ps1` and a read-through against the spec.
+
+**Done.** `.claude/hooks/verify-build.ps1` is PowerShell and this container has no `pwsh`, so it
+could not be run directly; verified instead by `dotnet build` (Debug, zero warnings) after every
+doc edit, since none of this task touches code that could regress silently. The spec itself was
+also corrected in two places to match what shipped (the `MaxRetryAttempts` mechanism, the
+`api.frankfurter.dev` domain) rather than left to describe a design that turned out to be wrong.
 
 ---
 
