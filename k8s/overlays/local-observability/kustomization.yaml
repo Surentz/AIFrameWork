@@ -1,0 +1,13 @@
+# The whole local overlay, plus the opt-in observability component - see
+# k8s/components/observability/kustomization.yaml for why this is a separate overlay rather than
+# a flag inside k8s/overlays/local itself: Kustomize has no runtime conditional for whether a
+# component is included, only whether it is listed here at all. deploy/deploy.ps1's
+# -WithObservability switch selects this overlay path instead of k8s/overlays/local; every
+# resource in k8s/overlays/local, including its own namespace: transformer, applies unchanged.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: aiframework
+resources:
+  - ../local
+components:
+  - ../../components/observability
