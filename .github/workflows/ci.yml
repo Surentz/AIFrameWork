@@ -9,8 +9,11 @@
 name: CI
 
 on:
+  # No branch filter on push: every branch gets backend + frontend build/test coverage, not
+  # just main. pull_request has no branch filter either, so a PR against any base branch is
+  # covered too - the two together mean a push to a feature branch is checked whether or not a
+  # PR is open yet, and again once one is.
   push:
-    branches: [main]
   pull_request:
 
 # A newer push to the same branch makes the older run's answer irrelevant.
