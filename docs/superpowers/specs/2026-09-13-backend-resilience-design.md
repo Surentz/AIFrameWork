@@ -127,7 +127,7 @@ rule for the first write integration is recorded in ADR 0014 rather than left to
 ### 4. The reference integration is exchange rates, and it is small on purpose
 
 `IExchangeRateProvider` in Application, `ExchangeRateClient` in Infrastructure, backed by
-`https://api.frankfurter.app` — a free, public, **key-less** rates API. Key-less matters twice:
+`https://api.frankfurter.dev` — a free, public, **key-less** rates API. Key-less matters twice:
 the no-secrets rule forbids an API key in `appsettings*.json`, and `.claude/hooks/no-secrets.ps1`
 would block the edit anyway.
 
@@ -226,11 +226,27 @@ because binding there would make `IOptions<ResilienceOptions>` require an `IConf
 a bare `ServiceCollection` in a unit test does not have. `Program.cs` binds the `"Resilience"`
 section, the same way it already binds `"Cache"` and reads `Wolverine:Durable`.
 
-`Enabled = false` makes every pipeline a straight pass-through. That switch is load-bearing
-under test for the same reason `Cache:Enabled=false` is: a test asserting that an unreachable
-provider produces a 503 must not first sit through three backoff delays, and
-`ApiFactory.cs:204` bans exactly that kind of waiting — "no `Thread.Sleep`, no `Task.Delay`, no
-retry-until-timeout".
+**Revised twice during implementation.** `Enabled = false` was designed here as "every pipeline a
+straight pass-through" — a plain `HttpClient`. Building it found that claim unimplementable as
+stated: `Microsoft.Extensions.Http.Resilience` attaches its handler at `IServiceCollection`
+registration time, before any `IOptions<T>` is resolvable, so there is no supported hook to
+decide "attach it or don't" from a value that only becomes known once the container is built.
+
+The first fix tried was `MaxRetryAttempts = 0` — one attempt, no backoff wait, whatever the
+response — leaving the timeouts, circuit breaker, and rate limiter at their configured values,
+since retrying is the only one of the five strategies whose default behavior costs real
+wall-clock time against a slow dependency. That, too, turned out to not be implementable as
+written: Polly's own `RetryStrategyOptions<T>.MaxRetryAttempts` validation requires at least 1
+and throws `OptionsValidationException` from inside the pipeline-build callback the first time a
+request is made — found by every retry-based test failing identically the first time this path
+ran. The actual mechanism: `options.Retry.ShouldHandle = _ => ValueTask.FromResult(false)`.
+`MaxRetryAttempts` stays at whatever it is configured to; the predicate just means it is never
+consulted, which achieves the same "one attempt, no backoff wait" outcome without touching a
+property Polly refuses to let reach zero. The switch is load-bearing under test for the same
+reason `Cache:Enabled=false` is: a test asserting that an unreachable provider produces a 503
+must not first sit through three backoff delays, and `ApiFactory.cs:204` bans exactly that kind
+of waiting — "no
+`Thread.Sleep`, no `Task.Delay`, no retry-until-timeout".
 
 ### 8. Backoff is tested against a fake clock, and `IClock` is not touched
 
@@ -244,7 +260,7 @@ happens to require. Widening `IClock` into a `TimeProvider`, or registering `Sys
 one, would push a scheduling abstraction into a layer that has no business with scheduling, to
 save one registration line.
 
-No test hits `api.frankfurter.app`. Infrastructure tests stub `HttpMessageHandler`; the base
+No test hits `api.frankfurter.dev`. Infrastructure tests stub `HttpMessageHandler`; the base
 address is configuration, and `ApiFactory` points it at a stub.
 
 ## Accepted risks

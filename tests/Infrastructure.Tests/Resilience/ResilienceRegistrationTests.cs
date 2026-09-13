@@ -120,12 +120,24 @@ public sealed class ResilienceRegistrationTests
     }
 
     [Fact]
-    public void AddResilience_WithZeroRetryAttempts_PassesValidation()
+    public void AddResilience_WithZeroRetryAttempts_FailsValidation()
     {
-        // Zero is how a non-idempotent write integration opts out of retry while keeping the
-        // timeouts and the breaker (ADR 0014). Rejecting it would leave that case no way to say
-        // "never replay this call" short of not using the pipeline at all.
+        // Discovered, not designed: this was originally the "opts out of retry" case, on the
+        // assumption zero meant "never retry". It does not - Polly's own
+        // RetryStrategyOptions<T>.MaxRetryAttempts validation requires at least 1, thrown as an
+        // OptionsValidationException the first time a request is made, not at startup. Caught
+        // here first instead. ResilienceOptions.Enabled is the real mechanism for "never retry".
         using var provider = Build(o => o.MaxRetryAttempts = 0);
+
+        var act = () => Resolve(provider);
+
+        act.Should().Throw<OptionsValidationException>().WithMessage("*MaxRetryAttempts*");
+    }
+
+    [Fact]
+    public void AddResilience_WithOneRetryAttempt_PassesValidation()
+    {
+        using var provider = Build(o => o.MaxRetryAttempts = 1);
 
         var act = () => Resolve(provider);
 
@@ -223,5 +235,27 @@ public sealed class ResilienceRegistrationTests
         act.Should().NotThrow(
             "Api reaches Infrastructure only through AddInfrastructure, so the retry budget has " +
             "to be wired in there rather than left for a host to remember");
+    }
+
+    [Fact]
+    public void AddInfrastructure_WiresExchangeRateClientIn()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        services.AddInfrastructure(
+            "Host=localhost;Port=1;Database=unreachable;Username=none;Password=none");
+
+        using var provider = services.BuildServiceProvider();
+
+        var act = () => provider.GetRequiredService<AiFramework.Application.Rates.IExchangeRateProvider>();
+
+        // The regression this guards: GetExchangeRateHandler is registered in AddMessaging as
+        // soon as GetExchangeRate exists in the Application assembly, ahead of this client's own
+        // task in the plan - a real WebApplicationFactory host validates its whole service graph
+        // at build time (ValidateOnBuild, on by default outside Production) and refuses to start
+        // at all if IExchangeRateProvider has no registration, which a bare ServiceCollection
+        // here would not catch on its own without this test.
+        act.Should().NotThrow();
     }
 }

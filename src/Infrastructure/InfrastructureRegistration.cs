@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using AiFramework.Application.Products;
+using AiFramework.Application.Rates;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
 using AiFramework.Infrastructure.Caching;
@@ -50,6 +51,13 @@ public static class InfrastructureRegistration
         services.AddCommand<UpdateProduct, bool, UpdateProductHandler>();
         services.AddQuery<GetProduct, ProductView, GetProductHandler>();
         services.AddQuery<GetProducts, ProductPage, GetProductsHandler>();
+
+        // IExchangeRateProvider itself is not registered here - that is Infrastructure's typed
+        // client (ExchangeRateClient), wired in AddInfrastructure once it exists. Registering
+        // the QUERY now, ahead of it, is what RegistrationCompletenessTests requires the moment
+        // GetExchangeRate exists in the Application assembly; nothing here needs the provider to
+        // be resolvable, only the descriptor to exist. ADR 0014.
+        services.AddQuery<GetExchangeRate, ExchangeRateView, GetExchangeRateHandler>();
 
         services.AddCommand<RegisterUser, SessionView, RegisterUserHandler>();
         services.AddCommand<SignIn, SessionView, SignInHandler>();
@@ -114,9 +122,11 @@ public static class InfrastructureRegistration
 
         services.AddCaching();
 
-        // Beside AddCaching, and inert until a typed client attaches a pipeline to it:
-        // this registers and validates the retry budget, nothing more. ADR 0014.
+        // Beside AddCaching. AddResilience registers and validates the retry budget;
+        // AddExchangeRateClient is what actually attaches a pipeline to it, for the one typed
+        // client this repository has today. ADR 0014.
         services.AddResilience();
+        services.AddExchangeRateClient();
 
         services.AddOutbox();
 

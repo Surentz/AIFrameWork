@@ -97,7 +97,9 @@ test host has something to neutralise.
 **Steps:**
 - [ ] `ResilienceOptions` with `Enabled` (default `true`), `TotalRequestTimeout` (30s),
       `AttemptTimeout` (10s), `MaxRetryAttempts` (3), `BaseDelay` (2s), and
-      `ExchangeRateBaseAddress` (`https://api.frankfurter.app`).
+      `ExchangeRateBaseAddress` (`https://api.frankfurter.dev/v1` — changed from the
+      `.app` domain named in the design docs above once implementation found `.app` already
+      past its own Deprecation header and redirecting; see ResilienceOptions.cs's remarks).
 - [ ] `AddResilience()` registers and validates the options, and **does not bind
       configuration** — copy `CachingRegistration`'s `<remarks>` reasoning verbatim in spirit:
       binding here would make `IOptions<ResilienceOptions>` require an `IConfiguration` that a
@@ -215,66 +217,145 @@ touches a Wolverine handler.
 
 ---
 
-### Task 4: The port and the query
+### Tasks 4 and 5: The port, the query, the typed client and its pipeline
 
-**Files:**
-- Create: `src/Application/Abstractions/IExchangeRateProvider.cs`
-- Create: `src/Application/Orders/GetExchangeRate.cs`
-- Create: `tests/Application.Tests/Orders/GetExchangeRateHandlerTests.cs`
+**Merged into one unit of work, discovered while implementing Task 4 in isolation.** The plan
+put the port+query (Task 4) and the typed client (Task 5) in separate commits, each independently
+green. That assumption was wrong: the moment `GetExchangeRate : IQuery<>` exists, it must be
+registered in `AddMessaging()` or `RegistrationCompletenessTests` fails the build — but
+registering it wires `GetExchangeRateHandler`, whose constructor needs `IExchangeRateProvider`,
+into the container `AddInfrastructure` builds for every `Api.IntegrationTests` host. A real
+`WebApplicationFactory` host runs with `ServiceProviderOptions.ValidateOnBuild = true` (the
+non-Production default) and validates the WHOLE service graph at build time — so registering the
+query without yet having an `IExchangeRateProvider` implementation broke `HealthTests` and
+every other Api test that boots a real host, all 111 of them, with no way to land Task 4 alone
+and keep the build green. Confirmed by doing exactly that and watching them fail. Fixed by
+building both tasks together instead of inventing a throwaway stub implementation to bridge the
+gap.
 
-**Steps:**
-- [ ] `IExchangeRateProvider.GetRateAsync(string baseCurrency, string quoteCurrency, CancellationToken)`
-      returning `Task<Result<ExchangeRate>>`. No `HttpClient`, no Polly type, no EF type — the
-      dependency-rule hook blocks two of those outright and the third is the whole point.
-- [ ] `GetExchangeRate(string From, string To) : IQuery<ExchangeRateView>, ICacheable` with
-      `CacheKey => $"{From}:{To}"` and `Duration => TimeSpan.FromMinutes(1)`. **No user id in
-      the key** — the behavior prepends `ICurrentUser.Id` already.
-- [ ] The handler validates its own inputs (three-letter ISO codes, upper-cased) and returns
-      `ErrorKind.Validation` — queries get no validation behavior, per `Infrastructure/CLAUDE.md`.
-- [ ] The handler passes the provider's failed `Result` straight through. It does not retry,
-      does not translate, and does not catch.
-- [ ] Tests substitute `IExchangeRateProvider` with NSubstitute: success maps through; a
-      provider `Unavailable` failure surfaces unchanged; bad currency codes never reach the port.
+**File-location deviation from the plan, decided before writing code.** The plan put
+`IExchangeRateProvider.cs` in `Application/Abstractions/` and `GetExchangeRate.cs` in
+`Application/Orders/`. Neither matches this repo's own convention: `IOrderRepository`,
+`IProductRepository`, and `IUserRepository` all live beside their feature, not in
+`Abstractions/` (that folder is for cross-cutting ports like `IClock` and `ICurrentUser`), and
+exchange rates have nothing to do with Orders. Both files went into a new `Application/Rates/`
+folder instead — matching Api's own Task 6 file list, which already puts `RatesController.cs`
+in its own `Api/Rates/` folder rather than nesting it under Orders. Test files followed:
+`tests/Application.Tests/Rates/GetExchangeRateHandlerTests.cs`, not `.../Orders/...`.
 
-**Verify:** `dotnet test tests/Application.Tests`.
-
----
-
-### Task 5: The typed client and its pipeline
-
-The task the whole plan exists for. Everything Polly touches lives in this file.
-
-**Files:**
-- Modify: `src/Infrastructure/AiFramework.Infrastructure.csproj`
+**Files (as actually created/modified):**
+- Create: `src/Application/Rates/IExchangeRateProvider.cs` (port + `ExchangeRate` record)
+- Create: `src/Application/Rates/GetExchangeRate.cs` (query, `ExchangeRateView`, handler)
+- Create: `tests/Application.Tests/Rates/GetExchangeRateHandlerTests.cs` (13 tests)
+- Modify: `src/Infrastructure/InfrastructureRegistration.cs` — registers `GetExchangeRate` in
+  `AddMessaging()` and calls `AddExchangeRateClient()` in `AddInfrastructure()`
+- Modify: `src/Infrastructure/AiFramework.Infrastructure.csproj` — `Microsoft.Extensions.Http.Resilience`
+  10.10.0, plus three existing `Microsoft.Extensions.*` pins bumped 10.0.11 → 10.0.12 (its
+  transitive graph floors them there; NU1605 package-downgrade is a build error in this repo)
 - Create: `src/Infrastructure/Resilience/ExchangeRateClient.cs`
-- Modify: `src/Infrastructure/Resilience/ResilienceRegistration.cs`
-- Create: `tests/Infrastructure.Tests/Resilience/StubHttpMessageHandler.cs`,
-  `tests/Infrastructure.Tests/Resilience/ExchangeRateClientTests.cs`
-- Modify: `tests/Infrastructure.Tests/AiFramework.Infrastructure.Tests.csproj`
+- Modify: `src/Infrastructure/Resilience/ResilienceRegistration.cs` — `AddExchangeRateClient()`
+- Modify: `src/Infrastructure/Resilience/ResilienceOptions.cs` — corrected doc comments (below)
+- Create: `tests/Infrastructure.Tests/Resilience/StubHttpMessageHandler.cs`
+- Create: `tests/Infrastructure.Tests/Resilience/ExchangeRateClientTests.cs` (10 tests)
+- Modify: `tests/Infrastructure.Tests/Resilience/ResilienceRegistrationTests.cs` — one new
+  wiring test, plus corrected `MaxRetryAttempts` validation tests (below)
+- Modify: `tests/Infrastructure.Tests/AiFramework.Infrastructure.Tests.csproj` —
+  `Microsoft.Extensions.TimeProvider.Testing` 10.10.0
+- Modify: `src/Api/appsettings.json` — `ExchangeRateBaseAddress` updated to `.dev` (below)
 
 **Steps:**
-- [ ] `PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0"` in
-      Infrastructure only. `Microsoft.Extensions.TimeProvider.Testing` 10.10.0 in
-      `Infrastructure.Tests` only.
-- [ ] `AddHttpClient<IExchangeRateProvider, ExchangeRateClient>()` configuring `BaseAddress`
-      from `ResilienceOptions`, then `.AddStandardResilienceHandler()` configured from the same
-      options — **guarded by `Enabled`**, so a disabled pipeline is a plain `HttpClient`.
-- [ ] A comment above the handler recording the strategy order and why it is not rearranged:
-      total timeout outside the retry, attempt timeout inside it.
-- [ ] `ExchangeRateClient` converts only the **final** outcome to `Result<T>`:
-      a non-success status or an `HttpRequestException`/`TimeoutRejectedException` escaping the
-      pipeline becomes `ErrorKind.Unavailable`; a 4xx that is not 408/429 becomes
-      `ErrorKind.Validation` or `NotFound` as appropriate. Catch the specific exception types,
-      never `Exception` — CA1031 is an error.
-- [ ] A comment in the adapter stating the rule in decision 2: nothing inside the pipeline may
-      return a failed `Result`, because Polly would read it as a success.
-- [ ] `ExchangeRateClientTests` drive a stub `HttpMessageHandler` with a `FakeTimeProvider`:
-      a 503 then a 200 retries and succeeds; three 503s exhaust and return `Unavailable`; a 400
-      is **not** retried (assert the stub was called exactly once); `Retry-After` on a 429 is
-      honoured over the computed backoff; `Enabled = false` calls exactly once. No real network,
-      no wall-clock delay.
+- [x] `IExchangeRateProvider.GetRateAsync(string baseCurrency, string quoteCurrency, CancellationToken)`
+      returning `Task<Result<ExchangeRate>>`. No `HttpClient`, no Polly type, no EF type.
+- [x] `GetExchangeRate(string From, string To) : IQuery<ExchangeRateView>, ICacheable`. `CacheKey`
+      upper-cases both codes (`"eur"`/`"EUR"` must not be two cache entries for one rate) —
+      one step beyond the plan's literal `$"{From}:{To}"`. `Duration` is one minute, not thirty
+      seconds like `GetOrders`/`GetProducts`: caching this query is as much about not spending a
+      third party's own rate limit as it is about latency.
+- [x] The handler validates its own inputs (three ASCII letters, via `value is { Length: 3 } &&
+      value.All(char.IsAsciiLetter)`, null-safe) and returns `ErrorKind.Validation` before ever
+      calling the port.
+- [x] The handler passes the provider's failed `Result` straight through unchanged — no retry,
+      no translation, no catch.
+- [x] `PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0"` in
+      Infrastructure only; `Microsoft.Extensions.TimeProvider.Testing` 10.10.0 in
+      `Infrastructure.Tests` only. Both required bumping three existing `10.0.11` pins to
+      `10.0.12` to clear an `NU1605` package-downgrade error from Http.Resilience's own
+      transitive floor.
+- [x] `AddHttpClient<IExchangeRateProvider, ExchangeRateClient>()` configuring `BaseAddress` from
+      `ResilienceOptions` (normalized to always end in `/` — `Uri` silently drops a `BaseAddress`
+      without a trailing slash's last path segment), then `.AddStandardResilienceHandler()`
+      configured from the same options via a lazy `.Configure((options, sp) => ...)` callback.
+- [x] A comment above the client and above `AddExchangeRateClient` recording the strategy order
+      and why it is not rearranged: total timeout outside the retry, attempt timeout inside it.
+- [x] `ExchangeRateClient` converts only the **final** outcome to `Result<T>`: `HttpRequestException`,
+      `TimeoutRejectedException`, and `BrokenCircuitException` escaping the pipeline, or any
+      non-success status other than 400/404, become `ErrorKind.Unavailable`; 400 becomes
+      `Validation`; 404 becomes `NotFound`. Each caught type is specific — CA1031 stayed an error
+      throughout, with no exemption added.
+- [x] A comment in the adapter and in `ResilienceOptions`'s remarks stating the rule from decision
+      2: nothing inside the pipeline may return a failed `Result`.
+- [x] `ExchangeRateClientTests` drives a stub `HttpMessageHandler` through the real pipeline: a
+      503 then a 200 retries and succeeds; four consecutive 503s (default `MaxRetryAttempts = 3`,
+      so one initial attempt plus three retries) exhaust and return `Unavailable`; a 400 and a
+      404 are each **not** retried (stub called exactly once); a 429's `Retry-After` is honoured
+      over the computed backoff (proven by simulated elapsed time, not just that a retry
+      happened); `Enabled = false` calls exactly once regardless of failures. No real network, no
+      real wall-clock delay — see the two corrections below for what that actually took.
 
-**Verify:** `dotnet test tests/Infrastructure.Tests`.
+**Two real defects found by writing these tests, neither hypothetical:**
+
+1. **`MaxRetryAttempts = 0` does not mean "never retry" — it throws.** The design assumed
+   `Enabled = false` could zero `MaxRetryAttempts` to disable retrying, and both `ResilienceOptions`'s
+   validation (`>= 0`) and its doc comment ("Zero is valid...") were written around that
+   assumption. Polly's own `RetryStrategyOptions<T>.MaxRetryAttempts` validation requires **at
+   least 1** and throws `OptionsValidationException` — not at startup, where `ValidateOnStart`
+   could catch it, but from inside the pipeline-build callback the first time a request is made.
+   Found by every retry-based test in `ExchangeRateClientTests` failing identically the first
+   time `Enabled = false` was exercised. Fixed by validating `MaxRetryAttempts >= 1` instead, and
+   implementing "disabled" as `options.Retry.ShouldHandle = _ => ValueTask.FromResult(false)` —
+   `MaxRetryAttempts` stays at whatever it is configured to; the predicate just means it is never
+   consulted. `ResilienceOptions.cs`'s doc comments on both `Enabled` and `MaxRetryAttempts`, this
+   plan's Global Constraints section having named the old (wrong) mechanism nowhere directly, and
+   `ResilienceRegistrationTests`'s zero/one-attempt validation tests were all updated to match.
+2. **`FakeTimeProvider` needs manual `Advance()` calls, not `AutoAdvanceAmount`, and needs a
+   `Task.Yield()` between them under xUnit specifically.** `AutoAdvanceAmount` only advances the
+   clock when something repeatedly *reads* it in a polling loop; Polly's retry and timeout
+   delays each schedule exactly one timer via `TimeProvider.CreateTimer` and await its single
+   callback, so `AutoAdvanceAmount` is never consulted and the timer never fires — confirmed by a
+   standalone repro that hung past 30 real seconds with it set. The working pattern: kick the
+   call off without awaiting it, then loop calling `clock.Advance(step)`, which fires any due
+   timer synchronously. That alone was enough in a plain console repro built against the real
+   `AiFramework.Infrastructure` project (proving the registration code itself was correct), but
+   hung indefinitely inside every retry-based xUnit test specifically — xUnit's test execution
+   context posts the timer callback's continuation rather than running it inline, and nothing
+   pumps that post without an actual async yield point in the loop. Fixed by making the advance
+   loop `async` and inserting `await Task.Yield()` between each `Advance()` call — a scheduler
+   bounce with no real delay of its own, just enough to let xUnit's context run what `Advance()`
+   already queued. `AdvanceUntilCompleteAsync<T>`'s own remarks in `ExchangeRateClientTests.cs`
+   record both findings in full so nobody rediscovers either one from scratch.
+
+**One more correction, unrelated to the two defects above, found while verifying manually
+against the live provider:** the design docs and the original `ResilienceOptions` default both
+named `https://api.frankfurter.app`. That domain carries a `Deprecation` header already past its
+own date and now answers only via a 301 to `https://api.frankfurter.dev` — same
+`/v1/latest?from=..&to=..` shape, different host. `ResilienceOptions.ExchangeRateBaseAddress`'s
+default and `appsettings.json` were updated to the `.dev` host directly, with the reasoning kept
+in the option's own remarks; the ADR and spec's mentions of the old domain were corrected too.
+`.dev`'s own successor-version header points at a `/v2/rates` endpoint with a different,
+undocumented parameter shape (rejected `symbols` as an unknown parameter when tried) — not
+chased, since this reference integration's test suite never calls the live provider regardless
+of which host is configured.
+
+**Verify:** `dotnet test tests/Application.Tests`, then `dotnet test tests/Infrastructure.Tests`.
+
+**Done, verified with a real Postgres container and Docker available throughout.** All four
+projects pass in full: Domain 74, Application 109 (13 new `GetExchangeRateHandlerTests`),
+Infrastructure 156 (34 new under `Resilience/`, including `ExchangeRateClientTests` and the new
+`AddInfrastructure_WiresExchangeRateClientIn` wiring test), Api 111 (unchanged count — the query
+is registered but not yet reachable over HTTP; that is Task 6). Debug and Release both build with
+zero warnings; `Api.IntegrationTests` re-run clean under `-c Release`; `codegen write` produces
+no diff. Every `ExchangeRateClientTests` run completes in well under one second of real time
+despite simulating retries, an exhausted retry budget, and a 20-second `Retry-After` wait.
 
 ---
 
