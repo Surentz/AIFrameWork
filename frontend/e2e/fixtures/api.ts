@@ -92,6 +92,11 @@ export function createApiClient(): ApiClient {
     user: TestUser,
     order: { sku: string; quantity: number },
   ): Promise<string> {
+    // PlaceOrder now refuses a sku the catalogue does not hold, so this creates the product it
+    // is about to order first — keeping placeOrder a one-call arrange for every existing caller
+    // instead of pushing a createProduct call onto each of them.
+    await createProduct(user, { sku: order.sku, name: order.sku, price: '19.95' });
+
     const context = await contextFor(user);
     const response = await context.post('/api/orders', { data: order });
 

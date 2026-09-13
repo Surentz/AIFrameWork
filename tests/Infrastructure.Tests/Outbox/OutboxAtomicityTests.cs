@@ -17,7 +17,7 @@ public sealed class OutboxAtomicityTests(PostgresFixture fixture)
         var id = Guid.NewGuid();
         await using (var context = fixture.CreateContextWithOutbox())
         {
-            context.Orders.Add(Order.Place(id, Guid.NewGuid(), "SKU-A", 2, PlacedAt));
+            context.Orders.Add(Order.Place(id, Guid.NewGuid(), 2, PlacedAt, AnOrderedProduct.Any(), "SKU-A"));
             await context.SaveChangesAsync();
         }
 
@@ -37,7 +37,7 @@ public sealed class OutboxAtomicityTests(PostgresFixture fixture)
 
         await using (var seed = fixture.CreateContextWithOutbox())
         {
-            seed.Orders.Add(Order.Place(id, Guid.NewGuid(), "SKU-B", 1, PlacedAt));
+            seed.Orders.Add(Order.Place(id, Guid.NewGuid(), 1, PlacedAt, AnOrderedProduct.Any(), "SKU-B"));
             await seed.SaveChangesAsync();
         }
 
@@ -46,7 +46,7 @@ public sealed class OutboxAtomicityTests(PostgresFixture fixture)
         // leave a second row behind — that is exactly the bug this test exists to catch.
         await using (var clash = fixture.CreateContextWithOutbox())
         {
-            clash.Orders.Add(Order.Place(id, Guid.NewGuid(), "SKU-B", 1, PlacedAt));
+            clash.Orders.Add(Order.Place(id, Guid.NewGuid(), 1, PlacedAt, AnOrderedProduct.Any(), "SKU-B"));
             var act = async () => await clash.SaveChangesAsync();
             await act.Should().ThrowAsync<DbUpdateException>();
         }
@@ -61,7 +61,7 @@ public sealed class OutboxAtomicityTests(PostgresFixture fixture)
     public async Task SaveChanges_ClearsTheAggregatesPendingEvents()
     {
         await using var context = fixture.CreateContextWithOutbox();
-        var order = Order.Place(Guid.NewGuid(), Guid.NewGuid(), "SKU-C", 1, PlacedAt);
+        var order = Order.Place(Guid.NewGuid(), Guid.NewGuid(), 1, PlacedAt, AnOrderedProduct.Any(), "SKU-C");
         context.Orders.Add(order);
 
         await context.SaveChangesAsync();

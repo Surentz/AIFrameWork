@@ -182,3 +182,15 @@
   display: grid;
   gap: var(--space-5);
 }
+
+.field__hint {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.order-form__total {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}

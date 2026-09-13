@@ -21,6 +21,16 @@ public sealed record OrderResponse
     public required int Quantity { get; init; }
 
     public required DateTimeOffset PlacedAt { get; init; }
+
+    /// <summary>
+    /// The catalogue product as it was when the order was placed. Null on orders that predate the
+    /// catalogue link — those render as the bare sku with no price.
+    /// </summary>
+    public Guid? ProductId { get; init; }
+
+    public string? ProductName { get; init; }
+
+    public decimal? UnitPrice { get; init; }
 }
 
 public sealed record OrderListItemResponse
@@ -32,6 +42,16 @@ public sealed record OrderListItemResponse
     public required int Quantity { get; init; }
 
     public required DateTimeOffset PlacedAt { get; init; }
+
+    /// <summary>
+    /// The catalogue product as it was when the order was placed. Null on orders that predate the
+    /// catalogue link — those render as the bare sku with no price.
+    /// </summary>
+    public Guid? ProductId { get; init; }
+
+    public string? ProductName { get; init; }
+
+    public decimal? UnitPrice { get; init; }
 }
 
 public sealed record OrderPageResponse

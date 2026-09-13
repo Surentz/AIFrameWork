@@ -8,7 +8,7 @@ import type {
 import { createProduct, getProduct, listProducts, updateProduct } from '../../api/products';
 import type { CreateProductInput, UpdateProductInput } from '../../api/products';
 import type { ApiError } from '../../api/client';
-import type { Product, ProductPage } from './types';
+import type { Product, ProductListItem, ProductPage } from './types';
 
 export const productKeys = {
   all: ['products'] as const,
@@ -27,6 +27,34 @@ export function useProducts(): UseInfiniteQueryResult<InfiniteData<ProductPage>,
     // The API returns null when there are no more rows; TanStack Query reads undefined as done,
     // so the two have to be bridged or hasNextPage would stay true forever.
     getNextPageParam: (lastPage: ProductPage) => lastPage.nextCursor ?? undefined,
+  });
+}
+
+/**
+ * The whole catalogue, for the order form's picker — a select needs every option, not a page.
+ *
+ * The paging loop lives in the queryFn rather than in an effect driving fetchNextPage, because
+ * this repo does not fetch from useEffect (frontend/CLAUDE.md) and TanStack Query owns server
+ * state. Its own cache entry, so it never collides with the paged list on the catalogue screen.
+ *
+ * A select stops being the right control somewhere in the hundreds of products. That is the
+ * point to replace this with a search endpoint and an autocomplete, not to paginate the select.
+ */
+export function useAllProducts(): UseQueryResult<ProductListItem[], ApiError> {
+  return useQuery({
+    queryKey: [...productKeys.all, 'every'] as const,
+    queryFn: async () => {
+      const items: ProductListItem[] = [];
+      let cursor: string | undefined;
+
+      do {
+        const page = await listProducts({ cursor, limit: 100 });
+        items.push(...page.items);
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+
+      return items;
+    },
   });
 }
 

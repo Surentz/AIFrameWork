@@ -1,8 +1,8 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { server } from '../../test/handlers';
+import { aProduct, server } from '../../test/handlers';
 import { withQueryClient } from '../../test/withQueryClient';
 import { OrderDetail } from './OrderDetail';
 import { PlaceOrderForm } from './PlaceOrderForm';
@@ -40,7 +40,7 @@ function requireElementById(id: string): HTMLElement {
 }
 
 describe('PlaceOrderForm', () => {
-  it('sends the typed values to the api and lands on the order it placed', async () => {
+  it('selects a product and lands on the order it placed', async () => {
     const id = '11111111-1111-1111-1111-111111111111';
     let body: unknown = null;
     server.use(
@@ -51,21 +51,33 @@ describe('PlaceOrderForm', () => {
       http.get('/api/orders/:id', () =>
         HttpResponse.json({
           id,
-          sku: 'SKU-9',
+          sku: aProduct.sku,
           quantity: 4,
           placedAt: '2026-09-02T10:00:00+00:00',
+          productId: aProduct.id,
+          productName: aProduct.name,
+          unitPrice: aProduct.price,
         }),
       ),
     );
     renderFormWithRoutes();
 
-    await userEvent.type(screen.getByLabelText('Sku'), 'SKU-9');
+    // Relies on the DEFAULT /api/products handler in test/handlers.ts, which returns aProduct.
+    // findByLabelText resolves as soon as the (initially empty, disabled) select mounts; the
+    // catalogue arrives a tick later, so the option itself - not just the select - has to be
+    // awaited before selecting it.
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Product'),
+      await screen.findByRole('option', { name: new RegExp(aProduct.sku) }),
+    );
     await userEvent.clear(screen.getByLabelText('Quantity'));
     await userEvent.type(screen.getByLabelText('Quantity'), '4');
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
 
-    expect(await screen.findByRole('heading', { name: 'SKU-9' })).toBeInTheDocument();
-    expect(body).toEqual({ sku: 'SKU-9', quantity: 4 });
+    expect(await screen.findByRole('heading', { name: aProduct.name })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(body).toEqual({ sku: aProduct.sku, quantity: 4 });
+    });
   });
 
   it('shows a server field error against the field it belongs to', async () => {
@@ -83,7 +95,13 @@ describe('PlaceOrderForm', () => {
     );
     renderForm();
 
-    await userEvent.type(screen.getByLabelText('Sku'), 'SKU-9');
+    // findByLabelText resolves as soon as the (initially empty, disabled) select mounts; the
+    // catalogue arrives a tick later, so the option itself - not just the select - has to be
+    // awaited before selecting it.
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Product'),
+      await screen.findByRole('option', { name: new RegExp(aProduct.sku) }),
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
 
     await screen.findByText('Quantity must be positive.');
@@ -114,9 +132,38 @@ describe('PlaceOrderForm', () => {
     );
     renderForm();
 
-    await userEvent.type(screen.getByLabelText('Sku'), 'SKU-9');
+    // findByLabelText resolves as soon as the (initially empty, disabled) select mounts; the
+    // catalogue arrives a tick later, so the option itself - not just the select - has to be
+    // awaited before selecting it.
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Product'),
+      await screen.findByRole('option', { name: new RegExp(aProduct.sku) }),
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
+  });
+
+  it('disables submit and explains itself when the catalogue is empty', async () => {
+    server.use(http.get('/api/products', () => HttpResponse.json({ items: [], nextCursor: null })));
+    renderForm();
+
+    expect(await screen.findByText(/no products in the catalogue/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Place order' })).toBeDisabled();
+    expect(screen.getByRole('link', { name: /add a product/i })).toBeInTheDocument();
+  });
+
+  it('renders the error state when the catalogue cannot be loaded', async () => {
+    server.use(
+      http.get('/api/products', () =>
+        HttpResponse.json(
+          { title: 'server.error', detail: 'Could not load products.' },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderForm();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/products/i);
   });
 });

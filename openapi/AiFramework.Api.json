@@ -1128,6 +1128,29 @@
           "placedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "productId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The catalogue product as it was when the order was placed. Null on orders that predate the\ncatalogue link — those render as the bare sku with no price.",
+            "format": "uuid"
+          },
+          "productName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unitPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -1179,6 +1202,29 @@
           "placedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "productId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The catalogue product as it was when the order was placed. Null on orders that predate the\ncatalogue link — those render as the bare sku with no price.",
+            "format": "uuid"
+          },
+          "productName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unitPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },

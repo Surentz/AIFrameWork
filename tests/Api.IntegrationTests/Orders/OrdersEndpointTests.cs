@@ -33,9 +33,10 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_WithAValidRequest_Returns201()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client);
 
         var response = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-1", Quantity = 2 });
+            "/api/orders", new { Sku = sku, Quantity = 2 });
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
@@ -44,14 +45,15 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_ThenGet_ReturnsTheOrder()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client);
         var created = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-2", Quantity = 7 });
+            "/api/orders", new { Sku = sku, Quantity = 7 });
         var id = await created.Content.ReadFromJsonAsync<Guid>();
 
         var response = await client.GetFromJsonAsync<OrderResponseDto>($"/api/orders/{id}");
 
         response.Should().NotBeNull();
-        response.Sku.Should().Be("SKU-2");
+        response.Sku.Should().Be(sku);
         response.Quantity.Should().Be(7);
     }
 
@@ -59,9 +61,10 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_WithZeroQuantity_Returns400()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client);
 
         var response = await client.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-3", Quantity = 0 });
+            "/api/orders", new { Sku = sku, Quantity = 0 });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
@@ -154,8 +157,9 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     {
         using var owner = await factory.CreateAuthenticatedClientAsync();
         using var stranger = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(owner);
         var created = await owner.PostAsJsonAsync(
-            "/api/orders", new { Sku = "SKU-PRIVATE", Quantity = 1 });
+            "/api/orders", new { Sku = sku, Quantity = 1 });
         var id = await created.Content.ReadFromJsonAsync<Guid>();
 
         var response = await stranger.GetAsync($"/api/orders/{id}");
@@ -163,6 +167,37 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
         response.StatusCode.Should().Be(
             HttpStatusCode.NotFound,
             "another user's order id must be indistinguishable from one that was never issued");
+    }
+
+    [Fact]
+    public async Task PostOrders_ThenGet_ReturnsTheProductSnapshot()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client, price: 12.50m);
+
+        var created = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 2 });
+        var id = await created.Content.ReadFromJsonAsync<Guid>();
+
+        var order = await client.GetFromJsonAsync<JsonElement>($"/api/orders/{id}");
+
+        order.GetProperty("productName").GetString().Should().Be("Widget");
+        order.GetProperty("unitPrice").GetDecimal().Should().Be(12.50m);
+        order.GetProperty("productId").GetGuid().Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task PostOrders_WithAnUnknownSku_Returns400()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/orders", new { Sku = "SKU-NOT-IN-THE-CATALOGUE", Quantity = 2 });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("title").GetString()
+            .Should().Be("orders.unknown_sku");
     }
 
     public sealed record OrderResponseDto(Guid Id, string Sku, int Quantity, DateTimeOffset PlacedAt);

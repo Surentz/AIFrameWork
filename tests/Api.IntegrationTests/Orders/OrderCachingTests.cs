@@ -69,15 +69,17 @@ public sealed class OrderCachingTests : IDisposable
     public async Task PlacingAnOrder_ThenListingImmediately_ReturnsTheNewOrder()
     {
         using var client = await SignedInClientAsync();
-        await PlaceAsync(client, "CACHE-FIRST");
+        var skuFirst = await CatalogueSetup.CreateProductAsync(client);
+        var skuSecond = await CatalogueSetup.CreateProductAsync(client);
+        await PlaceAsync(client, skuFirst);
         await ListAsync(client);
 
         // The page is now cached. Without synchronous eviction this second SKU would be missing.
-        await PlaceAsync(client, "CACHE-SECOND");
+        await PlaceAsync(client, skuSecond);
         var page = await ListAsync(client);
 
         page.Items.Select(i => i.Sku).Should().Contain(
-            "CACHE-SECOND",
+            skuSecond,
             "a client that refetches straight after a 201 must read its own write; this is the " +
             "whole reason eviction is synchronous rather than riding the outbox");
 
@@ -107,13 +109,14 @@ public sealed class OrderCachingTests : IDisposable
         using var alice = await SignedInClientAsync();
         using var bob = await SignedInClientAsync();
 
-        await PlaceAsync(alice, "ALICE-ONLY");
+        var aliceSku = await CatalogueSetup.CreateProductAsync(alice);
+        await PlaceAsync(alice, aliceSku);
         await ListAsync(alice);
 
         var bobsPage = await ListAsync(bob);
 
         bobsPage.Items.Select(i => i.Sku).Should().NotContain(
-            "ALICE-ONLY",
+            aliceSku,
             "the cache key is scoped to ICurrentUser.Id; sharing one entry across callers would " +
             "be a data leak, not a stale read");
     }

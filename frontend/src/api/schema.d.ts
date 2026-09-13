@@ -840,6 +840,15 @@ export interface components {
             readonly quantity: number | string;
             /** Format: date-time */
             readonly placedAt: string;
+            /**
+             * Format: uuid
+             * @description The catalogue product as it was when the order was placed. Null on orders that predate the
+             *     catalogue link — those render as the bare sku with no price.
+             */
+            readonly productId?: null | string;
+            readonly productName?: null | string;
+            /** Format: double */
+            readonly unitPrice?: null | number | string;
         };
         readonly OrderPageResponse: {
             readonly items: readonly components["schemas"]["OrderListItemResponse"][];
@@ -853,6 +862,15 @@ export interface components {
             readonly quantity: number | string;
             /** Format: date-time */
             readonly placedAt: string;
+            /**
+             * Format: uuid
+             * @description The catalogue product as it was when the order was placed. Null on orders that predate the
+             *     catalogue link — those render as the bare sku with no price.
+             */
+            readonly productId?: null | string;
+            readonly productName?: null | string;
+            /** Format: double */
+            readonly unitPrice?: null | number | string;
         };
         /**
          * @description Business-rule validation (non-empty, max length, positive quantity) is owned by
