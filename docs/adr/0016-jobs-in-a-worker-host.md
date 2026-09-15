@@ -45,7 +45,7 @@ assumed — and that is the entire mechanism. The existing
 no new hook is needed.
 
 **The lane is the queue; the host-to-queue mapping is configuration.** A job declares
-`static abstract JobLane Lane` — `Light` or `Heavy` — which selects `jobs-light` or `jobs-heavy`.
+`static abstract JobLane Lane` — `Light` or `Heavy` — which selects `jobs_light` or `jobs_heavy`.
 Both are consumed by one worker Deployment on day one via `Jobs__Queues=light,heavy`, with
 `MaximumParallelMessages` of 8 and 2 respectively. Splitting them onto differently-sized
 Deployments later is a manifest change with no code change. The lane earns its place immediately
@@ -53,7 +53,7 @@ regardless, because it is what stops one thirty-second report blocking a queue o
 emails.
 
 **A job is a message and a handler.** No `IJobRunner`, no base class, no abstraction over
-Wolverine. `IJobQueue` is an Application port implemented over `IMessageBus`, so Application never
+Wolverine. `IJobScheduler` is an Application port implemented over `IMessageBus`, so Application never
 sees a Wolverine type. Every job type is registered explicitly in `JobRegistration.cs` with a
 completeness test failing the build on an omission, mirroring `AddMessaging()` exactly.
 

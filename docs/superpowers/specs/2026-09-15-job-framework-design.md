@@ -91,7 +91,7 @@ controllers and owns no feature code.
 The API registers **routing rules only**:
 
 ```csharp
-opts.PublishMessage<RebuildOrderReport>().ToPostgresqlQueue(JobLanes.Heavy);
+opts.PublishMessage<RebuildOrderReport>().ToPostgresqlQueue(JobLane.Heavy);
 ```
 
 and calls `ListenToPostgresqlQueue` for nothing. The worker calls it for the queues named in its
@@ -114,8 +114,8 @@ Two lanes, two queues, from day one:
 
 | Lane | Queue | Shape of work | Listener configuration |
 |---|---|---|---|
-| `Light` | `jobs-light` | Milliseconds to a couple of seconds, one or two round trips, negligible CPU. Sending mail, nudging a webhook, writing an audit row | `MaximumParallelMessages(8)` |
-| `Heavy` | `jobs-heavy` | Seconds to minutes, CPU- or memory-bound, or fanning over a large result set. Report generation, bulk import, recalculation | `MaximumParallelMessages(2)` |
+| `Light` | `jobs_light` | Milliseconds to a couple of seconds, one or two round trips, negligible CPU. Sending mail, nudging a webhook, writing an audit row | `MaximumParallelMessages(8)` |
+| `Heavy` | `jobs_heavy` | Seconds to minutes, CPU- or memory-bound, or fanning over a large result set. Report generation, bulk import, recalculation | `MaximumParallelMessages(2)` |
 
 Both queues are consumed by **one** worker Deployment on day one, selected by
 `Jobs__Queues=light,heavy`. The lane split still earns its place immediately, because it is what
@@ -167,7 +167,7 @@ unit of work and the logging behavior on the path.
 
 ```csharp
 // src/Application/Abstractions/Jobs.cs
-public interface IJobQueue
+public interface IJobScheduler
 {
     Task EnqueueAsync<TJob>(TJob job, CancellationToken cancellationToken) where TJob : IJob;
 
@@ -179,7 +179,7 @@ public interface IJobQueue
 }
 ```
 
-Implemented once in `Infrastructure/Jobs/JobQueue.cs` over `IMessageBus`. Application never sees a
+Implemented once in `Infrastructure/Jobs/JobScheduler.cs` over `IMessageBus`. Application never sees a
 Wolverine type — that is the dependency rule, and it is also what keeps ADR 0005's "the seam stays
 ours" promise true for jobs as well as for events.
 
@@ -219,20 +219,20 @@ commit path to add a job framework, and it is refused on those grounds.
 handler raises a domain event
   -> DomainEventsInterceptor writes the outbox row in the SAME SaveChangesAsync (same transaction)
      -> OutboxWorkItemProcessor delivers it
-        -> IDomainEventHandler<T> calls IJobQueue.EnqueueAsync
+        -> IDomainEventHandler<T> calls IJobScheduler.EnqueueAsync
 ```
 
 Transactional by construction, at-least-once with the dedupe key `DomainEventContext` already
 carries, and **zero change to `UnitOfWork` or the command pipeline**. The cost is one hop and a
 domain event per guaranteed job, which is a far smaller price than rewriting every commit.
 
-`IJobQueue` itself publishes through plain `IMessageBus`, which is correct for both of its callers:
+`IJobScheduler` itself publishes through plain `IMessageBus`, which is correct for both of its callers:
 a domain event handler (already past commit, so there is nothing left to be atomic with) and a job
 handler rescheduling itself.
 
 **The rule this produces, and it belongs in `CLAUDE.md`:** a job enqueued *directly* from a
 command handler is fire-and-forget and will run even if the command later fails. For a job that
-must not be lost, raise a domain event and enqueue from its handler. `IJobQueue`'s XML docs say
+must not be lost, raise a domain event and enqueue from its handler. `IJobScheduler`'s XML docs say
 this at the point of use, because it is exactly the kind of thing that is invisible until it is
 a production incident.
 
@@ -262,7 +262,7 @@ Wolverine has durable scheduled delivery and no cron. The pattern is that the ha
 its own next occurrence as its final act:
 
 ```csharp
-public sealed class PruneStaleCartsHandler(IJobQueue jobs, IClock clock)
+public sealed class PruneStaleCartsHandler(IJobScheduler jobs, IClock clock)
 {
     public async Task Handle(PruneStaleCarts message, CancellationToken cancellationToken)
     {
@@ -476,7 +476,7 @@ leaving a queue silently unconsumed, which is the same failure mode `OutboxOptio
 
 | Project | Covers |
 |---|---|
-| `tests/Application.Tests` | Job handlers with `IJobQueue` and ports substituted. No Wolverine |
+| `tests/Application.Tests` | Job handlers with `IJobScheduler` and ports substituted. No Wolverine |
 | `tests/Infrastructure.Tests` | `JobQueue` over a substituted `IMessageBus`; lane→queue mapping; **job registration completeness**; `JobOptions` validation |
 | `tests/Worker.IntegrationTests` | The worker host boots against Testcontainers Postgres; a published job reaches its handler on the right queue; the codegen staleness guard |
 | `tests/Api.IntegrationTests` | **The API listens to no job queue** — asserted against `ServiceCapabilities.MessagingEndpoints`, the same route `WolverineLocalQueueDurabilityTests` already uses to prove local queues are durable |
@@ -536,9 +536,9 @@ effect.
 ## Files
 
 **Created:**
-- `src/Application/Abstractions/Jobs.cs` — `JobLane`, `IJob`, `IJobQueue`
+- `src/Application/Abstractions/Jobs.cs` — `JobLane`, `IJob`, `IJobScheduler`
 - `src/Application/Jobs/` — the reference job
-- `src/Infrastructure/Jobs/JobOptions.cs`, `JobQueue.cs`, `JobRegistration.cs`, `JobCurrentUser.cs`
+- `src/Infrastructure/Jobs/JobOptions.cs`, `JobScheduler.cs`, `JobRegistration.cs`, `JobCurrentUser.cs`
 - `src/Worker/` — `Program.cs`, `appsettings.json`, `AiFramework.Worker.csproj`, `CLAUDE.md`,
   `Internal/Generated/`
 - `k8s/base/worker.yaml`

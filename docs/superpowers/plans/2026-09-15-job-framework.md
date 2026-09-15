@@ -8,9 +8,9 @@ lane; the lane is a queue; the worker listens, the API only publishes. Retry, sc
 dead-lettering come from Wolverine rather than from hand-written arithmetic.
 
 **Architecture:** `src/Worker` as a second composition root, a web host serving only health
-endpoints. Two PostgreSQL queues (`jobs-light`, `jobs-heavy`) with different
+endpoints. Two PostgreSQL queues (`jobs_light`, `jobs_heavy`) with different
 `MaximumParallelMessages`, selected per host by `Jobs__Queues`. `IJob` carries
-`static abstract JobLane Lane`; `IJobQueue` is an Application port over `IMessageBus`. No broker.
+`static abstract JobLane Lane`; `IJobScheduler` is an Application port over `IMessageBus`. No broker.
 
 **Tech Stack:** .NET 10 (net10.0), `LangVersion` 14.0, Wolverine 6.33.0 (`WolverineFx`,
 `.Postgresql`, `.EntityFrameworkCore`), EF Core + Npgsql 10.0.3, xUnit + FluentAssertions +
@@ -18,6 +18,15 @@ NSubstitute, Testcontainers. Kubernetes via kind.
 
 **Spec:** `docs/superpowers/specs/2026-09-15-job-framework-design.md`
 **ADR:** `docs/adr/0016-jobs-in-a-worker-host.md`
+
+> **Names that changed during implementation**, so this plan still reads correctly against the
+> code: `IJobQueue` became **`IJobScheduler`** (CA1711 reserves the `Queue` suffix, and the new
+> name sits better beside `ICommandDispatcher`/`IQueryDispatcher`), and the queue names use
+> underscores — **`jobs_light`/`jobs_heavy`** — because the Postgres transport sanitises a name
+> into an identifier and the real endpoints are `postgresql://jobs_light/`. The reference jobs live
+> in their feature folder (`src/Application/Orders/`), not a technical `Jobs/` one, matching how
+> this repo organises Application. Task 1 additionally changed the enqueue MECHANISM — see its
+> result block.
 
 ## Global Constraints
 
@@ -52,7 +61,7 @@ NSubstitute, Testcontainers. Kubernetes via kind.
 ## File Structure
 
 **Created:**
-- `src/Application/Abstractions/Jobs.cs` — `JobLane`, `IJob`, `IJobQueue`
+- `src/Application/Abstractions/Jobs.cs` — `JobLane`, `IJob`, `IUserScopedJob`, `IJobScheduler`
 - `src/Application/Jobs/RebuildOrderReport.cs` — the reference job and its handler
 - `src/Infrastructure/Jobs/JobOptions.cs` — `Queues`, per-lane parallelism, validation
 - `src/Infrastructure/Jobs/JobQueue.cs` — `IJobQueue` over `IMessageBus`
@@ -125,17 +134,17 @@ uncertainty: whether envelopes published through `IDbContextOutbox<AiFrameworkDb
 a commit made by the existing `IUnitOfWork.SaveChangesAsync` (rather than
 `SaveChangesAndFlushMessagesAsync`), and if so how they are eventually delivered.
 
-- [ ] Write a throwaway test in `tests/Api.IntegrationTests/EventPath/` modelled on
+- [x] Write a throwaway test in `tests/Api.IntegrationTests/EventPath/` modelled on
       `WolverineOutboxAtomicityTests` — which already wraps its call in
       `context.Database.CreateExecutionStrategy().ExecuteAsync(...)`, required since
       `EnableRetryOnFailure` landed (ADR 0014).
-- [ ] Publish a message through `IDbContextOutbox<AiFrameworkDbContext>`, commit with plain
+- [x] Publish a message through `IDbContextOutbox<AiFrameworkDbContext>`, commit with plain
       `SaveChangesAsync`, and assert on **both**: (a) whether a row appears in the Wolverine
       outgoing envelope table in the `wolverine` schema, and (b) whether the message is ultimately
       delivered.
-- [ ] Assert the negative too: the same publish inside a transaction that **rolls back** must
+- [x] Assert the negative too: the same publish inside a transaction that **rolls back** must
       deliver nothing.
-- [ ] Record the finding as a comment at the top of `JobQueue.cs`, in the style of
+- [x] Record the finding as a comment at the top of `JobScheduler.cs`, in the style of
       `ObservabilityRegistration.BuildOtlpEndpoint`'s remarks — the empirical result, not the
       assumption.
 
@@ -147,7 +156,7 @@ a commit made by the existing `IUnitOfWork.SaveChangesAsync` (rather than
   and enqueue the job from an `IDomainEventHandler<T>`. Already transactional via
   `DomainEventsInterceptor`, no new mechanism, one extra hop.
 
-- [ ] Delete the throwaway test once the finding is recorded and a real test replaces it in
+- [x] Delete the throwaway test once the finding is recorded and a real test replaces it in
       Task 3.
 
 **Verify:** `dotnet test tests/Api.IntegrationTests -c Debug` — the spike test passes and its
@@ -155,42 +164,42 @@ result is written down before any production code is added.
 
 ---
 
-## Task 2 — Application contracts
+## Task 2 — Application contracts ✅ DONE (2026-09-15)
 
-- [ ] `src/Application/Abstractions/Jobs.cs`:
+- [x] `src/Application/Abstractions/Jobs.cs`:
   - `public enum JobLane { Light, Heavy }`
   - `public interface IJob { static abstract JobLane Lane { get; } }`
   - `IJobQueue` with `EnqueueAsync<TJob>`, `ScheduleAsync<TJob>(…, DateTimeOffset, …)` and
     `ScheduleAsync<TJob>(…, TimeSpan, …)`, each constrained `where TJob : IJob`.
-- [ ] XML docs on each, stating: the lane is a static abstract so it reads with **no reflection**;
+- [x] XML docs on each, stating: the lane is a static abstract so it reads with **no reflection**;
       a job carries the user it acts for because there is no `HttpContext` in the worker; and a
       job handler must not log its own outcome because `Behaviors.LoggedAsync` already does.
-- [ ] `src/Application/Jobs/RebuildOrderReport.cs` — the reference job: a `sealed record`
+- [x] `src/Application/Jobs/RebuildOrderReport.cs` — the reference job: a `sealed record`
       implementing `IJob` with `Lane => JobLane.Heavy`, carrying `OwnerId`, plus its handler
       resolving `IQueryDispatcher` and doing something small and real.
-- [ ] No Wolverine reference anywhere in `src/Application`.
+- [x] No Wolverine reference anywhere in `src/Application`.
 
 **Verify:** `dotnet build src/Application -c Debug` clean. Confirm the dependency-rule hook stays
 silent — nothing here should trip it.
 
 ---
 
-## Task 3 — Infrastructure: queue, options, caller, registration
+## Task 3 — Infrastructure: queue, options, caller, registration ✅ DONE (2026-09-15)
 
-- [ ] `JobOptions.cs` — `Queues` (comma-separated string, bound from `Jobs__Queues`),
+- [x] `JobOptions.cs` — `Queues` (comma-separated string, bound from `Jobs__Queues`),
       `Light.MaximumParallelMessages` (8), `Heavy.MaximumParallelMessages` (2). Validate that
       every name in `Queues` parses to a `JobLane`, so an unknown lane fails at startup rather
       than leaving a queue silently unconsumed — the same failure `OutboxOptions`' `WorkerCount >= 1`
       validation exists to prevent. Bind in each host's `Program.cs`, **not** in `AddJobs`, so
       `AddJobs` stays resolvable from a bare `ServiceCollection` in a unit test (the reason given
       for `CacheOptions` in `Infrastructure/CLAUDE.md`).
-- [ ] `JobQueue.cs` — `IJobQueue` over `IMessageBus`, in the shape Task 1 settled. Lane→queue name
+- [x] `JobScheduler.cs` — `IJobQueue` over `IMessageBus`, in the shape Task 1 settled. Lane→queue name
       mapping lives here and nowhere else; a second copy is how the two sides drift.
-- [ ] `JobCurrentUser.cs` — scoped `ICurrentUser` populated from the job message by a Wolverine
+- [x] `JobCurrentUser.cs` — scoped `ICurrentUser` populated from the job message by a Wolverine
       middleware before the handler runs. Memoize like `Api/Auth/CurrentUser` does, and carry a
       comment explaining that this exists because `EvictAsync` and ADR 0007's ownership-in-the-query
       both read `ICurrentUser`, and the worker has no `HttpContext`.
-- [ ] `JobRegistration.cs`:
+- [x] `JobRegistration.cs`:
   - `MapJobs(WolverineOptions)` — one explicit `opts.PublishMessage<T>().ToPostgresqlQueue(...)`
     per job type, reading `T.Lane`. Explicit, greppable, mirroring `AddMessaging()`.
   - `ListenForJobs(WolverineOptions, JobOptions)` — `ListenToPostgresqlQueue(...)` per configured
@@ -199,9 +208,9 @@ silent — nothing here should trip it.
     **`ScheduleRetry`, not `RetryWithCooldown`** — a cooldown holds a listener slot for its whole
     duration, and on a two-slot lane one poisoned message would consume half the capacity. Put that
     reason in a comment; it is not obvious from the method names.
-- [ ] `InfrastructureRegistration.AddJobs()`, called from `AddInfrastructure`, registering
+- [x] `InfrastructureRegistration.AddJobs()`, called from `AddInfrastructure`, registering
       `IJobQueue` and the job handlers' dependencies.
-- [ ] Tests in `tests/Infrastructure.Tests/Jobs/`:
+- [x] Tests in `tests/Infrastructure.Tests/Jobs/`:
   - `JobQueueTests` — lane→queue mapping; `ScheduleAsync` produces a **scheduled** envelope with
     the right time (assert on the envelope, never by waiting).
   - `JobRegistrationTests` — **completeness**: every `IJob` in the Application assembly has a
@@ -212,16 +221,16 @@ silent — nothing here should trip it.
 
 ---
 
-## Task 4 — Split the Wolverine host role, and prove the API listens to nothing
+## Task 4 — Split the Wolverine host role, and prove the API listens to nothing ✅ DONE (2026-09-15)
 
-- [ ] `WolverineEventPath.AddWolverineEventPath` gains a host role — an enum or two entry points,
+- [x] `WolverineEventPath.AddWolverineEventPath` gains a host role — an enum or two entry points,
       `PublishOnly` and `ProcessesJobs`. Keep the existing `durable` and `usePreGeneratedCode`
       parameters and their documented reasoning intact.
-- [ ] The API passes `PublishOnly`: `MapJobs` runs, `ListenForJobs` does not.
-- [ ] Extend the existing `DisableConventionalDiscovery()` block with the job handler types the
+- [x] The API passes `PublishOnly`: `MapJobs` runs, `ListenForJobs` does not.
+- [x] Extend the existing `DisableConventionalDiscovery()` block with the job handler types the
       **worker** includes, and leave the API's list unchanged. Comment that this list is the
       enforcement point for "jobs never run in the API".
-- [ ] `tests/Api.IntegrationTests/Jobs/ApiPublishesOnlyTests.cs` — assert against
+- [x] `tests/Api.IntegrationTests/Jobs/ApiPublishesOnlyTests.cs` — assert against
       `ServiceCapabilities.MessagingEndpoints` that no `jobs-*` queue appears as a **listener** on
       the API host. `WolverineLocalQueueDurabilityTests` already reaches endpoint modes this way;
       copy that route rather than inventing one.
@@ -234,13 +243,13 @@ worker exists, and watch it pass for the right reason.**
 
 ---
 
-## Task 5 — The worker host
+## Task 5 — The worker host ✅ DONE (2026-09-15)
 
-- [ ] `src/Worker/AiFramework.Worker.csproj` — `Microsoft.NET.Sdk.Web`, references `Application`
+- [x] `src/Worker/AiFramework.Worker.csproj` — `Microsoft.NET.Sdk.Web`, references `Application`
       and `Infrastructure`. Mirror `AiFramework.Api.csproj`'s Debug-only
       `WolverineFx.RuntimeCompilation` reference and its comment: Release ships without Roslyn and
       loads pre-generated adapters (33MB, measured — ADR 0005).
-- [ ] `src/Worker/Program.cs`:
+- [x] `src/Worker/Program.cs`:
   - The same `ConnectionStrings:Default` whitespace guard the API uses, and for the same reason —
     `GetConnectionString` returns `""`, not null, for an unset-but-present key.
   - `builder.AddObservability()` — unchanged, because this is a `WebApplicationBuilder`.
@@ -259,10 +268,10 @@ worker exists, and watch it pass for the right reason.**
     every ordinary start.
   - `public partial class Program { protected Program() { } }` for `WebApplicationFactory`, with
     the S1118 comment the API's carries.
-- [ ] `src/Worker/appsettings.json` — `Observability:ServiceName` = `aiframework-worker`,
+- [x] `src/Worker/appsettings.json` — `Observability:ServiceName` = `aiframework-worker`,
       `Cache:Enabled` = `false`, `Jobs:Queues` = `light,heavy`, `Otlp:Enabled` = `false`.
-- [ ] `dotnet run --project src/Worker -- codegen write`; commit `src/Worker/Internal/Generated`.
-- [ ] Add both new projects to `AiFramework.slnx`.
+- [x] `dotnet run --project src/Worker -- codegen write`; commit `src/Worker/Internal/Generated`.
+- [x] Add both new projects to `AiFramework.slnx`.
 
 **Verify:** `dotnet build -c Release` — Release is the configuration that proves the generated
 tree loads. Then run the worker against the dev database and confirm it starts and answers
@@ -270,34 +279,34 @@ tree loads. Then run the worker against the dev database and confirm it starts a
 
 ---
 
-## Task 6 — Worker integration tests
+## Task 6 — Worker integration tests ✅ DONE (2026-09-15)
 
-- [ ] `tests/Worker.IntegrationTests/` with a `JasperFxTestEnvironment.cs` module initializer
+- [x] `tests/Worker.IntegrationTests/` with a `JasperFxTestEnvironment.cs` module initializer
       setting `JasperFxEnvironment.AutoStartHost` — without it the host never starts under
       `WebApplicationFactory`, which cost 23 of 24 tests in `Api.IntegrationTests` to discover.
-- [ ] `WorkerFactory.cs` over Testcontainers Postgres, mirroring `ApiFactory`.
-- [ ] `JobDeliveryTests` — a published job reaches its handler; a `Heavy` job lands on
+- [x] `WorkerFactory.cs` over Testcontainers Postgres, mirroring `ApiFactory`.
+- [x] `JobDeliveryTests` — a published job reaches its handler; a `Heavy` job lands on
       `jobs-heavy` and not on `jobs-light`; a handler that throws is retried and then
       dead-lettered, asserted on envelope state rather than by waiting.
-- [ ] `WorkerCodegenTests` — the worker's committed adapters are current, mirroring
+- [x] `WorkerCodegenTests` — the worker's committed adapters are current, mirroring
       `WolverineCodegenTests`. **Verify it fails, naming the regenerate command, when
       `src/Worker/Internal/Generated` is deleted.** A staleness guard that has never been seen to
       fail is not a guard.
-- [ ] `JobCurrentUserTests` — a job carrying an owner resolves that owner through `ICurrentUser`
+- [x] `JobCurrentUserTests` — a job carrying an owner resolves that owner through `ICurrentUser`
       inside the handler.
 
 **Verify:** `dotnet test tests/Worker.IntegrationTests -c Debug` and again `-c Release`.
 
 ---
 
-## Task 7 — Container and Kubernetes
+## Task 7 — Container and Kubernetes ✅ DONE (2026-09-15)
 
-- [ ] `Dockerfile.api` — a `worker` stage from `aspnet:10.0-noble-chiseled`, publishing
+- [x] `Dockerfile.api` — a `worker` stage from `aspnet:10.0-noble-chiseled`, publishing
       `src/Worker/AiFramework.Worker.csproj` in **Release** (same reason the API's build stage
       says "Release, always"). Reuse the existing `build` stage; do not add a second file.
       Remember `COPY src/Worker/AiFramework.Worker.csproj src/Worker/` before the restore layer,
       or the cached restore misses it.
-- [ ] `k8s/base/worker.yaml` — Deployment only, **no Service** (nothing routes to it; `httpGet`
+- [x] `k8s/base/worker.yaml` — Deployment only, **no Service** (nothing routes to it; `httpGet`
       probes address the pod directly). `replicas: 1`,
       `terminationGracePeriodSeconds: 300`, `requests: cpu 500m / memory 512Mi`,
       `limits: memory 1536Mi`, `readOnlyRootFilesystem: true`, `runAsNonRoot: true`,
@@ -309,10 +318,10 @@ tree loads. Then run the worker against the dev database and confirm it starts a
   - **No `preStop` sleep.** Comment why: the API needs one to leave Service endpoints before it
     stops accepting connections; nothing routes here, so what matters is Wolverine finishing
     in-flight messages, which is `HostOptions.ShutdownTimeout`.
-- [ ] `k8s/base/kustomization.yaml` — add `worker.yaml`.
-- [ ] `deploy/deploy.ps1` — build `aiframework-worker:local` and `kind load` it alongside the API
+- [x] `k8s/base/kustomization.yaml` — add `worker.yaml`.
+- [x] `deploy/deploy.ps1` — build `aiframework-worker:local` and `kind load` it alongside the API
       image, and wait on the worker rollout.
-- [ ] `scripts/dev.ps1` — start the worker in its own window, so the compose loop exercises the
+- [x] `scripts/dev.ps1` — start the worker in its own window, so the compose loop exercises the
       same split the cluster does.
 
 **Verify:** `./deploy/deploy.ps1`, then `kubectl -n <ns> get pods` shows the worker `Running`, and
@@ -321,13 +330,13 @@ still passes — the worker must not disturb the existing gate.
 
 ---
 
-## Task 8 — CI
+## Task 8 — CI ✅ DONE (2026-09-15)
 
-- [ ] `.github/workflows/ci.yml`, `codegen` job — regenerate **both** trees and fail on either
+- [x] `.github/workflows/ci.yml`, `codegen` job — regenerate **both** trees and fail on either
       diff. The Api step already exists; add the worker step with the same
       `Wolverine__Durable=false` and placeholder connection string, and an `::error` message
       naming `dotnet run --project src/Worker -- codegen write`.
-- [ ] Confirm the `backend` matrix picks the new projects up without edits — it runs
+- [x] Confirm the `backend` matrix picks the new projects up without edits — it runs
       `dotnet build`/`dotnet test` over the solution, so adding them to `AiFramework.slnx` in
       Task 5 should be sufficient. **Check, do not assume.**
 
@@ -336,24 +345,24 @@ confirm they fail. Restore.
 
 ---
 
-## Task 9 — Teach the hooks about the Worker layer
+## Task 9 — Teach the hooks about the Worker layer ✅ DONE (2026-09-15)
 
-- [ ] `.claude/hooks/hooks.config.json` — add `"Worker"` to `layers`.
-- [ ] `.claude/hooks/dependency-rule.ps1` — add `'Worker' = @("$root.Api")` to `$banned`.
+- [x] `.claude/hooks/hooks.config.json` — add `"Worker"` to `layers`.
+- [x] `.claude/hooks/dependency-rule.ps1` — add `'Worker' = @("$root.Api")` to `$banned`.
       **Both files, in the same change.** The script's own comment warns that a layer in the
       config with no `$banned` entry matches with an empty banned list, silently disarming that
       layer.
-- [ ] Add fixtures under `.claude/hooks/tests/fixtures/` — one `Worker` file importing
+- [x] Add fixtures under `.claude/hooks/tests/fixtures/` — one `Worker` file importing
       `AiFramework.Api` (must be blocked), one importing `AiFramework.Infrastructure` (must pass).
-- [ ] Run `.claude/hooks/tests/run-hook-tests.ps1`.
+- [x] Run `.claude/hooks/tests/run-hook-tests.ps1`.
 
 **Verify:** the hook test suite passes, and the new blocked fixture genuinely exits 2.
 
 ---
 
-## Task 10 — Teach the framework
+## Task 10 — Teach the framework ✅ DONE (2026-09-15)
 
-- [ ] Root `CLAUDE.md` — a `## Jobs` section placed after `## Caching`, covering:
+- [x] Root `CLAUDE.md` — a `## Jobs` section placed after `## Caching`, covering:
   - **Jobs run in the worker. The API listens to nothing.** State the rule in one sentence, name
     `ApiPublishesOnlyTests` as what enforces it, and the discovery list as where it is declared.
   - The two lanes, their queues, their parallelism, and that the host-to-queue mapping is
@@ -370,15 +379,15 @@ confirm they fail. Restore.
   - `ScheduleRetry` over `RetryWithCooldown` on the heavy lane, and why.
   - Recurring jobs are self-rescheduling messages; no Quartz, no timer `IHostedService`.
   - `See ADR 0016.`
-- [ ] `src/Worker/CLAUDE.md` — what belongs here (composition, health endpoints, the generated
+- [x] `src/Worker/CLAUDE.md` — what belongs here (composition, health endpoints, the generated
       tree) and what never does (feature logic, controllers, any `AiFramework.Api` namespace).
-- [ ] `.claude/commands/job.md` — `/job <JobName>`, mirroring `/feature`'s numbered shape:
+- [x] `.claude/commands/job.md` — `/job <JobName>`, mirroring `/feature`'s numbered shape:
       1. choose the lane and justify it; 2. the job record in `src/Application/Jobs/`;
       3. the handler; 4. register in `JobRegistration.cs` **and** in the worker's discovery list;
       5. tests at each layer; 6. **regenerate the worker's adapters and commit them**;
       7. `/verify` then `dotnet-reviewer`. End with `/feature`'s own closing rule: if a step is
       blocked, stop and say so rather than inventing a shape.
-- [ ] `docs/adr/0005-wolverine-for-the-event-path.md` — a line pointing at ADR 0016, noting jobs
+- [x] `docs/adr/0005-wolverine-for-the-event-path.md` — a line pointing at ADR 0016, noting jobs
       now ride the same runtime and that moving the outbox pumps to the worker is the open
       follow-on.
 
@@ -389,13 +398,13 @@ what do I regenerate, and what can it not do" without opening another file.
 
 ## Task 11 — Finish
 
-- [ ] `/verify` — both stacks, both configurations.
-- [ ] `dotnet test -c Release` explicitly. Release is the one that proves both generated trees
+- [x] `/verify` — both stacks, both configurations.
+- [x] `dotnet test -c Release` explicitly. Release is the one that proves both generated trees
       load, and Debug alone is not evidence — the reason CI builds both.
-- [ ] `./deploy/deploy.ps1` then `./deploy/e2e-k8s.ps1`.
-- [ ] Dispatch the `dotnet-reviewer` agent over the full diff. It carries the `Api → Infrastructure`
+- [x] `./deploy/deploy.ps1` then `./deploy/e2e-k8s.ps1`.
+- [x] Dispatch the `dotnet-reviewer` agent over the full diff. It carries the `Api → Infrastructure`
       "DI only" cell the hook cannot enforce, and `Worker → Infrastructure` is the same shape.
-- [ ] Confirm `openapi/AiFramework.Api.json` is **unchanged** — this plan touches no controller,
+- [x] Confirm `openapi/AiFramework.Api.json` is **unchanged** — this plan touches no controller,
       DTO or `[ProducesResponseType]`, so a diff there means something leaked into the API surface.
 
 ---
