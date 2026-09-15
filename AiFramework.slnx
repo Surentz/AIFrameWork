@@ -19,6 +19,9 @@
   <Folder Name="/tests/Api.IntegrationTests/">
     <Project Path="tests/Api.IntegrationTests/AiFramework.Api.IntegrationTests.csproj" />
   </Folder>
+  <Folder Name="/tests/Worker.IntegrationTests/">
+    <Project Path="tests/Worker.IntegrationTests/AiFramework.Worker.IntegrationTests.csproj" />
+  </Folder>
   <Folder Name="/tests/Application.Tests/">
     <Project Path="tests/Application.Tests/AiFramework.Application.Tests.csproj" />
   </Folder>
