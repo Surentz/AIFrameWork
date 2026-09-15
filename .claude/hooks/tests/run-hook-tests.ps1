@@ -97,6 +97,8 @@ Assert-Exit -Name 'Domain + DataAnnotations is blocked'    -Script 'dependency-r
 Assert-Exit -Name 'Domain with only System is allowed'     -Script 'dependency-rule.ps1' -Fixture 'domain-clean.json'                        -Expected 0
 Assert-Exit -Name 'Application + Infrastructure blocked'   -Script 'dependency-rule.ps1' -Fixture 'application-infrastructure-violation.json' -Expected 2
 Assert-Exit -Name 'Api may reference every layer'          -Script 'dependency-rule.ps1' -Fixture 'api-all-layers.json'                      -Expected 0
+Assert-Exit -Name 'Worker + Api namespace is blocked'  -Script 'dependency-rule.ps1' -Fixture 'worker-api-violation.json'                -Expected 2
+Assert-Exit -Name 'Worker + Infrastructure is allowed'    -Script 'dependency-rule.ps1' -Fixture 'worker-clean.json'                        -Expected 0
 Assert-Exit -Name 'Malformed payload fails open'           -Script 'dependency-rule.ps1' -Fixture 'malformed.json'                           -Expected 0
 # The conventional "dotnet new classlib -o src/AiFramework.Domain" layout produces a
 # dotted, root-namespace-prefixed folder. Matching bare folder names only meant the

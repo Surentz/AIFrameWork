@@ -63,6 +63,13 @@ try {
                 )
                 'Infrastructure' = @("$root.Api")
                 'Api' = @()
+                # The second composition root (ADR 0016). Like Api it may reference every inner
+                # layer, and like Api that is "DI only" by review rather than by this hook —
+                # nothing here distinguishes a registration from a controller-style reach-in.
+                # What it must NEVER reference is Api: Worker is a sibling host, not a layer
+                # above one, and a Worker -> Api reference is also what would let the two share
+                # one Wolverine generated-code tree, which ADR 0016 explicitly rules out.
+                'Worker' = @("$root.Api")
             }
 
             # A layer declared in hooks.config.json that has no banned list here
