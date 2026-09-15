@@ -1,4 +1,5 @@
 using AiFramework.Application.Abstractions;
+using Wolverine;
 
 namespace AiFramework.Infrastructure.Jobs;
 
@@ -46,19 +47,35 @@ public sealed class JobCurrentUser : ICurrentUser
 /// Populates <see cref="JobCurrentUser"/> before a user-scoped job's handler runs.
 /// </summary>
 /// <remarks>
-/// Applied by <c>JobRegistration</c> via
-/// <c>opts.Policies.ForMessagesOfType&lt;IUserScopedJob&gt;().AddMiddleware&lt;JobUserMiddleware&gt;()</c>,
-/// so it reaches every user-scoped job automatically and a new one cannot forget it. Wolverine
-/// discovers <c>Before</c> by convention and generates the call into the handler's adapter —
-/// which is why adding or changing this needs <c>codegen write</c> re-run for the worker.
+/// <para>
+/// Applied by <c>JobRegistration.IncludeJobHandlers</c> to every chain whose message implements
+/// <see cref="IUserScopedJob"/>, so a new user-scoped job cannot forget it. Wolverine discovers
+/// <c>Before</c> by convention and generates the call into the handler's adapter — which is why
+/// changing this file means re-running the worker's <c>codegen write</c>.
+/// </para>
+/// <para>
+/// <b>Takes the <see cref="Envelope"/>, not an <see cref="IUserScopedJob"/>.</b> JasperFx resolves
+/// chain variables by exact type: the chain has the CONCRETE message (<c>RebuildOrderReport</c>)
+/// and will not upcast it to an interface, so a <c>Before(IUserScopedJob, ...)</c> fails codegen
+/// outright with "unable to resolve a variable of type IUserScopedJob". Found by running
+/// <c>codegen write</c>, which is the only place it shows up — the code compiles fine.
+/// </para>
+/// <para>
+/// The <c>is</c> check is therefore the cast, and it is also belt-and-braces: the chain predicate
+/// already guarantees only user-scoped jobs reach here, so a non-match is not an error to report,
+/// just nothing to do.
+/// </para>
 /// </remarks>
 public static class JobUserMiddleware
 {
-    public static void Before(IUserScopedJob job, JobCurrentUser currentUser)
+    public static void Before(Envelope envelope, JobCurrentUser currentUser)
     {
-        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(envelope);
         ArgumentNullException.ThrowIfNull(currentUser);
 
-        currentUser.Set(job.OwnerId);
+        if (envelope.Message is IUserScopedJob job)
+        {
+            currentUser.Set(job.OwnerId);
+        }
     }
 }

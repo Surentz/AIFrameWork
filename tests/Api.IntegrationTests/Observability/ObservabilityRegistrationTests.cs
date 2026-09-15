@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiFramework.Api.Observability;
+using AiFramework.Infrastructure.Observability;
 using FluentAssertions;
 
 namespace AiFramework.Api.IntegrationTests.Observability;
@@ -47,7 +48,7 @@ public sealed partial class ObservabilityRegistrationTests(ApiFactory factory)
     }
 
     /// <summary>
-    /// BuildOtlpEndpoint's two jobs, confirmed empirically against a real Seq container per its
+    /// OtlpEndpoint.Build's two jobs, confirmed empirically against a real Seq container per its
     /// own remarks: append the signal path (never rely on the SDK to), and do it without
     /// dropping or duplicating a slash regardless of how the configured root is spelled.
     /// </summary>
@@ -62,7 +63,7 @@ public sealed partial class ObservabilityRegistrationTests(ApiFactory factory)
     public void BuildOtlpEndpoint_AppendsExactlyOneSlashBetweenRootAndSignalPath(
         string receiverRoot, string signalPath, string expected)
     {
-        var endpoint = ObservabilityRegistration.BuildOtlpEndpoint(receiverRoot, signalPath);
+        var endpoint = OtlpEndpoint.Build(receiverRoot, signalPath);
 
         endpoint.Should().Be(new Uri(expected));
     }

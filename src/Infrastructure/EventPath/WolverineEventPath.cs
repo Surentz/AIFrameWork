@@ -113,28 +113,23 @@ public static class WolverineEventPath
 
         return host.UseWolverine(opts =>
         {
-            if (durable)
+            // Handler DISCOVERY, unconditionally — it has nothing to do with the transport, and
+            // separating it from the transport wiring below is load-bearing for two reasons:
+            //
+            //  - `codegen write` runs with Wolverine__Durable=false, because generating code must
+            //    not need a database. Discovery inside the durable branch meant the worker's
+            //    generated tree came out with NO job adapters at all: it wrote only
+            //    OrderPlacedNotificationHandler and Release would then fail at startup with
+            //    MissingPreBuiltTypesException on the first job. Found by reading what the
+            //    command actually wrote, not by reasoning.
+            //  - A MediatorOnly host with a discovered handler is harmless; one with a
+            //    database-backed ROUTE is not (see below).
+            if (role is WolverineHostRole.ProcessesJobs)
             {
-                ConfigureDurability(opts, connectionString);
+                JobRegistration.IncludeJobHandlers(opts);
+            }
 
-                // AFTER ConfigureDurability, and only when durable. Both halves matter, and both
-                // were found by failing tests rather than reasoned out:
-                //
-                //  - Order: job routing is expressed as ToPostgresqlQueue, which needs the
-                //    Postgres transport that PersistMessagesWithPostgresql registers. Configured
-                //    first, it has nothing to attach to.
-                //  - Condition: MediatorOnly has no transport at all, by definition — that mode
-                //    exists precisely so a host can start with no reachable database. Registering
-                //    a database-backed route there reintroduces the startup connection the mode
-                //    is for avoiding, which is what took HealthTests, OpenApiDocumentTests,
-                //    ForwardedHeadersTests and AuthRateLimitTests to ~19s timeouts in one step.
-                //    A MediatorOnly host cannot publish a job anyway; nothing is lost.
-                ConfigureJobs(opts, role, jobOptions);
-            }
-            else
-            {
-                opts.Durability.Mode = DurabilityMode.MediatorOnly;
-            }
+            ConfigureTransport(opts, connectionString, role, jobOptions, durable);
 
             // Static rather than Auto deliberately: Auto silently falls back to generating code
             // at runtime, which in Release means failing later and less clearly. Static throws
@@ -163,6 +158,40 @@ public static class WolverineEventPath
     }
 
     /// <summary>
+    /// Durability, and the transport wiring that depends on it. Extracted so the UseWolverine
+    /// lambda stays under Meziantou's MA0051 length limit — the rule is satisfied, not suppressed.
+    /// </summary>
+    private static void ConfigureTransport(
+        WolverineOptions opts,
+        string connectionString,
+        WolverineHostRole role,
+        JobOptions? jobOptions,
+        bool durable)
+    {
+        if (!durable)
+        {
+            opts.Durability.Mode = DurabilityMode.MediatorOnly;
+            return;
+        }
+
+        ConfigureDurability(opts, connectionString);
+
+        // AFTER ConfigureDurability, and only when durable. Both halves matter, and both were
+        // found by failing tests rather than reasoned out:
+        //
+        //  - Order: job routing is expressed as ToPostgresqlQueue, which needs the Postgres
+        //    transport that PersistMessagesWithPostgresql registers. Configured first, it has
+        //    nothing to attach to.
+        //  - Condition: MediatorOnly has no transport at all, by definition — that mode exists
+        //    precisely so a host can start with no reachable database. Registering a
+        //    database-backed route there reintroduces the startup connection the mode is for
+        //    avoiding, which is what took HealthTests, OpenApiDocumentTests, ForwardedHeadersTests
+        //    and AuthRateLimitTests to ~19s timeouts in one step. A MediatorOnly host cannot
+        //    publish a job anyway; nothing is lost.
+        ConfigureJobs(opts, role, jobOptions);
+    }
+
+    /// <summary>
     /// The job half of the configuration, and the one place the API and the worker differ.
     /// </summary>
     /// <remarks>
@@ -187,7 +216,9 @@ public static class WolverineEventPath
             return;
         }
 
-        JobRegistration.IncludeJobHandlers(opts);
+        // Discovery already happened above, outside the durable branch — see the comment there.
+        // Error policy lands here because MoveToErrorQueue needs the envelope storage that only
+        // the durable branch registers.
         JobRegistration.ConfigureJobErrorHandling(opts);
 
         // Null here is a wiring mistake, not a default to paper over: a worker with no JobOptions
