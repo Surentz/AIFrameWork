@@ -163,7 +163,11 @@ public sealed class JobDeliveryTests(WorkerFactory factory)
             $"select count(*) from wolverine_queues.wolverine_queue_{lightQueue}_scheduled",
             connection);
 
-        var scheduled = (long)(await command.ExecuteScalarAsync(CancellationToken.None))!;
+        // Convert rather than a null-forgiving cast: count(*) cannot return null, but an
+        // unexplained NRE here would read as a test bug rather than as what it is.
+        var scheduled = Convert.ToInt64(
+            await command.ExecuteScalarAsync(CancellationToken.None),
+            System.Globalization.CultureInfo.InvariantCulture);
 
         scheduled.Should().BeGreaterThan(
             0,

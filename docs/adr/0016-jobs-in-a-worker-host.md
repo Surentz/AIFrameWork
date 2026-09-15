@@ -109,6 +109,13 @@ signal unrelated to request rate. Deploying the API stops killing in-flight work
   `HttpContext` in the worker, so the caller travels on the job message and a middleware populates
   a scoped `JobCurrentUser`. Required by ADR 0007 as much as by the cache: ownership lives in the
   query, so a job that presents no user reads nothing.
+- **The worker joins the outbox poll, it does not relieve the API of it.** `AddInfrastructure`
+  calls `AddOutbox()`, so `OutboxPollerService`/`OutboxWorkerService` now run in the worker as
+  well as in both API replicas — a third poller. Safe by the same `FOR UPDATE SKIP LOCKED`
+  mechanism that already lets two API replicas share the table, and it means a domain event that
+  enqueues a job can be delivered by the process that will run it. But "the outbox runs inside the
+  API process", above, is now incomplete: moving those pumps OFF the API is still the open
+  follow-on.
 - **A second Deployment, image stage, log stream, probe set and set of manifests.** Plus
   `terminationGracePeriodSeconds: 300` on the worker and a matching `HostOptions.ShutdownTimeout`,
   because .NET's 30s default would abandon work long before Kubernetes was willing to.

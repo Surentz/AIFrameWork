@@ -173,7 +173,11 @@ public sealed class JobEnqueueMechanismTests(ApiFactory factory, ITestOutputHelp
         {
             await using var countCommand = new NpgsqlCommand(
                 $"select count(*) from wolverine.\"{table}\"", connection);
-            var count = (long)(await countCommand.ExecuteScalarAsync(CancellationToken.None))!;
+            // Convert rather than a null-forgiving cast: count(*) cannot return null, but an
+            // unexplained NRE here would read as a test bug rather than as what it is.
+            var count = Convert.ToInt64(
+                await countCommand.ExecuteScalarAsync(CancellationToken.None),
+                System.Globalization.CultureInfo.InvariantCulture);
             output.WriteLine($"[JOBS]   wolverine.{table} = {count}");
 
             if (table.Contains("outgoing", StringComparison.OrdinalIgnoreCase))

@@ -1,19 +1,4 @@
-| From ↓ / To → | Domain | Application | Infrastructure | Api | Worker |
-|---|---|---|---|---|---|
-| **Domain** | — | ✗ | ✗ | ✗ | ✗ |
-| **Application** | ✓ | — | ✗ | ✗ | ✗ |
-| **Infrastructure** | ✓ | ✓ | — | ✗ | ✗ |
-| **Api** | ✓ | ✓ | ✓ DI only | — | ✗ |
-| **Worker** | ✓ | ✓ | ✓ DI only | ✗ | — |
-
-> The `Api → Infrastructure` and `Worker → Infrastructure` cells are the rows the hook does
-> **not** enforce: nothing distinguishes a `services.AddScoped<>()` registration from a
-> controller reaching into a repository, so "DI only" is carried by review and
-> `dotnet-reviewer`. Every other cell blocks.
-
-> `Api` and `Worker` are SIBLINGS, not layers — two composition roots over the same three inner
-> layers (ADR 0016). Neither may reference the other, and `Worker → Api` in particular is what
-> would let the two share one Wolverine generated-code tree, which ADR 0016 rules out.# AIFrameWork
+# AIFrameWork
 
 .NET backend + React frontend, Clean Architecture, single repo.
 

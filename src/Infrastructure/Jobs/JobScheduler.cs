@@ -43,6 +43,12 @@ public sealed class JobScheduler(IMessageBus bus) : IJobScheduler
     {
         ArgumentNullException.ThrowIfNull(job);
 
+        // Checked rather than forwarded: IMessageBus.PublishAsync/ScheduleAsync take no
+        // CancellationToken, so there is nothing to pass it to. Honouring it at the boundary is
+        // what stops the parameter reading, at every call site, as though cancellation were
+        // observed when it is silently dropped. Same in both ScheduleAsync overloads below.
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Routing to the lane's queue is a registration concern (JobRegistration.MapJobs), not a
         // per-call one: PublishAsync consults the routing rules for TJob. Naming the queue here
         // would be a second place for lane-to-queue mapping to live, and the two would drift.
@@ -54,6 +60,8 @@ public sealed class JobScheduler(IMessageBus bus) : IJobScheduler
     {
         ArgumentNullException.ThrowIfNull(job);
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         return bus.ScheduleAsync(job, runAt).AsTask();
     }
 
@@ -61,6 +69,8 @@ public sealed class JobScheduler(IMessageBus bus) : IJobScheduler
         where TJob : IJob
     {
         ArgumentNullException.ThrowIfNull(job);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         return bus.ScheduleAsync(job, delay).AsTask();
     }

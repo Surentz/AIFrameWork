@@ -12,11 +12,6 @@ using Wolverine.Postgresql;
 namespace AiFramework.Infrastructure.EventPath;
 
 /// <summary>
-/// A spike, per ADR 0005: Wolverine's durable event path running ALONGSIDE the hand-built
-/// outbox in <c>Infrastructure/Outbox</c>, not replacing it. Nothing in the existing path
-/// calls into this, and removing this folder plus the one line in Program.cs reverts it.
-/// </summary>
-/// <summary>
 /// What a host does with jobs. <b>This one value is the entire API/worker split</b> — same
 /// assembly, same handlers, same AddInfrastructure; only whether <c>ListenToPostgresqlQueue</c>
 /// is ever called differs. See ADR 0016.
@@ -36,6 +31,16 @@ public enum WolverineHostRole
     ProcessesJobs,
 }
 
+/// <summary>
+/// Wolverine's durable event path, per ADR 0005, running ALONGSIDE the hand-built outbox in
+/// <c>Infrastructure/Outbox</c> rather than replacing it — nothing in the existing path calls into
+/// this.
+/// </summary>
+/// <remarks>
+/// No longer the removable spike ADR 0005 describes: ADR 0016 put the job framework on this same
+/// runtime, so <see cref="WolverineHostRole"/> above and <c>JobRegistration</c> now depend on it.
+/// Deleting this folder would take the worker with it.
+/// </remarks>
 public static class WolverineEventPath
 {
     /// <summary>

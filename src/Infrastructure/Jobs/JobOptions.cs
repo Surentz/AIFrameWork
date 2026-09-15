@@ -48,12 +48,56 @@ public sealed class JobOptions
 
         return [.. Queues
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(name => Enum.TryParse<JobLane>(name, ignoreCase: true, out var lane)
-                ? lane
-                : throw new InvalidOperationException(
-                    $"'{name}' is not a job lane. Jobs:Queues accepts a comma-separated list of: " +
-                    $"{string.Join(", ", Enum.GetNames<JobLane>())}."))];
+            .Select(ParseLane)
+            // "light,light" would otherwise attach two listeners to one queue. Harmless in
+            // principle, but it doubles the lane's effective parallelism against a number an
+            // operator set deliberately.
+            .Distinct()];
     }
+
+    /// <summary>
+    /// Everything <c>AddJobs</c>'s options validation checks, in a form a host can call directly
+    /// on a raw-bound instance. Throws naming the offending value.
+    /// </summary>
+    /// <remarks>
+    /// Needed because the host reads these options at CONFIGURATION time — <c>UseWolverine</c>
+    /// hooks the host builder, before any service provider exists — and so binds straight off
+    /// <c>IConfiguration</c> rather than resolving <c>IOptions&lt;JobOptions&gt;</c>. Nothing in
+    /// either host resolves that interface, so the <c>AddOptions</c> validators would never run on
+    /// their own: <c>Jobs__LightParallelism=0</c> would reach
+    /// <c>MaximumParallelMessages(0)</c> unchallenged, which is the "queue with no consumer and
+    /// nothing to say so" failure the validation exists to prevent.
+    /// </remarks>
+    public void Validate()
+    {
+        if (LightParallelism < 1 || HeavyParallelism < 1)
+        {
+            throw new InvalidOperationException(
+                "Jobs:LightParallelism and Jobs:HeavyParallelism must each be at least 1; " +
+                $"got {LightParallelism} and {HeavyParallelism}. A lane at 0 registers a listener " +
+                "that consumes nothing, with no error and no log.");
+        }
+
+        ParseQueues();
+    }
+
+    /// <summary>
+    /// One lane name, or a throw naming it.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/> alone is not enough.</b> It
+    /// happily parses any numeric string, so <c>Jobs__Queues=7</c> would return <c>true</c> with
+    /// <c>(JobLane)7</c> — validation would report success and the host would then die deeper in,
+    /// in <c>JobRegistration.QueueFor</c>, with an <c>ArgumentOutOfRangeException</c> naming no
+    /// configuration key at all. <see cref="Enum.IsDefined{TEnum}(TEnum)"/> is what makes the
+    /// failure land here, where the message can name the offending value.
+    /// </remarks>
+    private static JobLane ParseLane(string name) =>
+        Enum.TryParse<JobLane>(name, ignoreCase: true, out var lane) && Enum.IsDefined(lane)
+            ? lane
+            : throw new InvalidOperationException(
+                $"'{name}' is not a job lane. Jobs:Queues accepts a comma-separated list of: " +
+                $"{string.Join(", ", Enum.GetNames<JobLane>())}.");
 
     /// <summary>The parallelism for one lane. One place, so listener setup cannot drift.</summary>
     public int ParallelismFor(JobLane lane) => lane switch

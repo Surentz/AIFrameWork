@@ -62,6 +62,24 @@ Two codegen failures that compile perfectly well and only show up when you run t
   Wolverine 6 refuses under its `NotAllowed` default. `JobRegistration.IncludeJobHandlers` sets
   `ServiceLocationPolicy.AlwaysAllowed` **on this host only** — the Api keeps the strict default.
 
+## It also runs the outbox pumps
+
+`AddInfrastructure` calls `AddOutbox()`, so `OutboxPollerService` and `OutboxWorkerService` — and
+every `IDomainEventHandler` they dispatch to — run **here as well as in both API replicas**. This
+host is a third poller, not a replacement for the two in the API.
+
+That is safe rather than accidental: `OutboxPoller.ClaimAsync` claims with
+`FOR UPDATE SKIP LOCKED`, which is exactly the mechanism that already lets two API replicas poll
+the same table. The practical effect is more outbox capacity, and one useful side effect — a
+domain event that enqueues a job (`OrderPlacedConfirmationHandler`) can now be delivered by the
+same process that will run the job.
+
+Know it before it surprises you: ADR 0016 frames the outbox as running "inside the API process",
+which was true when it was written and is now incomplete. Moving those pumps **off** the API is the
+open follow-on; this host joining the poll is a step toward it, not the finished thing. If the
+intent ever becomes "only the worker polls", that is an explicit opt-out in `AddOutbox`, not a
+side effect to rely on.
+
 ## Configuration
 
 | Key | Why it matters |

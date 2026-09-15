@@ -86,9 +86,6 @@ if (-not $SkipBuild) {
             -t aiframework-migrator:local $repoRoot
     }
     Invoke-Step 'Building the worker image' {
-        docker build -f (Join-Path  'Dockerfile.api') --target worker 
-            -t aiframework-worker:local \n    }
-    Invoke-Step 'Building the worker image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target worker `
             -t aiframework-worker:local $repoRoot
     }

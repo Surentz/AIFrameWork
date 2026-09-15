@@ -62,7 +62,10 @@ try {
                     'Microsoft.EntityFrameworkCore', 'Microsoft.AspNetCore'
                 )
                 'Infrastructure' = @("$root.Api")
-                'Api' = @()
+                # Api may reach every inner layer, but NOT its sibling host. The matrix in
+                # CLAUDE.md marks this cell ✗ and says only the two "DI only" cells go
+                # unenforced, so leaving this empty would make that note false.
+                'Api' = @("$root.Worker")
                 # The second composition root (ADR 0016). Like Api it may reference every inner
                 # layer, and like Api that is "DI only" by review rather than by this hook —
                 # nothing here distinguishes a registration from a controller-style reach-in.
