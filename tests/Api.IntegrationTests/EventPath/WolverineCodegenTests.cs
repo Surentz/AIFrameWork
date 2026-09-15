@@ -31,6 +31,9 @@ public sealed class WolverineCodegenTests
                 // The Api assembly, because that is where codegen writes and where the
                 // generated files are compiled in — the same assembly Program.cs passes.
                 typeof(Program).Assembly,
+                // The Api's own role, because this test exists to prove the Api's committed
+                // generated code is current. The worker's tree has its own equivalent test.
+                role: WolverineHostRole.PublishesJobs,
                 durable: false,
                 // The point of the test. In Release this is the default; forcing it here makes
                 // a stale-codegen failure surface in the Debug suite everyone actually runs.

@@ -7,6 +7,7 @@ using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Messaging;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
@@ -75,6 +76,13 @@ public static class InfrastructureRegistration
         services.AddDomainEvent<OrderPlaced>("order.placed");
         services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedAuditHandler>();
 
+        // A second handler for the same event: OutboxWorkItemProcessor fans out to every
+        // IDomainEventHandler<OrderPlaced>. This one is the job framework's reference for
+        // enqueuing work that must not be lost — the enqueue happens here, off the committed
+        // event, rather than inside PlaceOrderHandler where a rolled-back command would still
+        // have sent a confirmation. See ADR 0016 and IJobScheduler's remarks.
+        services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedConfirmationHandler>();
+
         return services;
     }
 
@@ -129,6 +137,11 @@ public static class InfrastructureRegistration
         services.AddExchangeRateClient();
 
         services.AddOutbox();
+
+        // The job framework. Registers IJobScheduler and the per-message caller; which lanes this
+        // host actually LISTENS on is decided by Jobs:Queues, bound in each host's Program.cs.
+        // ADR 0016.
+        services.AddJobs();
 
         // ADR 0005 spike: registers only what the Wolverine handler needs. The Wolverine host
         // itself is wired in Program.cs, because UseWolverine hooks IHostBuilder, not IServiceCollection.
