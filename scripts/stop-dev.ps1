@@ -21,6 +21,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # Fixed, not configurable — same ports dev.ps1 uses, for the same reasons (launchSettings.json /
 # vite.config.ts).
 $apiPort = 5234
+$workerPort = 5235
 $webPort = 5173
 
 function Stop-PortOwner {
@@ -39,6 +40,7 @@ function Stop-PortOwner {
 }
 
 Stop-PortOwner -Port $apiPort -Name 'API'
+Stop-PortOwner -Port $workerPort -Name 'Job worker'
 Stop-PortOwner -Port $webPort -Name 'Vite dev server'
 
 Write-Host '==> Stopping the dev database (and Seq, if it was started)' -ForegroundColor Cyan

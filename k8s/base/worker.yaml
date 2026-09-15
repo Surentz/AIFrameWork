@@ -1,0 +1,105 @@
+# The job worker. ADR 0016.
+#
+# NO Service, deliberately: nothing routes to this pod. httpGet probes address the pod directly,
+# so a Service would buy nothing and imply a traffic path that does not exist. That is also why
+# there is no preStop sleep here — the API needs one to leave its Service's endpoints before it
+# stops accepting connections, and this pod has no endpoints to leave. What matters instead is
+# that Wolverine stops listening and drains in-flight messages, which is the host's own shutdown,
+# bounded by HostOptions.ShutdownTimeout in src/Worker/Program.cs.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  # One replica locally. Scaling this is the whole point of splitting the host — job capacity now
+  # moves on a signal unrelated to request rate — but an HPA cannot read queue depth natively;
+  # KEDA's postgresql scaler over a COUNT against the lane's queue table is the intended route and
+  # is out of scope for ADR 0016. The kind cluster is already the largest thing on the machine.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      # Must exceed the longest expected heavy-lane job, and it is paired with
+      # HostOptions.ShutdownTimeout in src/Worker/Program.cs — the two numbers are meaningless
+      # apart. .NET's default is 30s, which would abandon work long before Kubernetes was willing
+      # to; this without that would just waste the grace period.
+      #
+      # A SIGKILL mid-handler is not a correctness failure — the message is redelivered — but it
+      # burns a retry attempt, exactly as k8s/base/api.yaml records for the outbox.
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: worker
+          image: aiframework-worker:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          env:
+            # Double underscores. A single one binds nothing and warns nothing — the same trap
+            # root CLAUDE.md records for Cache__Enabled and ForwardedHeaders__Enabled.
+            #
+            # This one value is the host split: a pod listing no lane is publish-only. Splitting
+            # the lanes onto differently-sized Deployments later is a copy of this manifest with
+            # 'heavy' here and 'light' there, and no code change at all.
+            - name: Jobs__Queues
+              value: 'light,heavy'
+            # A job's cache eviction reaches only this pod's own L1 cache, which is empty —
+            # HybridCache is L1-only and this pod is not behind the ingress cookie affinity that
+            # makes eviction work between API pods (ADR 0010). Disabling it makes that explicit
+            # rather than subtle. ADR 0016.
+            - name: Cache__Enabled
+              value: 'false'
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            # Generous, like the API's: durable Wolverine does schema work at boot, and a slow
+            # start must not read as a crash loop.
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            periodSeconds: 10
+            # Explicit, where the other two take Kubernetes' 1s default, for the reason
+            # k8s/base/api.yaml gives: this calls AddDbContextCheck's CanConnectAsync, which goes
+            # through the EnableRetryOnFailure execution strategy like every other database
+            # access, so a down Postgres fails it after up to three retries rather than on the
+            # first attempt. ADR 0014.
+            timeoutSeconds: 5
+          # More memory than the API and, like the API, no CPU limit. Heavy jobs are the reason
+          # for the higher ceiling: memory is the one the kubelet cannot reclaim gracefully, so a
+          # limit turns a runaway job into a restart of THIS pod rather than an evicted neighbour
+          # — and crucially not into an OOM of an API pod serving requests, which is a large part
+          # of why the host was split at all. A CPU limit would only throttle work the request
+          # already guarantees a share of.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Safe because nothing here writes to disk: a Release build loads the Wolverine
+            # adapters committed under src/Worker/Internal/Generated rather than compiling any at
+            # startup. A Debug image would need a writable path for that codegen; this one does not.
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ['ALL']

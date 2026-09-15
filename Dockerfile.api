@@ -10,10 +10,16 @@ COPY src/Domain/AiFramework.Domain.csproj src/Domain/
 COPY src/Application/AiFramework.Application.csproj src/Application/
 COPY src/Infrastructure/AiFramework.Infrastructure.csproj src/Infrastructure/
 COPY src/Api/AiFramework.Api.csproj src/Api/
+COPY src/Worker/AiFramework.Worker.csproj src/Worker/
 RUN dotnet restore src/Api/AiFramework.Api.csproj
+RUN dotnet restore src/Worker/AiFramework.Worker.csproj
 
 COPY src/ src/
 RUN dotnet publish src/Api/AiFramework.Api.csproj -c Release -o /app/publish --no-restore
+# The worker, from the same build stage. Release for the same reason the API is: it is what loads
+# the pre-generated Wolverine adapters committed under src/Worker/Internal/Generated, and a Debug
+# image would compile its own at startup and diverge from what CI validates. ADR 0016.
+RUN dotnet publish src/Worker/AiFramework.Worker.csproj -c Release -o /app/publish-worker --no-restore
 
 # A self-contained migration bundle, so the EF Design package never reaches a runtime image.
 # CLAUDE.md records what that package costs when it leaks into a publish: 7.9MB to 37MB.
@@ -45,3 +51,14 @@ ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 USER $APP_UID
 ENTRYPOINT ["dotnet", "AiFramework.Api.dll"]
+
+# The job worker. Same base image as the API — it is an ASP.NET host too, serving only /health
+# and /health/ready, because Kubernetes cannot probe a process with no HTTP surface and the
+# chiseled image has no shell for an exec probe. See ADR 0016 and src/Worker/CLAUDE.md.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS worker
+WORKDIR /app
+COPY --from=build /app/publish-worker ./
+ENV ASPNETCORE_HTTP_PORTS=8080
+EXPOSE 8080
+USER $APP_UID
+ENTRYPOINT ["dotnet", "AiFramework.Worker.dll"]
