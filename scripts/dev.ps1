@@ -139,6 +139,33 @@ Invoke-Step 'Launching the API' {
     $global:LASTEXITCODE = 0
 }
 
+# The job worker, in a window of its own. The compose loop runs the same host split the cluster
+# does (ADR 0016) rather than a convenient approximation: the API here listens on no job queue, so
+# without this window an enqueued job simply sits in Postgres and nothing says so.
+#
+# It inherits the same environment as the API above — including -WithSeq's OTLP settings, which is
+# why this block sits inside the same try/finally-guarded region rather than after the cleanup:
+# a worker exporting to a different place than the API would defeat the point of having one log
+# store to correlate a job against the request that enqueued it.
+Invoke-Step 'Launching the job worker' {
+    if ($WithSeq) {
+        $env:Observability__Otlp__Enabled = 'true'
+        $env:Observability__Otlp__Endpoint = "http://localhost:$seqPort/ingest/otlp"
+    }
+    try {
+        Start-Process powershell -WorkingDirectory $repoRoot -ArgumentList @(
+            '-NoExit', '-Command', 'dotnet run --project src/Worker'
+        )
+    }
+    finally {
+        if ($WithSeq) {
+            Remove-Item Env:\Observability__Otlp__Enabled -ErrorAction SilentlyContinue
+            Remove-Item Env:\Observability__Otlp__Endpoint -ErrorAction SilentlyContinue
+        }
+    }
+    $global:LASTEXITCODE = 0
+}
+
 # A fixed pause, not a health-check poll: polling /health/ready would need retry/timeout logic
 # for a problem this small. In practice the API is answering within a few seconds, and the
 # frontend dependency check below (when it has to run `npm install`) usually eats this delay on

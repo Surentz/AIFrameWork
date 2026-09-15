@@ -255,6 +255,10 @@ builder.Host.AddWolverineEventPath(
     // writes them into this project. typeof(Program) rather than GetEntryAssembly() so that
     // WebApplicationFactory tests resolve the Api assembly and not the test host.
     typeof(Program).Assembly,
+    // The API publishes jobs and listens on no job queue — the whole of ADR 0016's split. No
+    // JobOptions is passed because there is nothing to listen on; a worker must pass one.
+    // ApiPublishesOnlyTests asserts this against the runtime's own endpoint list.
+    role: WolverineHostRole.PublishesJobs,
     // Durable Wolverine connects to Postgres while the host starts, so a host with no reachable
     // database no longer boots. Configurable so a test that deliberately runs without one
     // (HealthTests) can still start the app. Defaults to durable everywhere else.

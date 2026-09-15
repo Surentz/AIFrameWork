@@ -6,6 +6,8 @@ using FluentAssertions;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
+using Wolverine;
 using ApplicationMarker = AiFramework.Application.AssemblyMarker;
 using DomainMarker = AiFramework.Domain.AssemblyMarker;
 
@@ -151,6 +153,14 @@ public sealed class RegistrationCompletenessTests
         // construction. Only syntactic validity matters here.
         services.AddInfrastructure(
             "Host=localhost;Port=1;Database=unreachable;Username=none;Password=none");
+
+        // Supplied by UseWolverine on the HOST builder, not by AddInfrastructure — so a test that
+        // composes AddInfrastructure alone has to stand it in, the same way each host's Program.cs
+        // supplies its own ICurrentUser. OrderPlacedConfirmationHandler is the first domain event
+        // handler to reach a host-level service (IMessageBus, via IJobScheduler); without this line
+        // the test fails with "Unable to resolve service for type 'Wolverine.IMessageBus'", which
+        // is this composition boundary rather than the missing-handler trap the test guards.
+        services.AddSingleton(Substitute.For<IMessageBus>());
 
         // ValidateScopes = true and resolving from a CreateScope() (not the root provider) both
         // matter: a scoped handler resolved from a validated root provider throws for a reason

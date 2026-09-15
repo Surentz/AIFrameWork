@@ -1,0 +1,93 @@
+using AiFramework.Infrastructure.Observability;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+
+namespace AiFramework.Worker.Observability;
+
+/// <summary>
+/// The worker's OpenTelemetry pipeline. Deliberately its own composition rather than a shared one
+/// with the Api's <c>ObservabilityRegistration</c>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// What the two hosts must agree on — <see cref="ObservabilityOptions"/> and
+/// <see cref="OtlpEndpoint"/> — lives in Infrastructure and IS shared. What differs is the
+/// instrumentation, and it differs for a real reason: this host's only HTTP surface is two probe
+/// endpoints, so ASP.NET instrumentation would emit a span per kubelet probe every ten seconds
+/// and nothing else. A single "configurable" registration covering both would be a flag that only
+/// ever has one value per host.
+/// </para>
+/// <para>
+/// The tracer provider is registered UNCONDITIONALLY, even with the exporter off, for the reason
+/// the Api's own registration gives: it is what makes <c>Activity.Current</c> non-null, which is
+/// what lets a job's logs carry the TraceId of the request that enqueued it. Wolverine propagates
+/// W3C trace context on its envelopes, and <c>AddSource("Wolverine")</c> below is what collects
+/// it — without that line, trace continuity across the job boundary silently does nothing, the
+/// same trap <c>AddSource("AiFramework.Outbox")</c> records on the Api side.
+/// </para>
+/// </remarks>
+public static class WorkerObservability
+{
+    public static WebApplicationBuilder AddWorkerObservability(this WebApplicationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        var section = builder.Configuration.GetSection("Observability");
+        builder.Services.Configure<ObservabilityOptions>(section);
+
+        var options = section.Get<ObservabilityOptions>() ?? new ObservabilityOptions();
+
+        // Distinguishes replicas of the same worker in the log store. Unset outside a container,
+        // in which case AddService leaves the SDK to generate one.
+        var instanceId = Environment.GetEnvironmentVariable("HOSTNAME");
+
+        // IncludeScopes is load-bearing: it carries Behaviors.LoggedAsync's per-dispatch scope
+        // onto every record a handler emits from inside it, which is how a job's own queries are
+        // attributable in the log store.
+        builder.Logging.AddOpenTelemetry(logging =>
+        {
+            logging.IncludeScopes = true;
+            logging.IncludeFormattedMessage = true;
+
+            if (options.Otlp.Enabled)
+            {
+                logging.AddOtlpExporter(exporter =>
+                {
+                    exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
+                    exporter.Endpoint = OtlpEndpoint.Build(options.Otlp.Endpoint, OtlpEndpoint.LogsPath);
+                });
+            }
+        });
+
+        builder.Services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService(
+                serviceName: options.ServiceName,
+                serviceInstanceId: string.IsNullOrWhiteSpace(instanceId) ? null : instanceId))
+            .WithTracing(tracing => ConfigureTracing(tracing, options));
+
+        return builder;
+    }
+
+    /// <summary>Split out of the method above purely to stay under MA0051's line limit.</summary>
+    private static void ConfigureTracing(TracerProviderBuilder tracing, ObservabilityOptions options)
+    {
+        // No AddAspNetCoreInstrumentation: see this class's remarks. Outbound HTTP is here
+        // because a job legitimately calls out (the mail provider that replaces
+        // LoggingOrderNotifier will), and that is exactly what a trace should show.
+        tracing.AddHttpClientInstrumentation()
+            .AddSource("Wolverine")
+            .AddSource("AiFramework.Outbox")
+            .AddInfrastructureTracing();
+
+        if (options.Otlp.Enabled && options.Otlp.Traces)
+        {
+            tracing.AddOtlpExporter(exporter =>
+            {
+                exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
+                exporter.Endpoint = OtlpEndpoint.Build(options.Otlp.Endpoint, OtlpEndpoint.TracesPath);
+            });
+        }
+    }
+}

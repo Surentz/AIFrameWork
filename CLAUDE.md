@@ -40,6 +40,7 @@ this floor.
 | `src/Application` | Use cases, ports, `Result<T>`, validators |
 | `src/Infrastructure` | EF Core, repositories, external clients |
 | `src/Api` | Controllers, DTOs, exception handling, composition root |
+| `src/Worker` | The job host: composition, health endpoints, its own generated adapters |
 | `frontend` | Vite + React workspace |
 | `tests` | Test projects, one per layer |
 
@@ -48,16 +49,24 @@ this floor.
 Dependencies point inward. This is enforced by `.claude/hooks/dependency-rule.ps1`,
 which blocks the edit rather than warning about it.
 
-| From ↓ / To → | Domain | Application | Infrastructure | Api |
-|---|---|---|---|---|
-| **Domain** | — | ✗ | ✗ | ✗ |
-| **Application** | ✓ | — | ✗ | ✗ |
-| **Infrastructure** | ✓ | ✓ | — | ✗ |
-| **Api** | ✓ | ✓ | ✓ DI only | — |
+| From ↓ / To → | Domain | Application | Infrastructure | Api | Worker |
+|---|---|---|---|---|---|
+| **Domain** | — | ✗ | ✗ | ✗ | ✗ |
+| **Application** | ✓ | — | ✗ | ✗ | ✗ |
+| **Infrastructure** | ✓ | ✓ | — | ✗ | ✗ |
+| **Api** | ✓ | ✓ | ✓ DI only | — | ✗ |
+| **Worker** | ✓ | ✓ | ✓ DI only | ✗ | — |
 
-> The `Api → Infrastructure` cell is the one row the hook does **not** enforce: nothing
-> distinguishes a `services.AddScoped<>()` registration from a controller reaching into a
-> repository, so "DI only" is carried by review and `dotnet-reviewer`. Every other cell blocks.
+> The `Api → Infrastructure` and `Worker → Infrastructure` cells are the two rows the hook does
+> **not** enforce: nothing distinguishes a `services.AddScoped<>()` registration from a controller
+> reaching into a repository, so "DI only" is carried by review and `dotnet-reviewer`. Every other
+> cell blocks.
+
+> **`Api` and `Worker` are siblings, not layers** — two composition roots over the same three
+> inner layers (ADR 0016). Neither may reference the other. `Worker → Api` is blocked for a
+> concrete reason beyond tidiness: it is exactly what would let the two share one Wolverine
+> generated-code tree, and keeping them separate is what makes each host's `codegen write`
+> independently correct.
 
 `Domain` additionally may not reference `Microsoft.EntityFrameworkCore`,
 `Microsoft.AspNetCore`, `Microsoft.Extensions.DependencyInjection`, `System.Data`,
@@ -94,6 +103,7 @@ or `System.ComponentModel.DataAnnotations`.
 | `/react-feature <name>` | Scaffold a React feature |
 | `/verify` | Build, test, and lint both stacks |
 | `/adr <title>` | Record an architecture decision |
+| `/job <name>` | Add a background job: message, handler, registration, tests, regenerated adapters |
 
 ## Running locally
 
@@ -272,17 +282,30 @@ Wolverine builds its handler adapters with Roslyn, and **Release ships without t
 it costs 33MB (measured: a Release publish is 17MB without it, 50MB with). Release instead loads
 adapters generated ahead of time and committed under `src/Api/Internal/Generated`.
 
-**After adding or changing a Wolverine handler, regenerate them:**
+**There are TWO generated trees** — `src/Api/Internal/Generated` and
+`src/Worker/Internal/Generated`. `TypeLoadMode.Static` resolves pre-built types out of each host's
+own `opts.ApplicationAssembly`, and the worker cannot share the Api's: that needs a `Worker → Api`
+reference the dependency rule forbids. ADR 0016.
+
+**After adding or changing a Wolverine handler, regenerate the tree(s) it belongs to:**
 
 ```bash
-dotnet run --project src/Api -- codegen write
+dotnet run --project src/Api -- codegen write      # event-path handlers
+dotnet run --project src/Worker -- codegen write   # job handlers, and JobUserMiddleware
 ```
 
 Then commit the result. Debug does not need this — it still compiles adapters at startup — which
 is exactly the trap: stale generated code leaves Debug green and the build succeeding, and breaks
 only in Release, at startup. `WolverineCodegenTests` exists to catch that in the Debug suite; if
-it fails, the fix is the command above. CI additionally re-runs `codegen write` and fails on
-any diff, catching generated code that still loads but has drifted.
+it fails, the fix is the command above; `WorkerCodegenTests` is its counterpart for the worker's
+tree. CI additionally re-runs **both** `codegen write` commands and fails on any diff, catching
+generated code that still loads but has drifted.
+
+Two codegen failures compile perfectly well and surface only when you run the command, both found
+that way while building the job framework: JasperFx will not upcast a concrete message to an
+interface for a middleware parameter, and it refuses service location under Wolverine 6's
+`NotAllowed` default — which a job handler injecting a dispatcher triggers, since ADR 0003's
+reflection-free dispatchers take `IServiceProvider`. See `src/Worker/CLAUDE.md`.
 
 `Program.cs` therefore routes to `RunJasperFxCommands(args)` when args are present, and to plain
 `RunAsync()` when they are not — which is what makes `codegen write` reachable without paying for
@@ -401,6 +424,81 @@ No test waits for a TTL to lapse; `HybridCache` expires on its own clock, which 
 reach. The only TTL arithmetic is `CacheDuration.Clamp`, tested directly.
 
 See ADR 0009.
+
+## Jobs
+
+**Jobs run in the worker. The API listens to nothing.** That is the whole rule, and it is
+enforced rather than intended: `ApiPublishesOnlyTests` asserts against the runtime's own endpoint
+list that no `jobs_*` queue has a listener on the API host, and `JobDeliveryTests` asserts the
+mirror image on the worker. The API registers *routing* for every lane — publishing is how a job
+starts — and never `ListenToPostgresqlQueue`.
+
+The reason is the API's own health: a job sharing the API process competes for the thread pool,
+the GC heap under a 768Mi limit, and the Npgsql pool, and every API rollout would kill work
+in flight. See ADR 0016.
+
+A job is a message with a lane, nothing more:
+
+```csharp
+public sealed record RebuildOrderReport(Guid OwnerId) : IUserScopedJob
+{
+    public static JobLane Lane => JobLane.Heavy;
+}
+```
+
+| Lane | Queue | For | Parallelism per pod |
+|---|---|---|---|
+| `Light` | `jobs_light` | Milliseconds to seconds, a round trip or two, negligible CPU | 8 |
+| `Heavy` | `jobs_heavy` | Seconds to minutes, CPU- or memory-bound, or fanning over a large result set | 2 |
+
+The lane picks the queue; `Jobs__Queues` picks which host listens. Both lanes run on one worker
+today — splitting them onto differently-sized Deployments later is a manifest copy and no code
+change. Two queues earn their place immediately anyway: without them one thirty-second report
+blocks a queue of one-second emails behind it.
+
+Enqueue through `IJobScheduler` (`src/Application/Abstractions/Jobs.cs`); Wolverine never appears
+in `Application`. Every job type must be registered in
+`src/Infrastructure/Jobs/JobRegistration.cs` — explicit and greppable, mirroring `AddMessaging()`,
+with `JobRegistrationTests` failing the build on an omission.
+
+**Five things that will cost you time:**
+
+- **An enqueue is NOT transactional with the caller's work.** `EnqueueAsync` from a command
+  handler publishes immediately, so a command whose transaction then fails still runs the job.
+  **For a job that must not be lost, raise a domain event and enqueue from its handler** —
+  `DomainEventsInterceptor` writes the outbox row in the same `SaveChangesAsync` as the aggregate,
+  so the job exists if and only if the command committed. `OrderPlacedConfirmationHandler` is the
+  reference. This is measured, not preference: Wolverine's own EF Core outbox was the intended
+  mechanism and publishing through it *enrolls the DbContext*, opening a transaction that
+  `UnitOfWork`'s plain `SaveChangesAsync` then cannot commit. `JobEnqueueMechanismTests` pins it.
+- **There are TWO generated-code trees now.** `dotnet run --project src/Api -- codegen write`
+  *and* `dotnet run --project src/Worker -- codegen write`. Debug stays green with either one
+  stale; only Release breaks, at startup. CI checks both.
+- **A job cannot evict the API's cache.** `HybridCache` is L1-only, and the worker is not behind
+  the ingress cookie affinity that makes eviction work between API pods at all (ADR 0010). The
+  worker therefore runs with `Cache__Enabled=false` so this is explicit rather than subtle — the
+  TTL, not the eviction, is what bounds how long a job's write stays invisible.
+- **There is no `HttpContext` in the worker.** A job that touches user-owned data implements
+  `IUserScopedJob` and carries the owner; `JobUserMiddleware` populates `ICurrentUser` from it
+  before the handler runs. Forgetting is not a leak — ADR 0007 puts ownership in the query, so the
+  job reads nothing — but it is a job that silently never works.
+- **`ICurrentUser` is registered per host, never in `AddInfrastructure`.** The API binds it to the
+  cookie's claims, the worker to the job. Binding it inside `AddJobs` replaces the API's, because
+  the last registration wins, and every authenticated request then reports no caller.
+
+Retry and dead-lettering are Wolverine policy (`OnAnyException().ScheduleRetry(...).Then
+.MoveToErrorQueue()`), never hand-written backoff — `ScheduleRetry` rather than
+`RetryWithCooldown` on the heavy lane, because a cooldown holds a listener slot for its whole
+delay and would consume half a two-slot lane. Recurring jobs are **self-rescheduling durable
+messages**: the handler schedules its own next occurrence, so exactly one is in flight by
+construction and no distributed lock is needed across replicas. No Quartz, no timer
+`IHostedService`.
+
+**The transport stays PostgreSQL.** RabbitMQ is deferred with named triggers — worker replicas
+sustained above four, queue polling visible in database load, a job needing priority the transport
+cannot express, or a consumer outside this solution. It would not remove Postgres from the path.
+
+Use `/job <Name>` to add one. See `src/Worker/CLAUDE.md` and ADR 0016.
 
 ## Logging
 

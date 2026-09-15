@@ -85,6 +85,10 @@ if (-not $SkipBuild) {
         docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target migrator `
             -t aiframework-migrator:local $repoRoot
     }
+    Invoke-Step 'Building the worker image' {
+        docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target worker `
+            -t aiframework-worker:local $repoRoot
+    }
     Invoke-Step 'Building the web image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.web') `
             -t aiframework-web:local $repoRoot
@@ -98,7 +102,7 @@ if (-not $SkipBuild) {
 # and costs only a few seconds, which is cheap insurance against that dead-cluster case.
 Invoke-Step 'Loading images into kind' {
     kind load docker-image aiframework-api:local aiframework-migrator:local `
-        aiframework-web:local --name $cluster
+        aiframework-worker:local aiframework-web:local --name $cluster
 }
 
 $overlay = Join-Path $repoRoot $(
@@ -207,10 +211,12 @@ Invoke-Step 'Phase C: applying deployments and ingress' {
 # first deploy that means it supersedes the one phase C created seconds ago, and the practical
 # cost is near nil only because no pod of that ReplicaSet has become ready yet.
 Invoke-Step 'Rolling out the application' {
-    kubectl --context $context -n $namespace rollout restart deployment/api deployment/web
+    kubectl --context $context -n $namespace rollout restart deployment/api deployment/worker deployment/web
     Assert-LastExitCode 'kubectl rollout restart'
     kubectl --context $context -n $namespace rollout status deployment/api --timeout=300s
     Assert-LastExitCode 'kubectl rollout status (api)'
+    kubectl --context $context -n $namespace rollout status deployment/worker --timeout=300s
+    Assert-LastExitCode 'kubectl rollout status (worker)'
     kubectl --context $context -n $namespace rollout status deployment/web --timeout=300s
     Assert-LastExitCode 'kubectl rollout status (web)'
 

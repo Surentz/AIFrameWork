@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using AiFramework.Infrastructure.Jobs;
 using JasperFx;
 using JasperFx.CodeGeneration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,10 +12,35 @@ using Wolverine.Postgresql;
 namespace AiFramework.Infrastructure.EventPath;
 
 /// <summary>
-/// A spike, per ADR 0005: Wolverine's durable event path running ALONGSIDE the hand-built
-/// outbox in <c>Infrastructure/Outbox</c>, not replacing it. Nothing in the existing path
-/// calls into this, and removing this folder plus the one line in Program.cs reverts it.
+/// What a host does with jobs. <b>This one value is the entire API/worker split</b> — same
+/// assembly, same handlers, same AddInfrastructure; only whether <c>ListenToPostgresqlQueue</c>
+/// is ever called differs. See ADR 0016.
 /// </summary>
+public enum WolverineHostRole
+{
+    /// <summary>
+    /// Publishes jobs and listens on no job queue. The API. Routing rules are still registered —
+    /// publishing is how a job starts — but no job handler is discovered here, so none can run in
+    /// a process that is serving requests.
+    /// </summary>
+    PublishesJobs,
+
+    /// <summary>
+    /// Listens on the lanes named in <c>Jobs:Queues</c>, and runs the job handlers. The worker.
+    /// </summary>
+    ProcessesJobs,
+}
+
+/// <summary>
+/// Wolverine's durable event path, per ADR 0005, running ALONGSIDE the hand-built outbox in
+/// <c>Infrastructure/Outbox</c> rather than replacing it — nothing in the existing path calls into
+/// this.
+/// </summary>
+/// <remarks>
+/// No longer the removable spike ADR 0005 describes: ADR 0016 put the job framework on this same
+/// runtime, so <see cref="WolverineHostRole"/> above and <c>JobRegistration</c> now depend on it.
+/// Deleting this folder would take the worker with it.
+/// </remarks>
 public static class WolverineEventPath
 {
     /// <summary>
@@ -62,10 +88,22 @@ public static class WolverineEventPath
     /// container. Discovered by that test failing with "Failed to connect to 127.0.0.1:5432"
     /// the moment Wolverine was wired in. Recorded in ADR 0005 as a consequence.
     /// </param>
+    /// <param name="role">
+    /// Whether this host merely publishes jobs (the API) or also consumes them (the worker).
+    /// See <see cref="WolverineHostRole"/> — this is the whole of the split.
+    /// </param>
+    /// <param name="jobOptions">
+    /// Which lanes to listen on and at what parallelism. Passed in rather than resolved, the same
+    /// shape CacheOptions and ResilienceOptions already use: each host reads its own configuration
+    /// and hands the values to Infrastructure. Ignored entirely when
+    /// <paramref name="role"/> is <see cref="WolverineHostRole.PublishesJobs"/>.
+    /// </param>
     public static IHostBuilder AddWolverineEventPath(
         this IHostBuilder host,
         string connectionString,
         Assembly applicationAssembly,
+        WolverineHostRole role,
+        JobOptions? jobOptions = null,
         bool durable = true,
         bool usePreGeneratedCode =
 #if DEBUG
@@ -80,14 +118,23 @@ public static class WolverineEventPath
 
         return host.UseWolverine(opts =>
         {
-            if (durable)
+            // Handler DISCOVERY, unconditionally — it has nothing to do with the transport, and
+            // separating it from the transport wiring below is load-bearing for two reasons:
+            //
+            //  - `codegen write` runs with Wolverine__Durable=false, because generating code must
+            //    not need a database. Discovery inside the durable branch meant the worker's
+            //    generated tree came out with NO job adapters at all: it wrote only
+            //    OrderPlacedNotificationHandler and Release would then fail at startup with
+            //    MissingPreBuiltTypesException on the first job. Found by reading what the
+            //    command actually wrote, not by reasoning.
+            //  - A MediatorOnly host with a discovered handler is harmless; one with a
+            //    database-backed ROUTE is not (see below).
+            if (role is WolverineHostRole.ProcessesJobs)
             {
-                ConfigureDurability(opts, connectionString);
+                JobRegistration.IncludeJobHandlers(opts);
             }
-            else
-            {
-                opts.Durability.Mode = DurabilityMode.MediatorOnly;
-            }
+
+            ConfigureTransport(opts, connectionString, role, jobOptions, durable);
 
             // Static rather than Auto deliberately: Auto silently falls back to generating code
             // at runtime, which in Release means failing later and less clearly. Static throws
@@ -113,6 +160,79 @@ public static class WolverineEventPath
                 .DisableConventionalDiscovery()
                 .IncludeType<OrderPlacedNotificationHandler>();
         });
+    }
+
+    /// <summary>
+    /// Durability, and the transport wiring that depends on it. Extracted so the UseWolverine
+    /// lambda stays under Meziantou's MA0051 length limit — the rule is satisfied, not suppressed.
+    /// </summary>
+    private static void ConfigureTransport(
+        WolverineOptions opts,
+        string connectionString,
+        WolverineHostRole role,
+        JobOptions? jobOptions,
+        bool durable)
+    {
+        if (!durable)
+        {
+            opts.Durability.Mode = DurabilityMode.MediatorOnly;
+            return;
+        }
+
+        ConfigureDurability(opts, connectionString);
+
+        // AFTER ConfigureDurability, and only when durable. Both halves matter, and both were
+        // found by failing tests rather than reasoned out:
+        //
+        //  - Order: job routing is expressed as ToPostgresqlQueue, which needs the Postgres
+        //    transport that PersistMessagesWithPostgresql registers. Configured first, it has
+        //    nothing to attach to.
+        //  - Condition: MediatorOnly has no transport at all, by definition — that mode exists
+        //    precisely so a host can start with no reachable database. Registering a
+        //    database-backed route there reintroduces the startup connection the mode is for
+        //    avoiding, which is what took HealthTests, OpenApiDocumentTests, ForwardedHeadersTests
+        //    and AuthRateLimitTests to ~19s timeouts in one step. A MediatorOnly host cannot
+        //    publish a job anyway; nothing is lost.
+        ConfigureJobs(opts, role, jobOptions);
+    }
+
+    /// <summary>
+    /// The job half of the configuration, and the one place the API and the worker differ.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Routing is registered on every host; listening is not.</b> The API needs
+    /// <c>MapJobs</c> so that <c>IJobScheduler.EnqueueAsync</c> knows which queue a job belongs
+    /// on, and it must never reach <c>ListenForJobs</c> or <c>IncludeJobHandlers</c> — those two
+    /// calls are what would put job work on a process that is serving requests.
+    /// </para>
+    /// <para>
+    /// <c>ApiPublishesOnlyTests</c> asserts the API side of this against the runtime's own
+    /// endpoint list, so the rule is enforced rather than merely intended.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureJobs(
+        WolverineOptions opts, WolverineHostRole role, JobOptions? jobOptions)
+    {
+        JobRegistration.MapJobs(opts);
+
+        if (role is not WolverineHostRole.ProcessesJobs)
+        {
+            return;
+        }
+
+        // Discovery already happened above, outside the durable branch — see the comment there.
+        // Error policy lands here because MoveToErrorQueue needs the envelope storage that only
+        // the durable branch registers.
+        JobRegistration.ConfigureJobErrorHandling(opts);
+
+        // Null here is a wiring mistake, not a default to paper over: a worker with no JobOptions
+        // would start, listen to nothing, and look perfectly healthy while its queues filled.
+        JobRegistration.ListenForJobs(
+            opts,
+            jobOptions ?? throw new ArgumentNullException(
+                nameof(jobOptions),
+                $"A host in the {nameof(WolverineHostRole.ProcessesJobs)} role must be given JobOptions."));
     }
 
     /// <summary>

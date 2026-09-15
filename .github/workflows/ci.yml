@@ -114,6 +114,24 @@ jobs:
             exit 1
           fi
 
+      # TWO generated trees, not one. Release resolves pre-built handler types out of
+      # opts.ApplicationAssembly, and the worker's is its own — it cannot share the Api's,
+      # because that would need a Worker -> Api reference the dependency rule forbids. A job
+      # handler added without regenerating THIS tree leaves Debug green and breaks the worker at
+      # startup in Release, which is the same trap the Api half of this job exists for. ADR 0016.
+      - name: Regenerate the worker's Wolverine handler adapters
+        env:
+          ConnectionStrings__Default: 'Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder'
+          Wolverine__Durable: 'false'
+        run: dotnet run --project src/Worker --no-build -- codegen write
+
+      - name: Fail if the worker's committed generated code is stale
+        run: |
+          if ! git diff --exit-code -- src/Worker/Internal; then
+            echo "::error file=src/Worker/Internal::Generated Wolverine code for the worker is out of date. Run 'dotnet run --project src/Worker -- codegen write' and commit the result."
+            exit 1
+          fi
+
   contract:
     # The same guard as the `codegen` job above, for the other pair of committed generated
     # artifacts. A contract change that regenerates neither leaves the React app compiling

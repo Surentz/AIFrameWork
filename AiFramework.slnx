@@ -9,12 +9,18 @@
   <Folder Name="/src/Domain/">
     <Project Path="src/Domain/AiFramework.Domain.csproj" />
   </Folder>
+  <Folder Name="/src/Worker/">
+    <Project Path="src/Worker/AiFramework.Worker.csproj" />
+  </Folder>
   <Folder Name="/src/Infrastructure/">
     <Project Path="src/Infrastructure/AiFramework.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/" />
   <Folder Name="/tests/Api.IntegrationTests/">
     <Project Path="tests/Api.IntegrationTests/AiFramework.Api.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Worker.IntegrationTests/">
+    <Project Path="tests/Worker.IntegrationTests/AiFramework.Worker.IntegrationTests.csproj" />
   </Folder>
   <Folder Name="/tests/Application.Tests/">
     <Project Path="tests/Application.Tests/AiFramework.Application.Tests.csproj" />

@@ -208,3 +208,24 @@ a single-aggregate trial via EF Core projections, as described above.
 **KurrentDB (formerly EventStoreDB).** A purpose-built event store. Rejected on both licence
 (ESLv2, not OSI-approved, from 24.10) and infrastructure — it means a second database beside
 PostgreSQL, which is a large price for a capability not yet needed.
+
+---
+
+> **Superseded in part by [ADR 0016](0016-jobs-in-a-worker-host.md) (2026-09-15).** Jobs now ride
+> this same Wolverine runtime, on the PostgreSQL transport this ADR chose, in a second host
+> (`src/Worker`). Three consequences land back on this decision:
+>
+> - **The codegen tax is paid twice.** "A new build step — now built, and it cost more than this
+>   ADR predicted" now has a second instance: `src/Worker/Internal/Generated`, its own
+>   `codegen write`, its own staleness test, its own CI check. The worker cannot share this one,
+>   because that needs a `Worker → Api` reference the dependency rule forbids.
+> - **The transport claim held.** This ADR said moving to RabbitMQ "is a registration change
+>   rather than a redesign of the event path". That was verified against the installed 6.33.0
+>   package while designing ADR 0016 — `UseRabbitMq()` plus `ToRabbitQueue` — and RabbitMQ is
+>   deferred there with four named triggers rather than on judgement.
+> - **"An unused half" is now smaller.** Wolverine's mediator still goes deliberately unused, but
+>   its transport, scheduling and error policies are all load-bearing.
+>
+> The hand-built outbox in `Infrastructure/Outbox` still runs in the API, so "the existing outbox
+> is not deleted on adoption" still holds. Moving those pumps to the worker is the open follow-on,
+> and it is what would finally retire the two-paths-side-by-side arrangement.

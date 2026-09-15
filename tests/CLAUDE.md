@@ -8,6 +8,7 @@ One project per layer, mirroring `src/`.
 | `Application.Tests` | Use-case handlers | Ports substituted with NSubstitute |
 | `Infrastructure.Tests` | Repositories, EF mapping | Real database via Testcontainers |
 | `Api.IntegrationTests` | HTTP contract | `WebApplicationFactory<Program>` |
+| `Worker.IntegrationTests` | Job delivery, lanes, scoping | The real worker host + Testcontainers |
 
 ## Stack
 
@@ -78,3 +79,29 @@ hop (`ChannelWriter`/`ChannelReader`), backpressure, or `WorkerCount` parallelis
   rather than treating it as vacuously true. Assert on the disallowed subset
   instead (`disallowed.Should().BeEmpty()`), so the check is correct whether or
   not the collection is empty.
+
+## Worker tests
+
+`Worker.IntegrationTests` runs the real job host against Testcontainers Postgres, joining one
+collection (`WorkerFactoryCollection`) exactly as `ApiFactoryCollection` and `PostgresCollection`
+do — one container for the whole project, never one per class.
+
+Unlike `ApiFactory`, this factory does **not** strip its background machinery out: the Wolverine
+listeners are the thing under test, so both lanes stay on.
+
+Two rules specific to this project, both learned from failing tests rather than reasoned out:
+
+- **`IncludeExternalTransports()` is required on a tracking session.** A job goes out to a
+  Postgres queue and comes back in through the host's own listener, and a tracking session ignores
+  external transports by default — without it the session sees the message "Sent", stops waiting,
+  and every delivery assertion fails with "No messages of type … were received".
+- **Never use a tracking session to prove something did *not* happen.** `ExecuteAndWaitAsync`
+  waits for a message to be handled, so a message that must never be handled only ever produces a
+  timeout — an absence of evidence, bought at the price of the full timeout. Assert on the stored
+  envelope instead. A scheduled job waits in `wolverine_queues.wolverine_queue_<lane>_scheduled` —
+  the queue transport's **own** schema, not the `wolverine` one, whose tables are all empty at
+  that point.
+
+`ApiPublishesOnlyTests` (in `Api.IntegrationTests`) and `JobDeliveryTests` are two halves of one
+rule: the API listens on no job queue, the worker listens on every lane. Neither is decoration —
+ADR 0016's whole design rests on that split being true, and nothing else would catch it changing.

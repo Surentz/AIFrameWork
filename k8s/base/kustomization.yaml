@@ -6,5 +6,6 @@ resources:
   - postgres.yaml
   - migrate-job.yaml
   - api.yaml
+  - worker.yaml
   - web.yaml
   - ingress.yaml
