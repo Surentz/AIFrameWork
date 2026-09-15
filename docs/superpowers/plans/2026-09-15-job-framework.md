@@ -396,7 +396,25 @@ what do I regenerate, and what can it not do" without opening another file.
 
 ---
 
-## Task 11 — Finish
+## Task 11 — Finish ✅ DONE (2026-09-15)
+
+> **Verified, with the evidence:**
+> - `dotnet build` clean in **both** Debug and Release.
+> - **528 tests pass** across five projects: Domain 83, Application 120, Infrastructure 192,
+>   Api.IntegrationTests 128, Worker.IntegrationTests 5. Counts confirmed via TRX where the
+>   console summary disagreed under parallel execution.
+> - **51/51 hook tests**, including the two new Worker fixtures in both directions.
+> - Frontend untouched and still green: lint clean, build clean, 63 tests.
+> - `openapi/AiFramework.Api.json` **unchanged** — nothing leaked into the API surface.
+> - Both generated trees regenerate to no diff.
+> - **The full stack deploys to kind**: worker 1/1 Running, 0 restarts, listening on
+>   `postgresql://jobs_light/` and `postgresql://jobs_heavy/`; the API listening on **zero** job
+>   queues, which is ADR 0016's rule holding in a real cluster rather than only in a test.
+> - **`deploy/e2e-k8s.ps1`: 11/11 Playwright tests pass against the live cluster** with the
+>   worker deployed — the gate that exercises durable Wolverine, caching on, two API replicas and
+>   the real rate limit. Adding a third Wolverine node to the cluster disturbed none of it.
+> - `dotnet-reviewer` run over the full diff; seven findings acted on, including a completeness
+>   test that was documented but never written and two real bugs. See the `fix(jobs):` commit.
 
 - [x] `/verify` — both stacks, both configurations.
 - [x] `dotnet test -c Release` explicitly. Release is the one that proves both generated trees
