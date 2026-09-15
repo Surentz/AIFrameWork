@@ -109,8 +109,15 @@ retry attempt, the same cost `k8s/base/api.yaml` records for the outbox.
 
 ```bash
 dotnet run --project src/Worker          # port 5235, alongside the API's 5234
+./scripts/worker.ps1                      # the same, plus the Docker/Postgres/port checks
 ./scripts/dev.ps1                        # starts Postgres, the API, this, and Vite
 ```
+
+`scripts/worker.ps1` exists for the case that comes up on its own: **restarting only the worker**,
+without disturbing an API and a Vite server that are working fine. `codegen write` requires that
+restart before new adapters take effect, so it is routine rather than exotic. It runs in the
+foreground — one process is easier to watch than to hunt for — and is option 4 in
+`local-run/control-panel.bat` for anyone who would rather not open a terminal.
 
 `Properties/launchSettings.json` sets `ASPNETCORE_ENVIRONMENT=Development`, without which
 `appsettings.Development.json` never loads and the startup guard throws on an empty connection

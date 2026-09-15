@@ -110,7 +110,12 @@ or `System.ComponentModel.DataAnnotations`.
 ```powershell
 ./scripts/dev.ps1                                            # all of the below, in three windows
 ./scripts/dev.ps1 -WithSeq                                   # same, plus Seq at localhost:55341
+./scripts/worker.ps1                                         # just the job worker, in this window
 ```
+
+The three windows are the API (5234), the **job worker** (5235) and Vite (5173). `worker.ps1` is
+for restarting only the worker — which `dotnet run --project src/Worker -- codegen write` requires
+before new adapters take effect, and which is otherwise a stop-everything-and-start-again.
 
 `-WithSeq` starts `docker-compose.yml`'s `observability` profile alongside Postgres and points
 the launched API at it (`Observability__Otlp__Enabled`/`__Endpoint`, set on the API's own
@@ -253,9 +258,10 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Menu option | Runs |
 |---|---|
 | Install/check prerequisites | `scripts/install-prereqs.ps1` — see below |
-| Start dev loop | `scripts/dev.ps1` — the plain local dev loop |
+| Start dev loop | `scripts/dev.ps1` — the plain local dev loop: Postgres, API, **job worker**, Vite |
 | Start dev loop + Seq | `scripts/dev.ps1 -WithSeq` — same, plus Seq at `localhost:55341` |
-| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/Vite ports, tears down the database (and Seq, if it was started) |
+| Start job worker only | `scripts/worker.ps1` — restarts just the worker, leaving a working API and Vite alone. Runs in the foreground, so you watch its log; `codegen write` needs a worker restart to take effect |
+| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/worker/Vite ports, tears down the database (and Seq, if it was started) |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
 | Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses port 5234 |

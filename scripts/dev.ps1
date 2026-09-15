@@ -37,6 +37,10 @@ $seqPort = if ($env:SEQ_PORT) { $env:SEQ_PORT } else { '55341' }
 # frontend/vite.config.ts. (API_PORT moves where Vite *proxies to*, not where the API listens,
 # so it is deliberately not consulted here.)
 $apiPort = 5234
+# From src/Worker/Properties/launchSettings.json. Checked below like the other two: the worker
+# binds it for its health probes, and a port clash otherwise surfaces as a Kestrel error in a
+# spawned window nobody is looking at, with the rest of the stack starting normally around it.
+$workerPort = 5235
 $webPort = 5173
 
 function Invoke-Step {
@@ -70,6 +74,7 @@ Invoke-Step 'Checking Docker is running' {
 
 Invoke-Step 'Checking the ports are free' {
     Assert-PortFree -Port $apiPort -Purpose 'API'
+    Assert-PortFree -Port $workerPort -Purpose 'job worker'
     Assert-PortFree -Port $webPort -Purpose 'Vite dev server'
     $global:LASTEXITCODE = 0
 }
