@@ -4,8 +4,8 @@ namespace AiFramework.Infrastructure.Jobs.Scheduling;
 
 /// <summary>
 /// Everything about a schedule that does not need a running scheduler: keys, the effective cron,
-/// and cron validation. Kept apart from the (not-yet-added) scheduler-synchronizing component so
-/// it is testable with no host and no database.
+/// and cron validation. Kept apart from <see cref="ScheduleSynchronizer"/> so it is testable with
+/// no host and no database.
 /// </summary>
 public static class JobSchedules
 {
