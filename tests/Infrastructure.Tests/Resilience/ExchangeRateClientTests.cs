@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -32,10 +33,22 @@ namespace AiFramework.Infrastructure.Tests.Resilience;
 /// </remarks>
 public sealed class ExchangeRateClientTests
 {
-    // 5s steps, 400 iterations: up to ~33 simulated minutes, comfortably past anything any test
-    // below asks for, while costing no real time at all between steps.
-    private static readonly TimeSpan AdvanceStep = TimeSpan.FromSeconds(5);
-    private const int MaxAdvanceIterations = 400;
+    // 1s steps, each followed by a real 1ms pause: the default backoff (~2s, 4s, 8s with jitter)
+    // takes a dozen or so steps, well under a second of real time.
+    private static readonly TimeSpan AdvanceStep = TimeSpan.FromSeconds(1);
+
+    // A REAL-time budget, not an iteration count. An iteration cap is what flaked in CI (run
+    // 35036736950, Release only): the retries resume on other threads, the loop does not wait
+    // for them, and on a busy runner 400 iterations were spent in 93ms while the second attempt
+    // was still queued. Time spent waiting for the pipeline must not count against the budget.
+    private static readonly TimeSpan RealTimeBudget = TimeSpan.FromSeconds(30);
+
+    // Polly's ceiling for a timeout. The loop keeps advancing whether or not the pipeline has
+    // caught up, so under a lagging runner the fake clock can run ahead of the retries - and a
+    // 30s total timeout would then fire first, failing the call with fewer attempts than the
+    // test asserts. At one step per real millisecond or more, the 30s budget above cannot reach
+    // 24 simulated hours. No test here is about the total timeout.
+    private static readonly TimeSpan UnreachableTotalTimeout = TimeSpan.FromHours(24);
 
     private static (IExchangeRateProvider Provider, StubHttpMessageHandler Stub, FakeTimeProvider Clock) Build(
         Func<HttpRequestMessage, HttpResponseMessage> respond,
@@ -48,6 +61,7 @@ public sealed class ExchangeRateClientTests
         services.AddLogging();
         services.AddSingleton<TimeProvider>(clock);
         services.AddResilience();
+        services.Configure<ResilienceOptions>(o => o.TotalRequestTimeout = UnreachableTotalTimeout);
         if (configure is not null)
         {
             services.Configure(configure);
@@ -70,31 +84,31 @@ public sealed class ExchangeRateClientTests
     /// Runs <paramref name="task"/> to completion by advancing <paramref name="clock"/> in fixed
     /// steps rather than awaiting it directly, which would hang forever against a
     /// <see cref="FakeTimeProvider"/> that nothing is advancing. Throws, rather than awaiting an
-    /// incomplete task at the end, so a scenario that genuinely never completes fails fast with a
-    /// clear message instead of hanging the test run.
+    /// incomplete task at the end, so a scenario that genuinely never completes fails with a
+    /// clear message after <see cref="RealTimeBudget"/> instead of hanging the test run.
     /// </summary>
     private static async Task<T> AdvanceUntilCompleteAsync<T>(FakeTimeProvider clock, Task<T> task)
     {
-        // await Task.Yield() between advances, not a tight synchronous loop: a bare console app
-        // (used to isolate this) completes with a synchronous loop alone, but under xUnit's test
-        // execution context the timer callback's continuation is POSTED rather than run inline,
-        // and nothing pumps it back to running until something actually yields - so a
-        // synchronous loop advances the clock correctly but the awaited task never observes it,
-        // and hangs forever. Task.Yield introduces no real delay of its own; it only gives that
-        // context a turn to run what Advance() already queued.
-        var iterations = 0;
-        while (!task.IsCompleted && iterations < MaxAdvanceIterations)
+        // Yield between advances, not a tight synchronous loop: a bare console app (used to
+        // isolate this) completes with a synchronous loop alone, but under xUnit's test execution
+        // context the timer callback's continuation is POSTED rather than run inline, and nothing
+        // pumps it back to running until something actually yields - so a synchronous loop
+        // advances the clock correctly but the awaited task never observes it, and hangs
+        // forever. A real 1ms Task.Delay rather than Task.Yield: a yield gives the posted
+        // continuation a turn only if a thread is free to take it, and on a busy runner it is
+        // not; a delay hands the thread back to the pool for real.
+        var deadline = Stopwatch.StartNew();
+        while (!task.IsCompleted && deadline.Elapsed < RealTimeBudget)
         {
             clock.Advance(AdvanceStep);
-            await Task.Yield();
-            iterations++;
+            await Task.Delay(TimeSpan.FromMilliseconds(1));
         }
 
         if (!task.IsCompleted)
         {
             throw new TimeoutException(
-                $"The operation did not complete after advancing the fake clock " +
-                $"{MaxAdvanceIterations} times ({AdvanceStep} each).");
+                $"The operation did not complete within {RealTimeBudget} of real time, " +
+                $"advancing the fake clock {AdvanceStep} at a time.");
         }
 
         return await task.ConfigureAwait(false);
@@ -186,19 +200,14 @@ public sealed class ExchangeRateClientTests
     public async Task GetRateAsync_OnA429WithRetryAfter_WaitsTheHeaderValueRatherThanTheComputedBackoff()
     {
         // 20s: comfortably past the pipeline's own ~2s default backoff (so honouring the header
-        // is distinguishable from ignoring it), and well inside the widened total timeout below.
+        // is distinguishable from ignoring it). The production default TotalRequestTimeout (30s)
+        // would sit too close to that; Build's unreachable one is what this test relies on.
         var retryAfter = TimeSpan.FromSeconds(20);
         var attempt = 0;
         var (provider, stub, clock) = Build(
             _ => ++attempt == 1
                 ? StatusResponse(HttpStatusCode.TooManyRequests, retryAfter)
-                : SuccessResponse(1.08m),
-            // The default TotalRequestTimeout (30s) sits close enough to a 20s Retry-After that
-            // jitter elsewhere in the pipeline could flake the assertion below. Widened only for
-            // this test, and only because the SCENARIO calls for a wait long enough to tell
-            // "honoured the header" apart from "used the default backoff" - not a claim that
-            // real deployments need anything like this budget.
-            configure: o => o.TotalRequestTimeout = TimeSpan.FromMinutes(2));
+                : SuccessResponse(1.08m));
 
         var before = clock.GetUtcNow();
         var result = await AdvanceUntilCompleteAsync(
