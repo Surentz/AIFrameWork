@@ -21,7 +21,6 @@ namespace Internal.Generated.WolverineHandlers
         {
             await using var serviceScope = _serviceScopeFactory.CreateAsyncScope();
             Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Wolverine.Runtime.ScopedMessageContextHolder>(serviceScope.ServiceProvider).Context = context;
-            var jobCurrentUser = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Infrastructure.Jobs.JobCurrentUser>(serviceScope.ServiceProvider);
             var orderReportWriter = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Orders.IOrderReportWriter>(serviceScope.ServiceProvider);
             
             /*
@@ -29,6 +28,7 @@ namespace Internal.Generated.WolverineHandlers
             * Your code is directly using IServiceProvider
             */
             var queryDispatcher = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IQueryDispatcher>(serviceScope.ServiceProvider);
+            var jobCurrentUser = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Infrastructure.Jobs.JobCurrentUser>(serviceScope.ServiceProvider);
             // The actual message body
             var rebuildOrderReport = (AiFramework.Application.Orders.RebuildOrderReport)context.Envelope.Message;
 

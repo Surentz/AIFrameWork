@@ -3,6 +3,7 @@ using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Quartz.Diagnostics;
 
 namespace AiFramework.Worker.Observability;
 
@@ -79,6 +80,8 @@ public static class WorkerObservability
         tracing.AddHttpClientInstrumentation()
             .AddSource("Wolverine")
             .AddSource("AiFramework.Outbox")
+            // A trigger firing and the Wolverine job it enqueues then share one trace.
+            .AddSource(QuartzInstrumentation.ActivitySourceName)
             .AddInfrastructureTracing();
 
         if (options.Otlp.Enabled && options.Otlp.Traces)

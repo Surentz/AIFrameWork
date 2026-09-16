@@ -3,6 +3,7 @@ using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Jobs;
+using AiFramework.Infrastructure.Jobs.Scheduling;
 using AiFramework.Infrastructure.Persistence;
 using AiFramework.Infrastructure.Resilience;
 using AiFramework.Worker.Observability;
@@ -22,6 +23,10 @@ if (string.IsNullOrWhiteSpace(connectionString))
 builder.AddWorkerObservability();
 
 builder.Services.AddInfrastructure(connectionString);
+
+// The job CLOCK (ADR 0017). Here and only here: the API never starts a scheduler. Quartz fires a
+// schedule on exactly one worker and enqueues the job; Wolverine, configured below, runs it.
+builder.Services.AddJobScheduling(connectionString);
 
 // The worker's answer to "who is calling". The API binds this to the cookie's claims; here it is
 // the job's own OwnerId, set by JobUserMiddleware before the handler runs.

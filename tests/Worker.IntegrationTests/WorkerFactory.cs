@@ -2,7 +2,6 @@ using AiFramework.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
 namespace AiFramework.Worker.IntegrationTests;
@@ -20,15 +19,29 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
         .Build();
 
-    // The container must start BEFORE anything touches Services: the first access builds the host,
-    // which reads the container's connection string. Reversing these two fails to connect.
+    // The container must start BEFORE anything touches Services: the first access builds AND
+    // STARTS the host, which reads the container's connection string. Reversing these two fails to
+    // connect.
+    //
+    // Migration now happens against a STANDALONE DbContext, built directly off the container's
+    // connection string, rather than by touching `Services` first and migrating from inside it —
+    // the order that worked before Quartz joined this host. `AddJobScheduling` runs
+    // SchemaProvisioning.Validate against the `quartz` schema and ScheduleSynchronizer reads the
+    // `quartz.qrtz_*` tables, both during host START, and the first access to `Services` below is
+    // exactly what builds and starts that host. Migrating only after that access — as this used to
+    // — would ask Quartz to validate a schema that does not exist yet. Building a bare
+    // AiFrameworkDbContext here, the same shape DesignTimeDbContextFactory uses for `dotnet ef`,
+    // lets the migration run with no host and therefore no Quartz in the picture at all.
     async Task IAsyncLifetime.InitializeAsync()
     {
         await _container.StartAsync();
 
-        using var scope = Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>()
-            .Database.MigrateAsync();
+        var options = new DbContextOptionsBuilder<AiFrameworkDbContext>()
+            .UseNpgsql(_container.GetConnectionString())
+            .Options;
+
+        await using var context = new AiFrameworkDbContext(options);
+        await context.Database.MigrateAsync();
     }
 
     // Explicit interface implementation: WebApplicationFactory already exposes a
