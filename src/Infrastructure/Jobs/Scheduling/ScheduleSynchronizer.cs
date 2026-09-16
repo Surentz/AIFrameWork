@@ -9,10 +9,27 @@ namespace AiFramework.Infrastructure.Jobs.Scheduling;
 /// else in the <see cref="JobSchedules.Group"/> group. Runs once, at worker startup.
 /// </summary>
 /// <remarks>
-/// <b>Never changes a trigger's paused state.</b> A pause (piece 5's monitoring page) must survive
-/// redeploys, so a paused trigger whose cron is updated is paused again immediately. With several
-/// workers starting together, Quartz's cluster locks serialise the writes and every node writes the
-/// same values.
+/// <para>
+/// <b>An unchanged cron leaves its trigger completely untouched.</b> <c>RescheduleJob</c> always
+/// stores a freshly built trigger, whose next-fire-time is the next FUTURE occurrence — rewriting a
+/// trigger whose cron has not actually changed would silently discard any misfire this worker was
+/// meant to catch up on (the whole point of <see cref="CronTriggerMisfireInstruction.FireAndProceed"/>),
+/// and would briefly reset an operator-paused trigger to <see cref="TriggerState.Normal"/> between
+/// the reschedule and the later <c>PauseTrigger</c> call, letting another node still running an
+/// older pod acquire and fire it mid-rollout. So the existing trigger is fetched first, and is
+/// rebuilt only when its cron or misfire instruction actually differs from what the code now wants.
+/// </para>
+/// <para>
+/// <b>Residual gap: a genuine cron change still has a pause window.</b> When the cron in code has
+/// really changed, the trigger must be rebuilt, and <c>RescheduleJob</c> stores the replacement in
+/// the <see cref="TriggerState.Normal"/> state; the later <c>PauseTrigger</c> call that restores a
+/// pause is necessarily separate. A paused trigger whose cron is edited in the same deploy is
+/// therefore briefly unpaused in between — the one case where this class's "pause survives a deploy"
+/// guarantee does not fully hold, narrowed from "every startup" to "the one startup that changes
+/// that job's cron." Closing it fully would need an atomic reschedule-and-pause the current API does
+/// not expose. With several workers starting together, Quartz's cluster locks serialise the writes
+/// and every node computes and writes the same values.
+/// </para>
 /// </remarks>
 public sealed partial class ScheduleSynchronizer(
     ISchedulerFactory schedulers,
@@ -38,6 +55,10 @@ public sealed partial class ScheduleSynchronizer(
         var jobKey = JobSchedules.JobKeyFor(job);
         var triggerKey = JobSchedules.TriggerKeyFor(job);
 
+        // AddJob(..., AddJobOptions.Replacing) only ever stores/overwrites the IJobDetail — its own
+        // Quartz.xml doc says it adds a job "with no associated ITrigger", and nothing in IScheduler
+        // suggests otherwise. It never touches this job's existing trigger(s), so it is always safe
+        // to run unconditionally, before the unchanged-trigger check below.
         await scheduler.AddJob(
                 JobBuilder.Create<EnqueueScheduledJob>()
                     .WithIdentity(jobKey)
@@ -48,15 +69,25 @@ public sealed partial class ScheduleSynchronizer(
                 ct)
             .ConfigureAwait(false);
 
+        var existing = await scheduler.GetTrigger(triggerKey, ct).ConfigureAwait(false);
+        var wasPaused = await scheduler.GetTriggerState(triggerKey, ct).ConfigureAwait(false) == TriggerState.Paused;
+
+        if (existing is ICronTrigger existingCron && IsUnchanged(existingCron, cron))
+        {
+            // Same cron, same misfire instruction: leave the trigger completely untouched. See the
+            // class remarks for why replacing it anyway — even with an identical cron — would lose
+            // a pending misfire catch-up and open a pause gap on every single startup.
+            LogScheduled(logger, job.Name, cron, wasPaused);
+            return;
+        }
+
         var trigger = TriggerBuilder.Create()
             .WithIdentity(triggerKey)
             .ForJob(jobKey)
             .WithCronSchedule(cron, b => b.WithMisfireInstruction(CronTriggerMisfireInstruction.FireAndProceed))
             .Build();
 
-        var wasPaused = await scheduler.GetTriggerState(triggerKey, ct).ConfigureAwait(false) == TriggerState.Paused;
-
-        if (await scheduler.GetTrigger(triggerKey, ct).ConfigureAwait(false) is null)
+        if (existing is null)
         {
             await scheduler.ScheduleJob(trigger, ScheduleJobOptions.Replacing, ct).ConfigureAwait(false);
         }
@@ -72,6 +103,18 @@ public sealed partial class ScheduleSynchronizer(
 
         LogScheduled(logger, job.Name, cron, wasPaused);
     }
+
+    /// <summary>
+    /// Whether <paramref name="existing"/> already says what <paramref name="cron"/> and this
+    /// synchronizer's fixed <see cref="CronTriggerMisfireInstruction.FireAndProceed"/> say — the
+    /// only two things this synchronizer ever sets on a trigger. Time zone is deliberately not
+    /// compared: the trigger this class builds never calls <c>CronScheduleBuilder.InTimeZone</c>,
+    /// so every trigger it has ever stored resolves its cron in the same (default) zone, and there
+    /// is nothing here that could make the two disagree.
+    /// </summary>
+    private static bool IsUnchanged(ICronTrigger existing, string cron) =>
+        string.Equals(existing.CronExpressionString, cron, StringComparison.Ordinal) &&
+        existing.MisfireInstruction == CronTriggerMisfireInstruction.FireAndProceed;
 
     private async Task RemoveStaleAsync(IScheduler scheduler, JobDescriptor[] scheduled, CancellationToken ct)
     {
