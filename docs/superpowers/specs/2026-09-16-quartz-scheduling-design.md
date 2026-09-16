@@ -176,8 +176,8 @@ pods** (both API replicas and the worker) and issues the same `DELETE` every fiv
 
 - `src/Application/Maintenance/PruneProcessedOutbox.cs` — the job (Light lane, parameterless), its
   handler, and a port `IOutboxRetention` whose one method returns the number of rows removed.
-- `OutboxRetention` in Infrastructure implements the port over the existing `OutboxPoller.PruneAsync`
-  logic, unchanged.
+- `OutboxRetention` in Infrastructure implements the port by delegating to the existing `OutboxPoller.PruneAsync`,
+  which is unchanged and keeps its own Postgres test where it is.
 - `OutboxPollerService` loses `DueForPrune`, `_nextPruneDueAt` and the prune call;
   `OutboxOptions.PruneInterval` is removed. `RetentionPeriod` stays — it is still what defines
   "old enough to delete".
@@ -212,7 +212,7 @@ until something needs them to be.
 
 | Project | Covers |
 |---|---|
-| `Infrastructure.Tests` | `JobDescriptor.Scheduled` — cron validation, key naming; `JobOptions.Schedules` — unknown job and invalid cron both fail validation; `JobRegistrationTests` — every scheduled descriptor has a valid cron; `OutboxRetention` against Postgres (the existing prune test, moved) |
+| `Infrastructure.Tests` | `JobDescriptor.Scheduled` — cron validation, key naming; `JobOptions.Schedules` — unknown job and invalid cron both fail validation; `JobRegistrationTests` — every scheduled descriptor has a valid cron; the existing `OutboxPollerTests` prune test, unchanged, still covers the SQL |
 | `Application.Tests` | `PruneProcessedOutboxHandler` calls the port |
 | `Worker.IntegrationTests` | The worker **starts with `Validate`** against the migrated schema (this is the test that proves the vendored SQL matches Quartz 4.1); each scheduled job has a trigger with the effective cron; an override changes it; **a paused trigger stays paused across a re-sync**; a descriptor removed from the list has its trigger deleted; **firing a trigger enqueues the job and Wolverine runs it** |
 | `Api.IntegrationTests` | The API registers no Quartz scheduler; `ApiPublishesOnlyTests` unchanged |
@@ -260,6 +260,7 @@ downtime, and can be paused. Piece 5's pause/resume buttons have something real 
 - `src/Infrastructure/Outbox/OutboxRetention.cs`
 - `src/Infrastructure/Persistence/Migrations/<timestamp>_AddQuartzSchema.cs` (+ Designer)
 - `tests/Infrastructure.Tests/Jobs/ScheduledJobTests.cs`
+- `tests/Api.IntegrationTests/Jobs/ApiHasNoSchedulerTests.cs`
 - `tests/Application.Tests/Maintenance/PruneProcessedOutboxHandlerTests.cs`
 - `tests/Worker.IntegrationTests/Jobs/SchedulingTests.cs`
 - `docs/adr/0017-quartz-as-the-job-clock.md`
@@ -271,5 +272,5 @@ downtime, and can be paused. Piece 5's pause/resume buttons have something real 
 - `src/Infrastructure/InfrastructureRegistration.cs`
 - `src/Worker/Program.cs`, `src/Worker/Observability/WorkerObservability.cs`
 - `src/Worker/Internal/Generated/` — regenerated
-- `tests/Infrastructure.Tests/Outbox/OutboxPollerTests.cs`, `OutboxRegistrationTests.cs`
+- `tests/Infrastructure.Tests/Outbox/OutboxRegistrationTests.cs`
 - `CLAUDE.md`, `src/Worker/CLAUDE.md`, `.claude/commands/job.md`, ADR 0016 (pointer to 0017)
