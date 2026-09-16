@@ -1,5 +1,4 @@
 using System.Threading.Channels;
-using AiFramework.Application.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,21 +9,17 @@ namespace AiFramework.Infrastructure.Outbox;
 /// <summary>
 /// Claims due rows and hands them to the workers. FullMode.Wait is the point of using a
 /// channel: when the workers saturate, WriteAsync blocks, the poller stops claiming, and the
-/// DATABASE stays the buffer instead of memory.
+/// DATABASE stays the buffer instead of memory. Retention is no longer this loop's job: it runs
+/// as the scheduled <c>PruneProcessedOutbox</c> job (ADR 0017), once per pod fleet rather than
+/// once per pod.
 /// </summary>
 public sealed partial class OutboxPollerService(
     IServiceScopeFactory scopeFactory,
     ChannelWriter<OutboxWorkItem> writer,
     IOptions<OutboxOptions> options,
-    IClock clock,
     ILogger<OutboxPollerService> logger) : BackgroundService
 {
     private readonly OutboxOptions _options = options.Value;
-
-    // MinValue rather than "now + interval" so the first idle cycle sweeps once at startup,
-    // then settles into PruneInterval. Only ever touched from the single ExecuteAsync loop,
-    // so it needs no synchronisation.
-    private DateTimeOffset _nextPruneDueAt = DateTimeOffset.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -58,8 +53,8 @@ public sealed partial class OutboxPollerService(
     }
 
     /// <summary>
-    /// One poll cycle: claim, hand each item to the workers, prune if nothing was claimed.
-    /// Returns the number claimed so the caller knows whether to pause before the next cycle.
+    /// One poll cycle: claim, hand each item to the workers. Returns the number claimed so the
+    /// caller knows whether to pause before the next cycle.
     /// </summary>
     private async Task<int> RunPollCycleAsync(CancellationToken stoppingToken)
     {
@@ -72,14 +67,6 @@ public sealed partial class OutboxPollerService(
             foreach (var item in batch)
             {
                 await writer.WriteAsync(item, stoppingToken).ConfigureAwait(false);
-            }
-
-            // Still only when the queue is idle, but now also only when the retention sweep is
-            // actually due. See OutboxOptions.PruneInterval for why running it every cycle was
-            // wrong: RetentionPeriod is measured in days, so a per-second DELETE is pure noise.
-            if (batch.Count == 0 && DueForPrune())
-            {
-                await poller.PruneAsync(stoppingToken).ConfigureAwait(false);
             }
 
             return batch.Count;
@@ -103,26 +90,6 @@ public sealed partial class OutboxPollerService(
             LogPollCycleFailed(logger, exception);
             return 0;
         }
-    }
-
-    /// <summary>
-    /// Whether the retention sweep is due, advancing the schedule when it is. Uses IClock rather
-    /// than a Stopwatch so a test can drive it with the same fake clock the rest of the outbox
-    /// already uses.
-    /// </summary>
-    private bool DueForPrune()
-    {
-        var now = clock.UtcNow;
-
-        if (now < _nextPruneDueAt)
-        {
-            return false;
-        }
-
-        // Scheduled from "now" rather than from the previous due time on purpose: after a long
-        // stall there is nothing to gain from firing a burst of catch-up sweeps.
-        _nextPruneDueAt = now.Add(_options.PruneInterval);
-        return true;
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Outbox poll cycle failed.")]
