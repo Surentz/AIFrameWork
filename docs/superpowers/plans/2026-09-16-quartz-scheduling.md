@@ -88,6 +88,39 @@ FluentAssertions + NSubstitute, Testcontainers.
 
 ## Task 1: Spike — Quartz 4.1 against a real Postgres, before anything is built
 
+> **RESULT (2026-09-16):** All three findings confirmed on the first run — no schema-transformation
+> retry was needed.
+>
+> 1. **`Validate` accepted `quartz.qrtz_` on the first attempt.** The exact transformation: read the
+>    embedded resource `Quartz.Impl.AdoJobStore.Schema.create_postgres.sql` off `typeof(IJob).Assembly`,
+>    then `.Replace("{0}", "quartz.qrtz_")`, `.Replace("{1}", "qrtz_")`, `.Replace("--;;", "")`, prefix
+>    with `CREATE SCHEMA IF NOT EXISTS quartz;`, and run the **whole result as one `NpgsqlCommand`** —
+>    the `--;;` statement separators do **not** need to be split into separate commands; Npgsql's
+>    simple-query protocol executes the semicolon-delimited batch in a single `ExecuteNonQueryAsync()`
+>    call. Log evidence: `Successfully validated presence of 19 schema objects` /
+>    `LocalTransactionJobStore initialized.` — no validation exception.
+> 2. **A clustered scheduler started and fired the job.** `UsePersistentStore` +
+>    `UseClustering(c => c.Enabled = true)` produced `Using job store
+>    'Quartz.Impl.AdoJobStore.LocalTransactionJobStore', supports persistence: True, clustered: True`,
+>    the hosted service started it (`Scheduler QuartzScheduler_$_NON_CLUSTERED started.`), and
+>    `TriggerJob` fired `SpikeJob` (`[SPIKE] fired=True`). **Caveat for later tasks:** with no
+>    `InstanceId` configured, Quartz falls back to the literal string `"NON_CLUSTERED"` as the
+>    instance id even though `clustered: True` — every replica would collide on that same id in a
+>    real multi-pod cluster. A real deployment needs `s.InstanceId = "AUTO"` (or equivalent) set
+>    explicitly; this spike didn't need it because only one instance ever ran.
+> 3. **The job is resolved from a child scope, not the root.** `SpikeJob`'s injected
+>    `IServiceProvider` was compared by reference against the root captured before `host.StartAsync()`;
+>    `[SPIKE] job resolved from a child scope, not the root: True` confirms
+>    `MicrosoftDependencyInjectionJobFactory` creates a DI scope per job execution. As noted in the
+>    task brief, `EnqueueScheduledJob` (Task 4) creates its own scope via `IServiceScopeFactory`
+>    regardless, so no later code depends on this finding either way.
+>
+> One incidental fix needed to get the spike to *build* (not part of the three findings): Quartz
+> 4.1's `IJob.Execute` declares `CancellationToken cancellationToken = default` (has a default
+> value) — overriding it without the default value fails the repo's analyzers (`MA0061`/`S1006`,
+> "method overrides should not change default values"). The brief's spike code as written did not
+> compile until `= default` was added to the override.
+
 The spec lists three things not yet verified. This task proves them in a throwaway test, records
 the results in this plan, and deletes the test. **Nothing in later tasks may be built on an
 assumption this task could have checked.**
