@@ -20,6 +20,19 @@ public sealed class ScheduledJobTests
     }
 
     [Fact]
+    public void EveryScheduledJob_CanBeEnqueuedByTheScheduler()
+    {
+        // A descriptor built directly, or copied with a with-expression, can carry a cron but no
+        // factory; only the Scheduled factory keeps the two together. Such a job would be synced
+        // into Quartz and then throw on every firing, so the registration list must never hold one.
+        var unfireable = JobRegistration.Jobs
+            .Where(j => j.IsScheduled && j.EnqueueNew is null)
+            .Select(j => j.Name);
+
+        unfireable.Should().BeEmpty("a scheduled job must be registered with JobDescriptor.Scheduled<TJob>(cron)");
+    }
+
+    [Fact]
     public void PruneProcessedOutbox_IsScheduledHourly()
     {
         var job = JobSchedules.Find(nameof(PruneProcessedOutbox));

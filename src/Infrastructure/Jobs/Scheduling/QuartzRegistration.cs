@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Quartz;
+using Quartz.Diagnostics;
 using Quartz.Extensibility;
 
 namespace AiFramework.Infrastructure.Jobs.Scheduling;
@@ -15,6 +16,12 @@ public static class QuartzRegistration
     /// `wolverine_queues`, apart from EF's `public`. Must match the AddQuartzSchema migration.
     /// </summary>
     public const string TablePrefix = "quartz.qrtz_";
+
+    /// <summary>
+    /// Quartz's tracing source, for the worker's tracer to subscribe to — re-exported so no host
+    /// has to name a Quartz type itself.
+    /// </summary>
+    public const string ActivitySourceName = QuartzInstrumentation.ActivitySourceName;
 
     public static IServiceCollection AddJobScheduling(this IServiceCollection services, string connectionString)
     {
@@ -46,17 +53,15 @@ public static class QuartzRegistration
             // spike finding), which would make two worker pods look like one cluster node and
             // defeat both single-fire and failover.
             //
-            // Quartz's own built-in generators (SimpleInstanceIdGenerator, HostNameInstanceIdGenerator)
-            // are `internal` to the Quartz assembly in 4.1.0 — confirmed by reflection
-            // (typeof(SimpleInstanceIdGenerator).IsPublic is false), which is why they cannot be
-            // named as UseInstanceIdGenerator<T>()'s type argument from here (CS0122): this is not
-            // a design choice, it is what the package allows. ProcessInstanceIdGenerator below
-            // reproduces SimpleInstanceIdGenerator's own documented output — "HOSTNAME +
-            // CURRENT_TIME", per its Quartz.xml doc — through IInstanceIdGenerator, the public
-            // extension point Quartz ships for exactly this. That is the 4.1 equivalent of classic
-            // Quartz's `quartz.scheduler.instanceId = AUTO`: unique per PROCESS, not merely per
-            // machine, which plain HostNameInstanceIdGenerator-style output would not be for two
-            // pods sharing a node.
+            // Quartz's built-in generators (SimpleInstanceIdGenerator, HostNameInstanceIdGenerator)
+            // are `internal` in 4.1.0 (CS0122), so neither can be passed to
+            // UseInstanceIdGenerator<T>(). Quartz 4.1 also documents
+            // QuartzSchedulerOptions.GenerateInstanceId, which should select its own
+            // SimpleInstanceIdGenerator; that switch was not the one proven against the shipped
+            // package, so it is not what is used here. ProcessInstanceIdGenerator below is, and
+            // SchedulingTests asserts the result: an id that is not the sentinel, and different
+            // for two hosts on the same store. In Kubernetes the hostname alone already differs
+            // per pod; the process id and tick count are for two workers on one machine.
             q.UseInstanceIdGenerator<ProcessInstanceIdGenerator>();
 
             q.AddQuartzHealthChecks();

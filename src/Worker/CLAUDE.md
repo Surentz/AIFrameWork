@@ -99,9 +99,13 @@ scheduler over the `quartz` schema. The API registers no Quartz at all, and
   its paused state nor a pending misfire catch-up is lost on a redeploy. Only a real cron change
   rebuilds the trigger, and then re-pauses it if it was paused. There is a brief unpaused window
   in that one case; the class remarks explain why Quartz cannot close it.
-- **Every node needs its own instance id.** `ProcessInstanceIdGenerator` supplies one; without
-  it, clustered Quartz 4.1 names every node `NON_CLUSTERED` and two pods look like one.
-  `SchedulingTests` asserts both halves.
+- **The last build to start wins.** An old-build pod that restarts mid-rollout re-syncs the
+  store to *its* schedules — deleting jobs only the new build has, reverting changed crons — and
+  it stays that way until a new-build worker starts. If a schedule is missing or wrong after a
+  rollout, restart a worker. ADR 0017.
+- **Every node needs its own instance id.** `ProcessInstanceIdGenerator` supplies one; with
+  clustering on and no generator configured, Quartz 4.1 names every node `NON_CLUSTERED` and two
+  pods look like one. `SchedulingTests` asserts both halves.
 - **`SchemaProvisioning.Validate` means a missing migration stops the worker.** If the worker
   refuses to start naming a `qrtz_` table, run `dotnet ef database update`; do not switch to
   `CreateIfMissing`.

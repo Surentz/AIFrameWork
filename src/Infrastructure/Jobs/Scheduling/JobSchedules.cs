@@ -43,14 +43,12 @@ public static class JobSchedules
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(options);
 
-        if (!job.IsScheduled)
-        {
-            throw new InvalidOperationException($"{job.Name} is not a scheduled job.");
-        }
+        var defaultCron = job.DefaultCron
+            ?? throw new InvalidOperationException($"{job.Name} is not a scheduled job.");
 
         return options.Schedules.TryGetValue(job.Name, out var overridden)
             ? overridden
-            : job.DefaultCron!;
+            : defaultCron;
     }
 
     public static JobDescriptor? Find(string name) =>

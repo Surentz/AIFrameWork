@@ -1,9 +1,9 @@
+using AiFramework.Infrastructure.Jobs.Scheduling;
 using AiFramework.Infrastructure.Observability;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using Quartz.Diagnostics;
 
 namespace AiFramework.Worker.Observability;
 
@@ -81,7 +81,7 @@ public static class WorkerObservability
             .AddSource("Wolverine")
             .AddSource("AiFramework.Outbox")
             // A trigger firing and the Wolverine job it enqueues then share one trace.
-            .AddSource(QuartzInstrumentation.ActivitySourceName)
+            .AddSource(QuartzRegistration.ActivitySourceName)
             .AddInfrastructureTracing();
 
         if (options.Otlp.Enabled && options.Otlp.Traces)

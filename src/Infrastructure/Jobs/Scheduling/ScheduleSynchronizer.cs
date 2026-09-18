@@ -28,7 +28,18 @@ namespace AiFramework.Infrastructure.Jobs.Scheduling;
 /// guarantee does not fully hold, narrowed from "every startup" to "the one startup that changes
 /// that job's cron." Closing it fully would need an atomic reschedule-and-pause the current API does
 /// not expose. With several workers starting together, Quartz's cluster locks serialise the writes
-/// and every node computes and writes the same values.
+/// and — provided they run the same build — every node computes and writes the same values. Two
+/// nodes starting together in that cron-changing deploy can still lose a pause for good: B reads
+/// the state as Normal inside A's unpaused window, then reschedules after A has re-paused.
+/// </para>
+/// <para>
+/// <b>Mixed builds do not agree.</b> The store holds the schedules of whichever build synchronized
+/// last. During a rollout, an old-build pod that restarts after the new pods have started deletes
+/// any job only the new build schedules, and reverts any cron the new build changed; the reverse
+/// re-adds a job the new build removed, which then throws on every firing. It lasts until the next
+/// new-build worker starts, so the remedy is to restart a worker once the rollout has finished.
+/// Version-stamping the entries was rejected: it would also stop a rollback from removing what the
+/// rolled-back build no longer schedules, which is the one mixed-build case that is correct today.
 /// </para>
 /// </remarks>
 public sealed partial class ScheduleSynchronizer(
@@ -136,8 +147,12 @@ public sealed partial class ScheduleSynchronizer(
 
         foreach (var key in stale)
         {
-            await scheduler.DeleteJob(key, ct).ConfigureAwait(false);
-            LogRemoved(logger, key.Name);
+            // Nodes starting together all see the same stale job; only the one whose delete
+            // actually removed it logs, so one removal is one Warning.
+            if (await scheduler.DeleteJob(key, ct).ConfigureAwait(false))
+            {
+                LogRemoved(logger, key.Name);
+            }
         }
     }
 

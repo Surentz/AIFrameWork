@@ -143,6 +143,13 @@ pause/resume/run-now UI has something real to act on.
   `QuartzSchedulerOptions.GenerateInstanceId` switch that was not adopted here — the custom
   generator is what was actually proven against the shipped package; switching to that flag later
   is a possible simplification, not a correction.
+- **During a rollout, the store holds whichever build synchronized last.** An old-build worker
+  that restarts after the new ones have started deletes jobs only the new build schedules and
+  reverts crons it changed, until a new-build worker starts again. Restarting a worker after the
+  rollout converges it. Version-stamping the entries was rejected, because it would also stop a
+  rollback from removing what the rolled-back build no longer schedules. With one worker replica
+  and a surge-then-terminate rollout this needs a crash inside the rollout window, and it is
+  recorded here rather than engineered away.
 - **ADR 0016's recurring-job guidance is superseded.** Self-rescheduling messages are no longer
   the way to write a recurring job — see the note added to that ADR. `CLAUDE.md`,
   `src/Worker/CLAUDE.md`, and `/job` are updated to match.
