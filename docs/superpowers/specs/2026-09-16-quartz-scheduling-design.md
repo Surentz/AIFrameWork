@@ -1,7 +1,7 @@
 # Scheduled jobs: Quartz.NET as the clock, Wolverine as the runner
 
 **Date:** 2026-09-16
-**Status:** Approved, not yet implemented
+**Status:** Implemented (branch `claude/quartz-scheduling`, 2026-09-19)
 **Piece 1 of 5** in the job-monitoring roadmap (below).
 
 ## Context

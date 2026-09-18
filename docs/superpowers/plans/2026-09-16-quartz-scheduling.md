@@ -1549,3 +1549,23 @@ git commit -m "docs(jobs): ADR 0017 and framework guidance for scheduled jobs"
       log that the scheduler started clustered, and run `./deploy/e2e-k8s.ps1`.
 - [ ] Dispatch `dotnet-reviewer` over `git diff main...HEAD`.
 - [ ] `openapi/AiFramework.Api.json` unchanged.
+
+### Results (2026-09-19)
+
+- Debug and Release builds: 0 warnings, 0 errors.
+- Tests, Debug and Release, one project at a time: Domain 83, Application 122, Infrastructure 210,
+  Worker 14, Api 128 (129 in Release) — all passed.
+- `codegen write` for both hosts: no content diff (line endings only, which git normalises).
+- `openapi/AiFramework.Api.json` and `schema.d.ts`: unchanged.
+- Local worker against the dev database after `dotnet ef database update`: clustered, instance id
+  `<host>-<pid>-<ticks>`, logged `Schedule PruneProcessedOutbox = '0 5 * * * ?' (paused: False).`,
+  `/health/ready` 200. Run with `dotnet run --project src/Worker` rather than `dev.ps1`.
+- kind: the `migrate` Job applied `AddQuartzSchema`; the worker pod validated 19 schema objects,
+  started clustered with a pod-named instance id, and logged the schedule. `e2e-k8s.ps1`: 11 passed.
+- `dotnet-reviewer`: no blockers. Fixed in `d7927dc`: removal logged once, scheduled-descriptor
+  invariant pinned by a test, `!` removed, Quartz activity source re-exported from Infrastructure,
+  instance-id comment corrected. Documented rather than engineered: the mixed-build rollout gap and
+  the two-node pause race (ADR 0017, `ScheduleSynchronizer` remarks, `src/Worker/CLAUDE.md`).
+- Seen, not caused by this branch: every API and worker pod logs
+  `libgssapi_krb5.so.2: cannot open shared object file` once at startup — Npgsql probing for
+  Kerberos in the runtime image. The API pods, which have no Quartz, log it too.
