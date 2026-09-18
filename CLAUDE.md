@@ -467,7 +467,7 @@ in `Application`. Every job type must be registered in
 `src/Infrastructure/Jobs/JobRegistration.cs` — explicit and greppable, mirroring `AddMessaging()`,
 with `JobRegistrationTests` failing the build on an omission.
 
-**Five things that will cost you time:**
+**Six things that will cost you time:**
 
 - **An enqueue is NOT transactional with the caller's work.** `EnqueueAsync` from a command
   handler publishes immediately, so a command whose transaction then fails still runs the job.
@@ -491,14 +491,28 @@ with `JobRegistrationTests` failing the build on an omission.
 - **`ICurrentUser` is registered per host, never in `AddInfrastructure`.** The API binds it to the
   cookie's claims, the worker to the job. Binding it inside `AddJobs` replaces the API's, because
   the last registration wins, and every authenticated request then reports no caller.
+- **Quartz 4 is not Quartz 3**, and most samples online are 3.x. Checked against the 4.1.0
+  package: `IJob.Execute(IJobExecutionContext, CancellationToken = default)` returns `ValueTask`;
+  there is no `GetJobKeys` (use `QueryJobs(new JobQuery { Group = ... })`, which pages via
+  `.Items`/`.HasMore`), no `CheckExists` (it is `Exists`), no `CronExpression.IsValidExpression`
+  (use `TryParse`), and no settable `SchedulerName`; misfires are set with
+  `WithMisfireInstruction(CronTriggerMisfireInstruction.FireAndProceed)`. The built-in instance-id
+  generators are `internal`, and with clustering on and nothing configured every node gets the
+  id `NON_CLUSTERED` — see ADR 0017.
 
 Retry and dead-lettering are Wolverine policy (`OnAnyException().ScheduleRetry(...).Then
 .MoveToErrorQueue()`), never hand-written backoff — `ScheduleRetry` rather than
 `RetryWithCooldown` on the heavy lane, because a cooldown holds a listener slot for its whole
-delay and would consume half a two-slot lane. Recurring jobs are **self-rescheduling durable
-messages**: the handler schedules its own next occurrence, so exactly one is in flight by
-construction and no distributed lock is needed across replicas. No Quartz, no timer
-`IHostedService`.
+delay and would consume half a two-slot lane.
+
+**Scheduled jobs use Quartz as the clock (ADR 0017).** Declare one with
+`JobDescriptor.Scheduled<TJob>("0 5 * * * ?")` — a Quartz cron, seconds first — and it fires on
+exactly one worker, which enqueues it; Wolverine runs it like any other job. Only parameterless
+jobs can be scheduled, and the compiler enforces it. Override per environment with
+`Jobs__Schedules__<JobName>`; an unknown job or invalid cron fails worker startup. Quartz's tables
+live in the `quartz` schema, created by an EF migration — **a Quartz upgrade that changes its
+schema is a new migration**, and the worker's `SchemaProvisioning.Validate` refuses to start until
+it exists. Never start a scheduler in the API.
 
 **The transport stays PostgreSQL.** RabbitMQ is deferred with named triggers — worker replicas
 sustained above four, queue polling visible in database load, a job needing priority the transport

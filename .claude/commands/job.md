@@ -79,15 +79,9 @@ Application assembly is missing from `MapJobs`.
 
 ## 5. Enqueue it
 
-From the domain event handler (step 2), or from the caller you chose. For a recurring job, the
-handler schedules its own next occurrence as its final act:
-
-```csharp
-await jobs.ScheduleAsync(new PruneStaleCarts(), TimeSpan.FromHours(1), cancellationToken);
-```
-
-Exactly one occurrence is in flight by construction, so no distributed lock is needed. Do not add
-Quartz, and do not add a timer `IHostedService` — every replica would fire it.
+From the domain event handler (step 2), or from the caller you chose. To run on a schedule,
+register it with `JobDescriptor.Scheduled<TJob>(cron)`; the job must have a parameterless
+constructor. Do not add a timer `IHostedService` — every replica would fire it.
 
 ## 6. Tests
 
