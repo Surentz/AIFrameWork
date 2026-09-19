@@ -78,6 +78,13 @@ export default defineConfig({
               // The same move ApiFactory makes. A cached page would turn the eviction path into a
               // source of intermittent failures in a suite that is not testing the cache.
               Cache__Enabled: 'false',
+              // Off for the same reason the cache is, and it has to be said explicitly here:
+              // this run sets ASPNETCORE_ENVIRONMENT=Development, so it would otherwise inherit
+              // appsettings.Development.json's Realtime:Enabled=true. Push is best-effort by
+              // contract (ADR 0016) and the feed is the truth, so a spec that asserted on the
+              // feed would be racing a WebSocket it does not need. The REST path is what these
+              // specs exercise.
+              Realtime__Enabled: 'false',
             },
           },
           {

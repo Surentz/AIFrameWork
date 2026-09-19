@@ -616,6 +616,20 @@ a notification is whichever one's outbox pump claimed the row and is unrelated t
 that user's connection; the ingress cookie affinity of ADR 0010 does not help, since the pump is
 not serving that user's request. See ADR 0016.
 
+**It is ON in Development and nowhere else**, set in `src/Api/appsettings.Development.json`: a
+developer's `dotnet run` is a single process, which is the one configuration where push needs no
+backplane and cannot reach the wrong replica. Everywhere else the default stands — `ApiFactory`
+and the Playwright `webServer` both pin it to `false` explicitly (the e2e run sets
+`ASPNETCORE_ENVIRONMENT=Development` and would otherwise inherit the dev value), and the
+Kubernetes overlay leaves it off because that cluster runs two API replicas with no Redis.
+
+**Without push the badge is up to thirty seconds stale, by construction.** The outbox pump polls
+every second, so the notification row exists almost immediately; `useUnreadCount`'s interval is
+the only other thing that would ever ask. That gap is what `frontend/src/features/notifications/
+stream.ts` closes — and a `ProductPriceChanged` aimed at someone who took no action has no other
+trigger at all, since no client-side invalidation can fire on a user who did nothing. The
+frontend needs `/hubs` proxied for any of it to work in dev; see `frontend/CLAUDE.md`.
+
 ## Resilience
 
 `Microsoft.Extensions.Http.Resilience` on outbound HTTP clients (`ExchangeRateClient` is the

@@ -104,6 +104,13 @@ export const handlers = [
   http.post('/api/notifications/read-all', () =>
     HttpResponse.json({ markedCount: 1, unreadCount: 0 }),
   ),
+  // SignalR's negotiate, answered the way a server with Realtime__Enabled off answers it: 404,
+  // because Program.cs only calls MapHub inside that branch (pinned backend-side by
+  // NotificationHubTests.Negotiate_WhenRealtimeIsOff_IsNotMappedAtAll). Off is the default
+  // everywhere but a developer's machine, so this is the ordinary case, not a failure fixture -
+  // every suite that mounts AppLayout takes this path and falls back to polling. It also has to
+  // exist at all, since onUnhandledRequest is 'error'.
+  http.post('/hubs/notifications/negotiate', () => new HttpResponse(null, { status: 404 })),
 ];
 
 export const server = setupServer(...handlers);

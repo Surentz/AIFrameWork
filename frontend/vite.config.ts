@@ -15,12 +15,18 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api': { target: `http://localhost:${apiPort}`, changeOrigin: true },
+      // The SignalR hub, which Program.cs maps at /hubs/notifications. Without this entry the
+      // browser asks the DEV SERVER for the hub and gets Vite's own 404, so push silently never
+      // works while /api keeps working - and `ws: true` is what upgrades the connection rather
+      // than leaving it on the long-polling fallback.
+      '/hubs': { target: `http://localhost:${apiPort}`, changeOrigin: true, ws: true },
     },
   },
   preview: {
     port: Number(process.env.PREVIEW_PORT ?? 4173),
     proxy: {
       '/api': { target: `http://localhost:${apiPort}`, changeOrigin: true },
+      '/hubs': { target: `http://localhost:${apiPort}`, changeOrigin: true, ws: true },
     },
   },
   test: {

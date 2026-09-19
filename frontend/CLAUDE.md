@@ -37,6 +37,12 @@ Dev runs two processes: Vite on 5173 and the API on 5234. `vite.config.ts` proxi
 `http://localhost:5234`, so the browser sees one origin and the backend needs no CORS
 configuration. Production is a static bundle.
 
+**`/hubs` is proxied too, with `ws: true`** — that is the SignalR notification hub, and it is a
+separate entry because a proxy key is a path prefix, not a catch-all. Without it the browser asks
+the *dev server* for the hub and gets Vite's own 404, so realtime push silently never works while
+everything under `/api` keeps working normally. `ws: true` is what upgrades the connection instead
+of leaving it on the long-polling fallback. Both `server` and `preview` carry both entries.
+
 Ports are fixed (5173 dev, 4173 preview, 5234 API, 55432 the e2e Postgres) and can collide on
 a busy machine. Each is overridable by environment variable: `DEV_PORT`, `PREVIEW_PORT`,
 `API_PORT`, and `PG_PORT` respectively. `vite.config.ts` reads the first three;
