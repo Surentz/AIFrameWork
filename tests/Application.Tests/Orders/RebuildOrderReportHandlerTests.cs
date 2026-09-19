@@ -1,5 +1,6 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
+using AiFramework.Domain.Orders;
 using FluentAssertions;
 using NSubstitute;
 
@@ -18,7 +19,15 @@ public sealed class RebuildOrderReportHandlerTests
     private RebuildOrderReportHandler Handler => new(_queries, _writer);
 
     private static OrderListItem Item(int quantity) =>
-        new(Guid.NewGuid(), "SKU", quantity, DateTimeOffset.UnixEpoch, null, null, null);
+        new(
+            Guid.NewGuid(),
+            "SKU",
+            quantity,
+            DateTimeOffset.UnixEpoch,
+            null,
+            null,
+            null,
+            OrderStatus.Placed);
 
     [Fact]
     public async Task Handle_WithOnePage_WritesItsTotals()
