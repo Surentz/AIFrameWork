@@ -72,6 +72,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // test in this project would attempt OTLP delivery to a collector that is not there.
         builder.UseSetting("Observability:Otlp:Enabled", "false");
 
+        // Off for every test in this project, like the cache above. appsettings.json already
+        // defaults it to false, so this is defence against someone flipping that default: with
+        // realtime on and no Redis, every notification write would additionally go through a
+        // SignalR hub context these tests never read from. NotificationHubTests turns it back on
+        // for itself, the same WithWebHostBuilder split OrderCachingTests uses.
+        builder.UseSetting("Realtime:Enabled", "false");
+
         // Off for every test in this project, for the same reason the cache is off above: a
         // test asserting an ErrorKind.Unavailable failure must not first sit through the retry
         // pipeline's own backoff delays. RatesEndpointTests still exercises the real pipeline —

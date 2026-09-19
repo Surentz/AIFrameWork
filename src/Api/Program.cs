@@ -1,11 +1,14 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using AiFramework.Api;
 using AiFramework.Api.Auth;
+using AiFramework.Api.Notifications;
 using AiFramework.Api.Observability;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Notifications;
 using AiFramework.Application.Users;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
@@ -41,7 +44,30 @@ if (string.IsNullOrWhiteSpace(connectionString))
 // See docs/superpowers/plans/2026-09-13-centralized-logging.md and ADR 0014.
 builder.AddObservability();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    // Enums cross the wire as their NAMES. Without this, System.Text.Json writes the underlying
+    // integer, the OpenAPI document describes the property as a bare int, and
+    // frontend/src/api/schema.d.ts types it as `number` - so adding a member, or reordering the
+    // ones that exist, changes what every existing value means with nothing to catch it. As
+    // names, each enum reaches TypeScript as a string union, and a client switching over it
+    // fails to compile when a member is added rather than falling through at runtime.
+    //
+    // Safe to adopt globally at this point precisely because no endpoint exposed an enum before
+    // NotificationKind and OrderStatus: the generated contract carried no enum schema at all, so
+    // this changes no existing response shape (verified against openapi/AiFramework.Api.json).
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// The SAME converter again, on a DIFFERENT options type, and both calls are required. .NET has
+// two unrelated JsonOptions: Microsoft.AspNetCore.Mvc.JsonOptions (above) is what controllers
+// actually serialize with, and Microsoft.AspNetCore.Http.Json.JsonOptions (here) is what
+// AddOpenApi's schema generator reads. Configuring only the first is the trap: the API sends
+// "OrderPlaced" at runtime while the generated contract still declares the property an integer,
+// so frontend/src/api/schema.d.ts types it `number` and every client is wrong in a way no
+// backend test can see. Caught exactly that way - the integration test asserting
+// "kind":"OrderPlaced" passed while openapi/AiFramework.Api.json said type: integer.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 // Cookie, not a bearer token: the SPA is served same-origin (vite.config.ts proxies /api), so
 // the browser attaches this by itself and no JavaScript ever holds the session - an XSS bug has
@@ -242,6 +268,44 @@ builder.Services.AddHealthChecks()
 // Api reads its own configuration and hands the values to Infrastructure.
 builder.Services.Configure<CacheOptions>(builder.Configuration.GetSection("Cache"));
 
+// Realtime notification push. OFF by default (see RealtimeOptions), so nothing below runs for a
+// developer who has started no Redis, or in CI - the REST feed is the source of truth either way
+// and a client that receives no push simply polls. ADR 0016.
+var realtimeSection = builder.Configuration.GetSection("Realtime");
+builder.Services.Configure<RealtimeOptions>(realtimeSection);
+var realtime = realtimeSection.Get<RealtimeOptions>() ?? new RealtimeOptions();
+string? realtimeWarning = null;
+
+if (realtime.Enabled)
+{
+    var signalR = builder.Services.AddSignalR();
+
+    if (!string.IsNullOrWhiteSpace(realtime.RedisConnectionString))
+    {
+        // What makes a push reach a user connected to the OTHER replica. The pod that writes a
+        // notification is whichever one's outbox pump claimed the row, and that is unrelated to
+        // the pod holding the connection - the ingress cookie affinity of ADR 0010 does not help
+        // here, because the pump is not serving that user's request.
+        signalR.AddStackExchangeRedis(realtime.RedisConnectionString);
+    }
+    else
+    {
+        // Legitimate at one replica, silently wrong above it - so it is said out loud once, at
+        // startup, rather than discovered as "realtime works for some people". Logged after
+        // Build(), which is the first point an ILogger exists.
+        realtimeWarning =
+            "Realtime push is enabled with no Redis backplane. That is correct for a single "
+            + "instance only: with more than one replica, a push reaches a user only when the "
+            + "pod that wrote the notification is also the one holding their connection. "
+            + "Set Realtime__RedisConnectionString. See ADR 0016.";
+    }
+
+    // The port Application's notifiers depend on, as IEnumerable<INotificationPush> - registered
+    // ONLY when realtime is on, so "off" is an empty sequence rather than a fake implementation
+    // that looks like it works. See INotificationPush's own remarks.
+    builder.Services.AddSingleton<INotificationPush, SignalRNotificationPush>();
+}
+
 // Same reason, same shape: AddResilience registers and validates ResilienceOptions but does not
 // bind, so it stays resolvable from a bare ServiceCollection in a unit test. Api reads its own
 // configuration and hands the values to Infrastructure. ADR 0014.
@@ -262,6 +326,13 @@ builder.Host.AddWolverineEventPath(
 
 var app = builder.Build();
 
+if (realtimeWarning is not null)
+{
+#pragma warning disable CA1848 // One-off startup log, not a hot path; a [LoggerMessage] partial needs a class to live on and Program.cs is top-level statements.
+    app.Logger.LogWarning("{Warning}", realtimeWarning);
+#pragma warning restore CA1848
+}
+
 // First, conventionally: everything downstream - exception logging, authentication, the rate
 // limiter - should see the client's real address rather than the ingress's. The only *live*
 // constraint today is that this precedes UseRateLimiter, since the limiter partitions on the
@@ -275,6 +346,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+
+// Only when realtime is on - mapping a hub whose INotificationPush was never registered would
+// accept connections that can never receive anything.
+if (realtime.Enabled)
+{
+    app.MapHub<NotificationHub>("/hubs/notifications");
+}
 
 // No fallback authorization policy is registered, so this stays anonymous without an attribute -
 // a readiness probe that needs credentials is not a readiness probe.

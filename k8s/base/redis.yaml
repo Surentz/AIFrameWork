@@ -1,0 +1,76 @@
+# The SignalR backplane, and the reason realtime notifications work at more than one replica.
+#
+# The outbox pump that writes a notification runs on EVERY api replica and claims rows with
+# FOR UPDATE SKIP LOCKED, so the pod that writes is unrelated to the pod holding that user's
+# connection. The ingress cookie affinity of ADR 0010 does not help: the pump is not serving that
+# user's request. Without this, a push lands only when the two coincide — roughly half the time at
+# two replicas — and fails silently the rest. See ADR 0016.
+#
+# A Deployment, not a StatefulSet, and no PersistentVolumeClaim: a backplane holds messages in
+# flight, never state worth keeping. Everything it carries is already committed in Postgres, so a
+# restart costs at most a few live updates that clients pick up on their next read. That is also
+# why there is no replication here — a second Redis would buy availability for data that is
+# disposable by construction.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:8-alpine
+          ports:
+            - containerPort: 6379
+          # maxmemory with an eviction policy rather than an unbounded cache: a backplane that
+          # grows without limit is the one way this disposable component can take the node down
+          # with it. allkeys-lru drops the oldest in-flight messages under pressure, which costs
+          # live updates — exactly the thing already documented as best-effort.
+          args:
+            - redis-server
+            - --maxmemory
+            - 128mb
+            - --maxmemory-policy
+            - allkeys-lru
+            - --save
+            - ''
+            - --appendonly
+            - 'no'
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              # Above maxmemory on purpose: Redis accounts for its own dataset, not for its
+              # allocator's overhead, so a limit equal to maxmemory is an OOMKill waiting for a
+              # busy moment. The same reasoning as the OpenSearch heap-vs-limit gap.
+              memory: 192Mi
+          readinessProbe:
+            exec:
+              command: ['redis-cli', 'ping']
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ['redis-cli', 'ping']
+            initialDelaySeconds: 10
+            periodSeconds: 10

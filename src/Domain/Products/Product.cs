@@ -130,10 +130,20 @@ public sealed class Product : Entity
         ValidateDescription(description);
         ValidatePrice(price);
 
+        var previousPrice = Price;
+
         Name = name.Trim();
         Description = NormalizeDescription(description);
         Price = price;
         UpdatedAt = updatedAt;
+
+        // Only when it actually moved: an update that rewrites the name and leaves the price
+        // alone must not notify anyone that the price changed. decimal's == compares numeric
+        // value rather than representation, so 1.5 and 1.50 are correctly NOT a change.
+        if (previousPrice != price)
+        {
+            Raise(new ProductPriceChanged(Id, Sku, Name, previousPrice, price));
+        }
     }
 
     private static void ValidateName(string name)

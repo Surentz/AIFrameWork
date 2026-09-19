@@ -18,6 +18,25 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.Quantity).IsRequired();
         builder.Property(o => o.PlacedAt).IsRequired();
 
+        // By NAME, not by number, like NotificationKind — an enum stored as int silently
+        // reinterprets every existing row the moment someone reorders the members. OrderStatus
+        // says the names are the stored contract; this line is what makes that true.
+        // HasDefaultValue is load-bearing for the BACKFILL, not for inserts. Without it the
+        // generated migration adds this NOT NULL column with defaultValue: "" — every order that
+        // predates the column gets an empty string, which then fails to convert back to the enum
+        // on read, breaking every order query against rows that were perfectly fine before.
+        // Placed is what those rows always were; see OrderStatus on why it is first.
+        builder.Property(o => o.Status)
+            .IsRequired()
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .HasDefaultValue(OrderStatus.Placed);
+
+        builder.Property(o => o.ShippedAt);
+        builder.Property(o => o.CancelledAt);
+        builder.Property(o => o.CancellationReason)
+            .HasMaxLength(Order.MaxCancellationReasonLength);
+
         // DomainEvents is transient state the interceptor drains before save; it is not
         // persisted. Without this, EF tries to map IDomainEvent as an entity type and the
         // model fails to build at first use.

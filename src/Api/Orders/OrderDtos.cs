@@ -1,3 +1,5 @@
+using AiFramework.Domain.Orders;
+
 namespace AiFramework.Api.Orders;
 
 /// <summary>
@@ -59,4 +61,24 @@ public sealed record OrderPageResponse
     public required IReadOnlyList<OrderListItemResponse> Items { get; init; }
 
     public required string? NextCursor { get; init; }
+}
+
+/// <summary>
+/// The reason is owned by <c>CancelOrderValidator</c>, not duplicated here as a DataAnnotation —
+/// see the note on <see cref="PlaceOrderRequest"/>.
+/// </summary>
+public sealed record CancelOrderRequest
+{
+    public required string Reason { get; init; }
+}
+
+/// <summary>What both transition endpoints answer with, so a client can render the new state.</summary>
+public sealed record OrderStatusResponse
+{
+    public required Guid OrderId { get; init; }
+
+    /// <summary>Serialized as its name — see <c>NotificationResponse.Kind</c>.</summary>
+    public required OrderStatus Status { get; init; }
+
+    public required DateTimeOffset ChangedAt { get; init; }
 }

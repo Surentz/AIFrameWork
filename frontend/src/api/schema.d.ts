@@ -396,6 +396,154 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/orders/{id}/ship": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Marks one of the caller's own orders as shipped. 409 if it has already shipped or was
+         *     cancelled — an illegal transition is a conflict with existing state, not a malformed
+         *     request.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["OrderStatusResponse"];
+                        readonly "application/json": components["schemas"]["OrderStatusResponse"];
+                        readonly "text/json": components["schemas"]["OrderStatusResponse"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/orders/{id}/cancel": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Cancels one of the caller's own orders. 409 if it has already shipped or was already
+         *     cancelled.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["CancelOrderRequest"];
+                    readonly "text/json": components["schemas"]["CancelOrderRequest"];
+                    readonly "application/*+json": components["schemas"]["CancelOrderRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["OrderStatusResponse"];
+                        readonly "application/json": components["schemas"]["OrderStatusResponse"];
+                        readonly "text/json": components["schemas"]["OrderStatusResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/orders/{id}": {
         readonly parameters: {
             readonly query?: never;
@@ -441,6 +589,189 @@ export interface paths {
         };
         readonly put?: never;
         readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/notifications": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Lists the caller's notifications, newest first, one page at a time. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly limit?: number | string;
+                    readonly cursor?: string;
+                    readonly unreadOnly?: boolean;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["NotificationPageResponse"];
+                        readonly "application/json": components["schemas"]["NotificationPageResponse"];
+                        readonly "text/json": components["schemas"]["NotificationPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/notifications/unread-count": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The caller's unread count, for a badge. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["UnreadCountResponse"];
+                        readonly "application/json": components["schemas"]["UnreadCountResponse"];
+                        readonly "text/json": components["schemas"]["UnreadCountResponse"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/notifications/{id}/read": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Marks one notification read. Idempotent — marking an already-read one answers 200 with a
+         *     MarkedCount of zero, not an error.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["NotificationReadResponse"];
+                        readonly "application/json": components["schemas"]["NotificationReadResponse"];
+                        readonly "text/json": components["schemas"]["NotificationReadResponse"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/notifications/read-all": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Marks every unread notification read. */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["NotificationReadResponse"];
+                        readonly "application/json": components["schemas"]["NotificationReadResponse"];
+                        readonly "text/json": components["schemas"]["NotificationReadResponse"];
+                    };
+                };
+            };
+        };
         readonly delete?: never;
         readonly options?: never;
         readonly head?: never;
@@ -799,6 +1130,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description The reason is owned by `CancelOrderValidator`, not duplicated here as a DataAnnotation —
+         *     see the note on PlaceOrderRequest.
+         */
+        readonly CancelOrderRequest: {
+            readonly reason: string;
+        };
         readonly ChangePasswordRequest: {
             readonly currentPassword: string;
             readonly newPassword: string;
@@ -831,6 +1169,57 @@ export interface components {
              *     IsPersistent, which is the whole of what "remember me" means under cookie authentication.
              */
             readonly rememberMe: boolean;
+        };
+        /**
+         * @description What a notification is about. Persisted by name rather than by number (see the EF
+         *     configuration), so the numeric values here are free to be reordered — but the NAMES are a
+         *     stored contract: renaming one orphans every row already written under the old name.
+         * @enum {unknown}
+         */
+        readonly NotificationKind: "OrderPlaced" | "OrderShipped" | "OrderCancelled" | "ProductPriceChanged";
+        readonly NotificationPageResponse: {
+            readonly items: readonly components["schemas"]["NotificationResponse"][];
+            readonly nextCursor: null | string;
+        };
+        /** @description What both mark-read endpoints answer with. */
+        readonly NotificationReadResponse: {
+            /**
+             * Format: int32
+             * @description How many this call actually changed. Zero is a success: re-reading something already read
+             *     is idempotent, not an error.
+             */
+            readonly markedCount: number | string;
+            /**
+             * Format: int32
+             * @description The badge count after the change, so the client needs no second round-trip.
+             */
+            readonly unreadCount: number | string;
+        };
+        readonly NotificationResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            /**
+             * @description Serialized as its NAME, not its number — `Program.cs` configures a
+             *     `JsonStringEnumConverter`, and the generated OpenAPI document and
+             *     `frontend/src/api/schema.d.ts` both carry it as a string union. A client switching on
+             *     this gets a compile error when a kind is added, rather than an unhandled integer.
+             */
+            readonly kind: components["schemas"]["NotificationKind"];
+            readonly title: string;
+            readonly body: string;
+            /**
+             * Format: uuid
+             * @description The order or product this is about, for deep-linking. Null when the subject is gone or was
+             *     never recorded — see `Notification.SubjectId`.
+             */
+            readonly subjectId?: null | string;
+            /** Format: date-time */
+            readonly createdAt: string;
+            /**
+             * Format: date-time
+             * @description Null while unread. The single source of read-ness; there is no separate flag.
+             */
+            readonly readAt?: null | string;
         };
         readonly OrderListItemResponse: {
             /** Format: uuid */
@@ -871,6 +1260,24 @@ export interface components {
             readonly productName?: null | string;
             /** Format: double */
             readonly unitPrice?: null | number | string;
+        };
+        /**
+         * @description Where an order is in its life. Persisted by name, like
+         *     NotificationKind — the names are a stored contract.
+         *
+         *     OrderStatus.Placed is first so that it is also the CLR default: rows written before this
+         *     column existed materialize as Placed, which is what they were.
+         * @enum {unknown}
+         */
+        readonly OrderStatus: "Placed" | "Shipped" | "Cancelled";
+        /** @description What both transition endpoints answer with, so a client can render the new state. */
+        readonly OrderStatusResponse: {
+            /** Format: uuid */
+            readonly orderId: string;
+            /** @description Serialized as its name — see `NotificationResponse.Kind`. */
+            readonly status: components["schemas"]["OrderStatus"];
+            /** Format: date-time */
+            readonly changedAt: string;
         };
         /**
          * @description Business-rule validation (non-empty, max length, positive quantity) is owned by
@@ -932,6 +1339,11 @@ export interface components {
             readonly userId: string;
             readonly username: string;
             readonly displayName: string;
+        };
+        /** @description The badge count, on its own so a client polling it transfers one number. */
+        readonly UnreadCountResponse: {
+            /** Format: int32 */
+            readonly unreadCount: number | string;
         };
         /**
          * @description No Sku: it is the catalogue's business key and the domain refuses to change it. No Id
