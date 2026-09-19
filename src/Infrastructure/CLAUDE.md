@@ -103,11 +103,15 @@ writing the *next* typed client.
   callback; nothing re-reads the clock in a loop for `AutoAdvanceAmount` to catch, so it is never
   consulted and the timer never fires. Register a `FakeTimeProvider` as the DI `TimeProvider`
   (Polly resolves it from the container like anything else), then drive it by kicking the call
-  off unawaited and looping `clock.Advance(step)` with an `await Task.Yield()` between each call
-  — the yield is required specifically under xUnit, whose test execution context posts the timer
-  callback's continuation rather than running it inline. `ExchangeRateClientTests.cs`'s
+  off unawaited and looping `clock.Advance(step)` with a real `await Task.Delay(1ms)` between
+  each call. Some wait is required under xUnit, whose test execution context posts the timer
+  callback's continuation rather than running it inline. It must be a real delay, not
+  `Task.Yield()`, and the loop must be bounded by real time, not an iteration count: on a busy
+  CI runner a yield-and-count loop used up all of its iterations before the retry got a thread,
+  and flaked. Also move the total timeout out of reach in the test, because the loop keeps
+  advancing even when the pipeline lags. `ExchangeRateClientTests.cs`'s
   `AdvanceUntilCompleteAsync` is the reference implementation; copy it rather than rediscovering
-  either finding from a hang.
+  these findings from a hang or a flake.
 
 See ADR 0014.
 
