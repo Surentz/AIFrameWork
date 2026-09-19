@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using AiFramework.Api.Orders;
 using AiFramework.Infrastructure.Caching;
@@ -55,12 +57,19 @@ public sealed class OrderCachingTests : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    private static readonly JsonSerializerOptions JsonOptions =
+        new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
+
     private static async Task<OrderPageResponse> ListAsync(HttpClient client)
     {
         var response = await client.GetAsync("/api/orders");
         response.EnsureSuccessStatusCode();
 
-        var page = await response.Content.ReadFromJsonAsync<OrderPageResponse>();
+        // Explicit options, because OrderListItemResponse.Status is an enum the API now sends as
+        // its NAME (Program.cs's JsonStringEnumConverter). ReadFromJsonAsync's defaults do not
+        // include that converter, so a bare call throws on "Placed" - a client deserializing this
+        // contract has to opt in the same way.
+        var page = await response.Content.ReadFromJsonAsync<OrderPageResponse>(JsonOptions);
         page.Should().NotBeNull();
         return page;
     }

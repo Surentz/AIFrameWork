@@ -1,7 +1,15 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Domain.Orders;
 
 namespace AiFramework.Application.Orders;
 
+/// <summary>
+/// Carries Status/ShippedAt/CancelledAt, without which ShipOrder and CancelOrder are
+/// write-only: a client that shipped an order could never observe it as shipped, because a
+/// re-read was byte-identical and the only way to discover the state was to re-POST and read
+/// the 409. It is also what makes those commands' IInvalidatesCache tags mean something — before
+/// this, they evicted a cached view whose contents could not have changed.
+/// </summary>
 public sealed record OrderView(
     Guid Id,
     string Sku,
@@ -9,7 +17,10 @@ public sealed record OrderView(
     DateTimeOffset PlacedAt,
     Guid? ProductId,
     string? ProductName,
-    decimal? UnitPrice);
+    decimal? UnitPrice,
+    OrderStatus Status,
+    DateTimeOffset? ShippedAt,
+    DateTimeOffset? CancelledAt);
 
 public sealed record GetOrder(Guid Id) : IQuery<OrderView>, ICacheable
 {
@@ -40,6 +51,7 @@ public sealed class GetOrderHandler(IOrderRepository orders, ICurrentUser curren
                 ErrorKind.NotFound, "order.not_found", $"No order with id '{query.Id}'."))
             : Result.Success(new OrderView(
                 order.Id, order.Sku, order.Quantity, order.PlacedAt,
-                order.Product?.ProductId, order.Product?.Name, order.Product?.UnitPrice));
+                order.Product?.ProductId, order.Product?.Name, order.Product?.UnitPrice,
+                order.Status, order.ShippedAt, order.CancelledAt));
     }
 }

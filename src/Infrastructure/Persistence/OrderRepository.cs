@@ -13,6 +13,48 @@ public sealed class OrderRepository(AiFrameworkDbContext context) : IOrderReposi
         context.Orders.AsNoTracking()
             .FirstOrDefaultAsync(o => o.Id == id && o.UserId == ownerId, cancellationToken);
 
+    // No AsNoTracking, deliberately: ShipOrder/CancelOrder mutate what this returns, and an
+    // untracked entity would take their write to the floor with no error. See the port.
+    public Task<Order?> GetForUpdateAsync(
+        Guid id, Guid ownerId, CancellationToken cancellationToken) =>
+        context.Orders
+            .FirstOrDefaultAsync(o => o.Id == id && o.UserId == ownerId, cancellationToken);
+
+    public async Task<Guid?> GetOwnerAsync(Guid orderId, CancellationToken cancellationToken)
+    {
+        // Projects to the owner id in SQL rather than loading the order: this is called on the
+        // outbox pump's path for every OrderPlaced delivered, and it needs one column.
+        // Guid? rather than Guid so "no such order" is distinguishable from Guid.Empty, which
+        // Order.Place already refuses to store.
+        var owners = await context.Orders.AsNoTracking()
+            .Where(o => o.Id == orderId)
+            .Select(o => (Guid?)o.UserId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return owners;
+    }
+
+    public async Task<IReadOnlyList<Guid>> ListPurchaserIdsAsync(
+        string sku, int limit, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+
+        // GroupBy rather than Select().Distinct(): a user who ordered the same sku five times is
+        // one recipient, and grouping lets the "most recent purchase first" ordering be computed
+        // per user in SQL. Ordering by Max(PlacedAt) is what makes the cap drop the least recent
+        // buyers rather than an arbitrary set - see the port for what that trade buys.
+        return await context.Orders.AsNoTracking()
+            .Where(o => o.Sku == sku)
+            .GroupBy(o => o.UserId)
+            .Select(g => new { UserId = g.Key, LastPurchase = g.Max(o => o.PlacedAt) })
+            .OrderByDescending(x => x.LastPurchase)
+            .Take(limit)
+            .Select(x => x.UserId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<Order>> ListAsync(
         Guid ownerId,
         int limit,

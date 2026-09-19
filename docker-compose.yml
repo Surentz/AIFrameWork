@@ -63,6 +63,27 @@ services:
       # reset, same as pgdata.
       - seqdata:/data
 
+  # The SignalR backplane. Behind the same `realtime` profile as nothing else, so an ordinary
+  # `docker compose up` is unchanged and a developer who never touches notifications pays for no
+  # extra container — the same posture the `observability` profile takes for Seq.
+  #
+  # Worth knowing what this is NOT for locally: `dotnet run` is a single process, so push works
+  # without any backplane at all. This exists so the multi-replica path can be rehearsed on a
+  # laptop, and because the k8s overlay needs the same image. See ADR 0016.
+  redis:
+    image: redis:8-alpine
+    profiles: ['realtime']
+    ports:
+      - '${REDIS_PORT:-55379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    # No volume, deliberately. A backplane holds messages in flight, not state worth keeping:
+    # everything it carries is already committed in Postgres, and a restart that loses the queue
+    # costs at most a few live updates that clients pick up on their next read.
+
 volumes:
   pgdata:
   seqdata:

@@ -552,6 +552,208 @@
         }
       }
     },
+    "/api/orders/{id}/ship": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Marks one of the caller's own orders as shipped. 409 if it has already shipped or was\ncancelled — an illegal transition is a conflict with existing state, not a malformed\nrequest.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderStatusResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderStatusResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Cancels one of the caller's own orders. 409 if it has already shipped or was already\ncancelled.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderStatusResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderStatusResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orders/{id}": {
       "get": {
         "tags": [
@@ -606,6 +808,207 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Lists the caller's notifications, newest first, one page at a time.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "unreadOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/unread-count": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "The caller's unread count, for a badge.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCountResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCountResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCountResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/{id}/read": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Marks one notification read. Idempotent — marking an already-read one answers 200 with a\nMarkedCount of zero, not an error.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/read-all": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Marks every unread notification read.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadResponse"
                 }
               }
             }
@@ -1006,6 +1409,18 @@
   },
   "components": {
     "schemas": {
+      "CancelOrderRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "description": "The reason is owned by `CancelOrderValidator`, not duplicated here as a DataAnnotation —\nsee the note on PlaceOrderRequest."
+      },
       "ChangePasswordRequest": {
         "required": [
           "currentPassword",
@@ -1101,9 +1516,114 @@
           }
         }
       },
+      "NotificationKind": {
+        "enum": [
+          "OrderPlaced",
+          "OrderShipped",
+          "OrderCancelled",
+          "ProductPriceChanged"
+        ],
+        "description": "What a notification is about. Persisted by name rather than by number (see the EF\nconfiguration), so the numeric values here are free to be reordered — but the NAMES are a\nstored contract: renaming one orphans every row already written under the old name."
+      },
+      "NotificationPageResponse": {
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationResponse"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NotificationReadResponse": {
+        "required": [
+          "markedCount",
+          "unreadCount"
+        ],
+        "type": "object",
+        "properties": {
+          "markedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many this call actually changed. Zero is a success: re-reading something already read\nis idempotent, not an error.",
+            "format": "int32"
+          },
+          "unreadCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The badge count after the change, so the client needs no second round-trip.",
+            "format": "int32"
+          }
+        },
+        "description": "What both mark-read endpoints answer with."
+      },
+      "NotificationResponse": {
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "body",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "description": "Serialized as its NAME, not its number — `Program.cs` configures a\n`JsonStringEnumConverter`, and the generated OpenAPI document and\n`frontend/src/api/schema.d.ts` both carry it as a string union. A client switching on\nthis gets a compile error when a kind is added, rather than an unhandled integer.",
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "subjectId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The order or product this is about, for deep-linking. Null when the subject is gone or was\nnever recorded — see `Notification.SubjectId`.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "readAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null while unread. The single source of read-ness; there is no separate flag.",
+            "format": "date-time"
+          }
+        }
+      },
       "OrderListItemResponse": {
         "required": [
           "id",
+          "status",
           "sku",
           "quantity",
           "placedAt"
@@ -1113,6 +1633,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "status": {
+            "description": "Serialized as its name — see `NotificationResponse.Kind`.",
+            "$ref": "#/components/schemas/OrderStatus"
           },
           "sku": {
             "type": "string"
@@ -1178,6 +1702,7 @@
       "OrderResponse": {
         "required": [
           "id",
+          "status",
           "sku",
           "quantity",
           "placedAt"
@@ -1187,6 +1712,26 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "status": {
+            "description": "Serialized as its name — see `NotificationResponse.Kind`.",
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "shippedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null unless OrderStatus OrderResponse.Status is Shipped.",
+            "format": "date-time"
+          },
+          "cancelledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null unless OrderStatus OrderResponse.Status is Cancelled.",
+            "format": "date-time"
           },
           "sku": {
             "type": "string"
@@ -1227,6 +1772,37 @@
             "format": "double"
           }
         }
+      },
+      "OrderStatus": {
+        "enum": [
+          "Placed",
+          "Shipped",
+          "Cancelled"
+        ],
+        "description": "Where an order is in its life. Persisted by name, like\nNotificationKind — the names are a stored contract.\n\nOrderStatus.Placed is first so that it is also the CLR default: rows written before this\ncolumn existed materialize as Placed, which is what they were."
+      },
+      "OrderStatusResponse": {
+        "required": [
+          "orderId",
+          "status",
+          "changedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "description": "Serialized as its name — see `NotificationResponse.Kind`.",
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "What both transition endpoints answer with, so a client can render the new state."
       },
       "PlaceOrderRequest": {
         "required": [
@@ -1429,6 +2005,23 @@
         },
         "description": "Who the caller is. Carries no password material, by construction."
       },
+      "UnreadCountResponse": {
+        "required": [
+          "unreadCount"
+        ],
+        "type": "object",
+        "properties": {
+          "unreadCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "The badge count, on its own so a client polling it transfers one number."
+      },
       "UpdateProductRequest": {
         "required": [
           "name",
@@ -1470,6 +2063,9 @@
     },
     {
       "name": "Orders"
+    },
+    {
+      "name": "Notifications"
     },
     {
       "name": "Auth"

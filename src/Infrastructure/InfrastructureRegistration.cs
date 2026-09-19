@@ -1,10 +1,12 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Notifications;
 using AiFramework.Application.Orders;
 using AiFramework.Application.Products;
 using AiFramework.Application.Rates;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
+using AiFramework.Domain.Products;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Jobs;
@@ -45,8 +47,15 @@ public static class InfrastructureRegistration
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
 
         services.AddCommand<PlaceOrder, Guid, PlaceOrderHandler>();
+        services.AddCommand<ShipOrder, OrderStatusView, ShipOrderHandler>();
+        services.AddCommand<CancelOrder, OrderStatusView, CancelOrderHandler>();
         services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
         services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
+
+        services.AddCommand<MarkNotificationRead, NotificationReadResult, MarkNotificationReadHandler>();
+        services.AddCommand<MarkAllNotificationsRead, NotificationReadResult, MarkAllNotificationsReadHandler>();
+        services.AddQuery<GetNotifications, NotificationPage, GetNotificationsHandler>();
+        services.AddQuery<GetUnreadNotificationCount, int, GetUnreadNotificationCountHandler>();
 
         services.AddCommand<CreateProduct, Guid, CreateProductHandler>();
         services.AddCommand<UpdateProduct, bool, UpdateProductHandler>();
@@ -67,14 +76,16 @@ public static class InfrastructureRegistration
         services.AddQuery<GetUser, SessionView, GetUserHandler>();
 
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
+        services.AddScoped<IValidator<ShipOrder>, ShipOrderValidator>();
+        services.AddScoped<IValidator<CancelOrder>, CancelOrderValidator>();
+        services.AddScoped<IValidator<MarkNotificationRead>, MarkNotificationReadValidator>();
         services.AddScoped<IValidator<CreateProduct>, CreateProductValidator>();
         services.AddScoped<IValidator<UpdateProduct>, UpdateProductValidator>();
         services.AddScoped<IValidator<RegisterUser>, RegisterUserValidator>();
         services.AddScoped<IValidator<SignIn>, SignInValidator>();
         services.AddScoped<IValidator<ChangePassword>, ChangePasswordValidator>();
 
-        services.AddDomainEvent<OrderPlaced>("order.placed");
-        services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedAuditHandler>();
+        RegisterDomainEvents(services);
 
         // A second handler for the same event: OutboxWorkItemProcessor fans out to every
         // IDomainEventHandler<OrderPlaced>. This one is the job framework's reference for
@@ -84,6 +95,29 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedConfirmationHandler>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Split out of <see cref="AddMessaging"/> purely to stay under MA0051's line limit — the
+    /// rule is satisfied rather than suppressed, matching ObservabilityRegistration's own split.
+    /// </summary>
+    private static void RegisterDomainEvents(IServiceCollection services)
+    {
+        // The stored name, not the CLR type name, is what an outbox row carries — renaming a
+        // record is free, changing one of these strings orphans every row already written.
+        services.AddDomainEvent<OrderPlaced>("order.placed");
+        services.AddDomainEvent<OrderShipped>("order.shipped");
+        services.AddDomainEvent<OrderCancelled>("order.cancelled");
+        services.AddDomainEvent<ProductPriceChanged>("product.price_changed");
+
+        // Two handlers on OrderPlaced, dispatched to both: DomainEventDescriptor iterates
+        // GetServices<IDomainEventHandler<T>>(), so registering a second one fans out rather than
+        // replacing the first.
+        services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedAuditHandler>();
+        services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedNotifier>();
+        services.AddScoped<IDomainEventHandler<OrderShipped>, OrderShippedNotifier>();
+        services.AddScoped<IDomainEventHandler<OrderCancelled>, OrderCancelledNotifier>();
+        services.AddScoped<IDomainEventHandler<ProductPriceChanged>, ProductPriceChangedNotifier>();
     }
 
     /// <summary>The single entry point Api calls. Api must not reach past this into Infrastructure.</summary>
@@ -119,6 +153,7 @@ public static class InfrastructureRegistration
             .AddInterceptors(sp.GetRequiredService<DomainEventsInterceptor>()));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUserRepository, UserRepository>();

@@ -12,6 +12,10 @@ export const anOrder: Order = {
   sku: 'SKU-1',
   quantity: 2,
   placedAt: '2026-09-02T10:00:00+00:00',
+  // A string union, not a number: the API serializes enums by name, so the generated type is
+  // 'Placed' | 'Shipped' | 'Cancelled'. Adding Status to the order reads is what makes the
+  // ship/cancel endpoints observable at all — before that, a shipped order read back identically.
+  status: 'Placed',
 };
 
 export const aProduct: Product = {

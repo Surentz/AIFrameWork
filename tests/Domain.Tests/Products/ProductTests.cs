@@ -220,6 +220,72 @@ public sealed class ProductTests
     }
 
     [Fact]
+    public void Update_WhenThePriceChanges_RaisesProductPriceChanged()
+    {
+        var product = Create(name: "Widget", price: 9.99m);
+        product.ClearDomainEvents();
+
+        product.Update("Widget", null, 12.50m, UpdatedAt);
+
+        product.DomainEvents.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(
+                new ProductPriceChanged(product.Id, product.Sku, "Widget", 9.99m, 12.50m));
+    }
+
+    [Fact]
+    public void Update_WhenThePriceIsUnchanged_RaisesNothing()
+    {
+        // Renaming a product must not tell anyone its price moved.
+        var product = Create(name: "Widget", price: 9.99m);
+        product.ClearDomainEvents();
+
+        product.Update("Gadget", "Now a gadget.", 9.99m, UpdatedAt);
+
+        product.DomainEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Update_WhenThePriceDiffersOnlyInScale_RaisesNothing()
+    {
+        // 9.9 and 9.90 are the same money. decimal's == compares value, not representation.
+        var product = Create(price: 9.90m);
+        product.ClearDomainEvents();
+
+        product.Update("Widget", null, 9.9m, UpdatedAt);
+
+        product.DomainEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Update_WhenItThrows_RaisesNothing()
+    {
+        // The guards run before the price is assigned, so a refused update cannot announce a
+        // change that was never applied.
+        var product = Create(price: 9.99m);
+        product.ClearDomainEvents();
+
+        var act = () => product.Update("Widget", null, -1m, UpdatedAt);
+
+        act.Should().Throw<DomainException>();
+        product.DomainEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Update_CarriesTheNewNameOnTheEvent()
+    {
+        // The event is what a notification is written from, so it must describe the product as
+        // it is now, not as it was.
+        var product = Create(name: "Widget", price: 9.99m);
+        product.ClearDomainEvents();
+
+        product.Update("Gadget", null, 12.50m, UpdatedAt);
+
+        product.DomainEvents.Should().ContainSingle()
+            .Which.Should().BeOfType<ProductPriceChanged>()
+            .Which.Name.Should().Be("Gadget");
+    }
+
+    [Fact]
     public void Create_RaisesNoDomainEvents()
     {
         // Unlike Order.Place. Recorded as a test because adding one later is not free: the

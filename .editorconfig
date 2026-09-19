@@ -81,10 +81,16 @@ dotnet_diagnostic.CA1031.severity = none
 # at migration time, not in a hot path), and CA1825/MA0005 (a descending composite index -
 # `.IsDescending()` with no explicit per-column flags - makes the EF template emit
 # `descending: new bool[0]` rather than `Array.Empty<bool>()`; again a literal the template
-# always emits this way). Scoped to this generated folder only - not a repo-wide exemption. ---
+# always emits this way), and MA0051 (Up/Down are one generated statement per schema change,
+# so their length is decided by how much the migration does - a migration that adds a table
+# plus four columns crosses 60 lines with no way to shorten it that does not mean hand-editing
+# generated code the protect-migrations hook exists to forbid; splitting one migration into
+# several to satisfy a line count would also make the schema history lie about what changed
+# together). Scoped to this generated folder only - not a repo-wide exemption. ---
 [src/Infrastructure/Persistence/Migrations/*.cs]
 dotnet_diagnostic.CA1062.severity = none
 dotnet_diagnostic.IDE0161.severity = none
 dotnet_diagnostic.CA1861.severity = none
 dotnet_diagnostic.CA1825.severity = none
 dotnet_diagnostic.MA0005.severity = none
+dotnet_diagnostic.MA0051.severity = none

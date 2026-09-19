@@ -16,3 +16,8 @@ data:
   # ingress is the only route to the api Service, so X-Forwarded-For cannot be attacker-chosen.
   # Do not copy this into an overlay whose API is reachable directly - see ADR 0012.
   ForwardedHeaders__Enabled: 'true'
+  # Realtime notification push, and the backplane that makes it correct above one replica.
+  # DOUBLE underscores, like every key here. The Redis host is the in-cluster Service name from
+  # k8s/base/redis.yaml. See ADR 0016.
+  Realtime__Enabled: 'true'
+  Realtime__RedisConnectionString: 'redis:6379'

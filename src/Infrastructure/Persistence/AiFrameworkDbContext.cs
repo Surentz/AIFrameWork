@@ -1,3 +1,4 @@
+using AiFramework.Domain.Notifications;
 using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using AiFramework.Domain.Users;
@@ -19,6 +20,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     public DbSet<User> Users => Set<User>();
 
     public DbSet<Product> Products => Set<Product>();
+
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 

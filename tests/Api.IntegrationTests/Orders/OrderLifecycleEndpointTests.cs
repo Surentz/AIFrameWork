@@ -1,0 +1,195 @@
+using System.Net;
+using System.Net.Http.Json;
+using FluentAssertions;
+
+namespace AiFramework.Api.IntegrationTests.Orders;
+
+/// <summary>
+/// The ship/cancel transitions over HTTP, and the notifications they produce once the outbox
+/// drains.
+/// </summary>
+[Collection(nameof(ApiFactoryCollection))]
+public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
+{
+    private sealed record StatusResponse(Guid OrderId, string Status, DateTimeOffset ChangedAt);
+
+    private sealed record NotificationItem(
+        Guid Id, string Kind, string Title, string Body, Guid? SubjectId,
+        DateTimeOffset CreatedAt, DateTimeOffset? ReadAt);
+
+    private sealed record NotificationPage(IReadOnlyList<NotificationItem> Items, string? NextCursor);
+
+    private static async Task<Guid> PlaceOrderAsync(HttpClient client)
+    {
+        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 2 });
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        return await response.Content.ReadFromJsonAsync<Guid>();
+    }
+
+    private static async Task<IReadOnlyList<NotificationItem>> NotificationsForAsync(
+        HttpClient client, Guid subjectId)
+    {
+        var page = await client.GetFromJsonAsync<NotificationPage>("/api/notifications?limit=100");
+        page.Should().NotBeNull();
+        return [.. page.Items.Where(n => n.SubjectId == subjectId)];
+    }
+
+    [Fact]
+    public async Task ShipOrder_OnAPlacedOrder_ReportsShipped()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var orderId = await PlaceOrderAsync(client);
+
+        var response = await client.PostAsync($"/api/orders/{orderId}/ship", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var status = await response.Content.ReadFromJsonAsync<StatusResponse>();
+        status!.Status.Should().Be("Shipped");
+    }
+
+    [Fact]
+    public async Task ShipOrder_PersistsTheTransition()
+    {
+        // The handler reads tracked; if it did not, this second call would still see Placed and
+        // succeed instead of conflicting.
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var orderId = await PlaceOrderAsync(client);
+
+        await client.PostAsync($"/api/orders/{orderId}/ship", null);
+        var second = await client.PostAsync($"/api/orders/{orderId}/ship", null);
+
+        second.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task CancelOrder_AfterShipping_IsConflict()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var orderId = await PlaceOrderAsync(client);
+        await client.PostAsync($"/api/orders/{orderId}/ship", null);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/orders/{orderId}/cancel", new { Reason = "Changed my mind." });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task CancelOrder_OnAPlacedOrder_ReportsCancelled()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var orderId = await PlaceOrderAsync(client);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/orders/{orderId}/cancel", new { Reason = "Out of stock." });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var status = await response.Content.ReadFromJsonAsync<StatusResponse>();
+        status!.Status.Should().Be("Cancelled");
+    }
+
+    [Fact]
+    public async Task CancelOrder_WithNoReason_IsBadRequest()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var orderId = await PlaceOrderAsync(client);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/orders/{orderId}/cancel", new { Reason = "" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ShipOrder_ForAnotherUsersOrder_IsNotFound()
+    {
+        using var owner = await factory.CreateAuthenticatedClientAsync();
+        var orderId = await PlaceOrderAsync(owner);
+
+        using var stranger = await factory.CreateAuthenticatedClientAsync();
+        var response = await stranger.PostAsync($"/api/orders/{orderId}/ship", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task ShippingAndDraining_NotifiesTheBuyer()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var orderId = await PlaceOrderAsync(client);
+        await client.PostAsync($"/api/orders/{orderId}/ship", null);
+
+        await factory.DrainOutboxUntilEmptyAsync();
+
+        var notifications = await NotificationsForAsync(client, orderId);
+        notifications.Should().Contain(n => n.Kind == "OrderShipped");
+    }
+
+    [Fact]
+    public async Task CancellingAndDraining_NotifiesTheBuyerWithTheReason()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var orderId = await PlaceOrderAsync(client);
+        await client.PostAsJsonAsync(
+            $"/api/orders/{orderId}/cancel", new { Reason = "Out of stock." });
+
+        await factory.DrainOutboxUntilEmptyAsync();
+
+        var notifications = await NotificationsForAsync(client, orderId);
+        notifications.Should().ContainSingle(n => n.Kind == "OrderCancelled")
+            .Which.Body.Should().Contain("Out of stock.");
+    }
+
+    [Fact]
+    public async Task UpdatingAProductsPriceAndDraining_NotifiesItsPastPurchasers()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client, price: 10.00m);
+
+        var placed = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 1 });
+        placed.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var products = await client.GetFromJsonAsync<ProductPage>("/api/products?limit=100");
+        products.Should().NotBeNull();
+        var product = products.Items.Single(
+            p => string.Equals(p.Sku, sku, StringComparison.Ordinal));
+
+        var updated = await client.PutAsJsonAsync(
+            $"/api/products/{product.Id}",
+            new { Name = "Widget", Description = (string?)null, Price = 12.50m });
+        updated.IsSuccessStatusCode.Should().BeTrue();
+
+        await factory.DrainOutboxUntilEmptyAsync();
+
+        var notifications = await NotificationsForAsync(client, product.Id);
+        notifications.Should().ContainSingle(n => n.Kind == "ProductPriceChanged")
+            .Which.Body.Should().Contain("rose");
+    }
+
+    [Fact]
+    public async Task UpdatingAProductWithoutChangingThePrice_NotifiesNobody()
+    {
+        using var client = await factory.CreateAuthenticatedClientAsync();
+        var sku = await CatalogueSetup.CreateProductAsync(client, price: 10.00m);
+        await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 1 });
+
+        var products = await client.GetFromJsonAsync<ProductPage>("/api/products?limit=100");
+        products.Should().NotBeNull();
+        var product = products.Items.Single(
+            p => string.Equals(p.Sku, sku, StringComparison.Ordinal));
+
+        await client.PutAsJsonAsync(
+            $"/api/products/{product.Id}",
+            new { Name = "Renamed", Description = (string?)null, Price = 10.00m });
+
+        await factory.DrainOutboxUntilEmptyAsync();
+
+        var notifications = await NotificationsForAsync(client, product.Id);
+        notifications.Should().BeEmpty();
+    }
+
+    private sealed record ProductItem(Guid Id, string Sku, string Name, decimal Price);
+
+    private sealed record ProductPage(IReadOnlyList<ProductItem> Items, string? NextCursor);
+}
