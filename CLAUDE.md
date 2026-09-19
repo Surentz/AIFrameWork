@@ -307,6 +307,13 @@ it fails, the fix is the command above; `WorkerCodegenTests` is its counterpart 
 tree. CI additionally re-runs **both** `codegen write` commands and fails on any diff, catching
 generated code that still loads but has drifted.
 
+**CI's Linux output is the authority, and Windows does not always match it.** On the Quartz
+branch, `codegen write` on Windows put `RebuildOrderReportHandler`'s `jobCurrentUser` resolution
+after `queryDispatcher`, and CI on Linux put it before — stable on each platform, not affected by
+culture, and not diagnosed further. The two orders do the same thing. If a Windows regeneration
+reorders statements in a handler you did not change, keep the committed version of that file;
+CI's "generated code is current" job is what decides.
+
 Two codegen failures compile perfectly well and surface only when you run the command, both found
 that way while building the job framework: JasperFx will not upcast a concrete message to an
 interface for a middleware parameter, and it refuses service location under Wolverine 6's
