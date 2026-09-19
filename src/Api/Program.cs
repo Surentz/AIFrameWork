@@ -278,7 +278,16 @@ string? realtimeWarning = null;
 
 if (realtime.Enabled)
 {
-    var signalR = builder.Services.AddSignalR();
+    // A THIRD JsonSerializerOptions, and it is not reached by either of the two above.
+    // JsonHubProtocolOptions.PayloadSerializerOptions is what SignalR serializes hub payloads
+    // with; AddJsonOptions covers controllers and ConfigureHttpJsonOptions covers the OpenAPI
+    // generator, and neither touches this one. Without this line a push sends "kind":0 while
+    // GET /api/notifications sends "kind":"OrderPlaced" — two wire contracts for one concept,
+    // only one of which is in schema.d.ts. Proved by NotificationPushPayloadTests, which
+    // asserts against the host's own resolved options rather than a hand-built copy.
+    var signalR = builder.Services.AddSignalR()
+        .AddJsonProtocol(options =>
+            options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
     if (!string.IsNullOrWhiteSpace(realtime.RedisConnectionString))
     {

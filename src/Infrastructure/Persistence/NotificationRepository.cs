@@ -67,13 +67,15 @@ public sealed class NotificationRepository(AiFrameworkDbContext context) : INoti
             .ConfigureAwait(false);
 
     public async Task<IReadOnlySet<Guid>> ListNotifiedRecipientsAsync(
-        Guid sourceMessageId, CancellationToken cancellationToken)
+        Guid sourceMessageId, NotificationKind kind, CancellationToken cancellationToken)
     {
         // Projects to the id before materializing, so a message that fanned out to hundreds of
         // recipients does not hydrate hundreds of entities just to answer "who already has one".
         var recipients = await context.Notifications
             .AsNoTracking()
-            .Where(n => n.SourceMessageId == sourceMessageId)
+            // Filters on the same columns as IX_Notifications_SourceMessageId_UserId_Kind, in
+            // its leading order, so this seeks rather than scans.
+            .Where(n => n.SourceMessageId == sourceMessageId && n.Kind == kind)
             .Select(n => n.UserId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

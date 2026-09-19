@@ -42,7 +42,7 @@ internal static class NotificationFanOut
         }
 
         var alreadyNotified = await notifications
-            .ListNotifiedRecipientsAsync(context.MessageId, cancellationToken)
+            .ListNotifiedRecipientsAsync(context.MessageId, kind, cancellationToken)
             .ConfigureAwait(false);
 
         var created = await AddForEachAsync(

@@ -71,10 +71,12 @@ public sealed class MarkNotificationReadHandler(
         // never commit (that is the behavior's job, exactly once) and doing so would turn one
         // command into two transactions.
         //
-        // Advisory under concurrency: another request marking a different notification read
-        // between the count and the commit makes this one high. It is a badge, and the caller's
-        // next read corrects it.
-        var unread = storedUnread - (changed ? 1 : 0);
+        // Advisory under concurrency, in BOTH directions: another request marking a different
+        // notification read between the count and the commit makes this one high, and a
+        // concurrent mark-all-read committing in that same window leaves storedUnread at 0 while
+        // this call still changed something — which without the clamp reports -1. A badge is
+        // never negative; the caller's next read corrects either drift.
+        var unread = Math.Max(0, storedUnread - (changed ? 1 : 0));
 
         return Result.Success(new NotificationReadResult(changed ? 1 : 0, unread));
     }

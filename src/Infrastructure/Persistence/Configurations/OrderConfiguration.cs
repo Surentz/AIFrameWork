@@ -60,11 +60,28 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         // Rows written before the catalogue link have all three columns null.
         builder.Navigation(o => o.Product).IsRequired(false);
 
+        ConfigureIndexes(builder);
+    }
+
+    /// <summary>
+    /// Split out of <see cref="Configure"/> to stay under MA0051's line limit — the rule is
+    /// satisfied rather than suppressed.
+    /// </summary>
+    private static void ConfigureIndexes(EntityTypeBuilder<Order> builder)
+    {
         // The list endpoint filters by owner and orders by (PlacedAt DESC, Id DESC). The owner
         // is the leading column because it is an equality predicate; the previous
         // IX_Orders_PlacedAt_Id_Desc cannot serve this query and is dropped.
         builder.HasIndex(o => new { o.UserId, o.PlacedAt, o.Id })
             .IsDescending(false, true, true)
             .HasDatabaseName("IX_Orders_UserId_PlacedAt_Id_Desc");
+
+        // ListPurchaserIdsAsync — the recipient rule for a price change — filters on Sku and
+        // groups by UserId. The index above leads with UserId, so it cannot serve that query at
+        // all: without this one it is a sequential scan plus aggregate over the whole table, run
+        // on the outbox pump once per ProductPriceChanged delivery. PlacedAt is included because
+        // that query also takes Max(PlacedAt) per user to order the fan-out.
+        builder.HasIndex(o => new { o.Sku, o.UserId, o.PlacedAt })
+            .HasDatabaseName("IX_Orders_Sku_UserId_PlacedAt");
     }
 }

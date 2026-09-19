@@ -100,6 +100,14 @@ catch up on their next read. No caller may treat a successful push as delivery, 
 skip writing the row because it pushed. This is stated on `INotificationPush` itself because it is
 the assumption most likely to be quietly violated later.
 
+**Shipping is owner-scoped, and that is a stopgap with a sharp edge.** `ShipOrder` lets the
+buyer mark their own order shipped, because there is no role system yet and owner-scoped is the
+choice that cannot become a privilege escalation in the meantime (the same gap ADR 0013 works
+around for the catalogue). The edge worth knowing before roles arrive: `Order.Ship` is terminal,
+so a buyer who ships their own order also permanently suppresses any later legitimate ship — the
+operator has no transition left to make. `ShipOrder` is the one command whose authorization
+changes when roles land; cancelling stays with the buyer.
+
 **The e2e gate does not cover it.** `deploy/e2e-k8s.ps1` exercises two replicas, durable
 Wolverine, caching and the rate limit; realtime push is not in that readiness path, for the same
 reason `-WithObservability` is not — see ADR 0012. The cross-replica behaviour this ADR exists to

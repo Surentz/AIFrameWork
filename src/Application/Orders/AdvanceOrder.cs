@@ -67,11 +67,16 @@ public sealed class ShipOrderHandler(
         // than left to GlobalExceptionHandler's 400 for DomainException: "you already shipped
         // this" is a conflict with existing state, not a malformed request the caller can fix by
         // editing their input.
+        //
+        // OrderStateException specifically, not DomainException: catching the base would also
+        // swallow input-validation failures and answer 409 for them. Ship happens to throw only
+        // conflicts today, but catching the narrow type is what keeps that true if it ever
+        // gains an input rule.
         try
         {
             order.Ship(shippedAt);
         }
-        catch (DomainException exception)
+        catch (OrderStateException exception)
         {
             return Result.Failure<OrderStatusView>(new Error(
                 ErrorKind.Conflict, "orders.cannot_ship", exception.Message));
@@ -125,13 +130,18 @@ public sealed class CancelOrderHandler(
 
         var cancelledAt = clock.UtcNow;
 
-        // See ShipOrderHandler for why an illegal transition is a 409 rather than the 400 a
-        // DomainException would otherwise become.
+        // OrderStateException ONLY. Cancel throws for two different classes of problem — a state
+        // conflict (409) and a malformed reason (400) — and catching the base DomainException
+        // answered 409 for both. That was unreachable purely because CancelOrderValidator above
+        // duplicates the same input rules and rejects them first with a 400; the moment the
+        // validator and the aggregate drifted, a blank reason would have become a 409 carrying a
+        // domain message. A missing or overlong reason now falls through to
+        // GlobalExceptionHandler's 400, which is what it always should have been.
         try
         {
             order.Cancel(command.Reason, cancelledAt);
         }
-        catch (DomainException exception)
+        catch (OrderStateException exception)
         {
             return Result.Failure<OrderStatusView>(new Error(
                 ErrorKind.Conflict, "orders.cannot_cancel", exception.Message));

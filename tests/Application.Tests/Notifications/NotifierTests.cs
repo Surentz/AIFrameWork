@@ -33,7 +33,7 @@ public sealed class NotifierTests
     public NotifierTests()
     {
         _clock.UtcNow.Returns(Now);
-        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<CancellationToken>())
+        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<NotificationKind>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid>());
         _orders.GetOwnerAsync(OrderId, Arg.Any<CancellationToken>()).Returns(UserId);
     }
@@ -141,7 +141,7 @@ public sealed class NotifierTests
     public async Task OrderPlaced_WhenNothingWasWritten_PushesNothing()
     {
         // Nobody should be told about a redelivery that changed nothing.
-        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<CancellationToken>())
+        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<NotificationKind>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid> { UserId });
         var notifier = new OrderPlacedNotifier(_notifications, _orders, _unitOfWork, [_push], _clock);
 
@@ -156,7 +156,7 @@ public sealed class NotifierTests
     public async Task OrderPlaced_WhenNothingWasWritten_DoesNotCommit()
     {
         // A redelivery that writes nothing should not issue a pointless round trip.
-        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<CancellationToken>())
+        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<NotificationKind>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid> { UserId });
         var notifier = new OrderPlacedNotifier(_notifications, _orders, _unitOfWork, [_push], _clock);
 
@@ -170,7 +170,7 @@ public sealed class NotifierTests
     public async Task OrderPlaced_WhenAlreadyNotified_WritesNothing()
     {
         // The redelivery case. At-least-once means this WILL happen.
-        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<CancellationToken>())
+        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<NotificationKind>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid> { UserId });
         var notifier = new OrderPlacedNotifier(_notifications, _orders, _unitOfWork, [_push], _clock);
 
@@ -214,7 +214,7 @@ public sealed class NotifierTests
     [Fact]
     public async Task OrderShipped_WhenAlreadyNotified_WritesNothing()
     {
-        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<CancellationToken>())
+        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<NotificationKind>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid> { UserId });
         var notifier = new OrderShippedNotifier(_notifications, _unitOfWork, [_push], _clock);
 
@@ -271,7 +271,7 @@ public sealed class NotifierTests
         var stillPending = Guid.NewGuid();
         _orders.ListPurchaserIdsAsync("SKU-1", Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([alreadyDone, stillPending]);
-        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<CancellationToken>())
+        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<NotificationKind>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid> { alreadyDone });
         var notifier = new ProductPriceChangedNotifier(_notifications, _orders, _unitOfWork, [_push], _clock);
 
@@ -321,7 +321,7 @@ public sealed class NotifierTests
         await _notifications.DidNotReceive().AddAsync(
             Arg.Any<Notification>(), Arg.Any<CancellationToken>());
         await _notifications.DidNotReceive().ListNotifiedRecipientsAsync(
-            Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+            Arg.Any<Guid>(), Arg.Any<NotificationKind>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]

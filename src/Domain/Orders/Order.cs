@@ -113,21 +113,22 @@ public sealed class Order : Entity
     /// thing that happens to a parcel — a shipment that should not have gone out is a return,
     /// which is a different aggregate this feature does not model.
     /// </summary>
-    /// <exception cref="DomainException">
+    /// <exception cref="OrderStateException">
     /// If the order is already shipped, or was cancelled. Both are genuinely broken invariants
     /// rather than imprecise callers: shipping twice means two parcels, and shipping a cancelled
-    /// order means one nobody agreed to pay for.
+    /// order means one nobody agreed to pay for. This method throws NOTHING else, which is why
+    /// ShipOrderHandler can map every exception it produces to a single status.
     /// </exception>
     public void Ship(DateTimeOffset shippedAt)
     {
         if (Status == OrderStatus.Shipped)
         {
-            throw new DomainException("That order has already shipped.");
+            throw new OrderStateException("That order has already shipped.");
         }
 
         if (Status == OrderStatus.Cancelled)
         {
-            throw new DomainException("A cancelled order cannot ship.");
+            throw new OrderStateException("A cancelled order cannot ship.");
         }
 
         Status = OrderStatus.Shipped;
@@ -140,19 +141,23 @@ public sealed class Order : Entity
     /// cancelling is a return, not a cancellation, and pretending otherwise would let the two
     /// diverge silently.
     /// </summary>
+    /// <exception cref="OrderStateException">
+    /// If the order has shipped or is already cancelled — a conflict with existing state.
+    /// </exception>
     /// <exception cref="DomainException">
-    /// If the order has shipped, is already cancelled, or the reason is missing or too long.
+    /// If the reason is missing or too long — a malformed input, which must NOT reach the caller
+    /// as the same status as a state conflict. See OrderStateException for the full reasoning.
     /// </exception>
     public void Cancel(string reason, DateTimeOffset cancelledAt)
     {
         if (Status == OrderStatus.Shipped)
         {
-            throw new DomainException("An order that has shipped cannot be cancelled.");
+            throw new OrderStateException("An order that has shipped cannot be cancelled.");
         }
 
         if (Status == OrderStatus.Cancelled)
         {
-            throw new DomainException("That order is already cancelled.");
+            throw new OrderStateException("That order is already cancelled.");
         }
 
         if (string.IsNullOrWhiteSpace(reason))

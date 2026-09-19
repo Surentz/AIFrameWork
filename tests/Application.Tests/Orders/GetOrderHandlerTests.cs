@@ -29,7 +29,8 @@ public sealed class GetOrderHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be(new OrderView(
-            id, "SKU-1", 4, PlacedAt, product.ProductId, product.Name, product.UnitPrice));
+            id, "SKU-1", 4, PlacedAt, product.ProductId, product.Name, product.UnitPrice,
+            OrderStatus.Placed, null, null));
     }
 
     [Fact]

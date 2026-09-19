@@ -51,8 +51,9 @@ public interface INotificationRepository
         Guid ownerId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Who this outbox message has already notified. The dedupe check that makes every event
-    /// handler idempotent: delivery is at-least-once, so each of them WILL run twice eventually.
+    /// Who this outbox message has already notified WITH THIS KIND. The dedupe check that makes
+    /// every event handler idempotent: delivery is at-least-once, so each of them WILL run twice
+    /// eventually.
     /// </summary>
     /// <remarks>
     /// Returns the whole recipient set in ONE query rather than offering a per-user
@@ -61,11 +62,16 @@ public interface INotificationRepository
     /// is already under strain. Single-recipient handlers use the same method and just test
     /// <c>Contains</c>.
     ///
+    /// Scoped by KIND as well as by message, matching the unique index exactly — the two must
+    /// agree. One event may have more than one notifier, and if this read ignored kind, a retry
+    /// that found the first notifier's row would suppress the second notifier's row forever.
+    ///
     /// This check is an optimization, not the guarantee. Two concurrent deliveries of the same
-    /// message can both pass it and both insert; the unique index on (SourceMessageId, UserId) is
-    /// what actually prevents a duplicate landing in someone's feed, at the cost of failing one
-    /// of the two deliveries, which the outbox then retries into a no-op.
+    /// message can both pass it and both insert; the unique index on
+    /// (SourceMessageId, UserId, Kind) is what actually prevents a duplicate landing in someone's
+    /// feed, at the cost of failing one of the two deliveries, which the outbox then retries into
+    /// a no-op.
     /// </remarks>
     public Task<IReadOnlySet<Guid>> ListNotifiedRecipientsAsync(
-        Guid sourceMessageId, CancellationToken cancellationToken);
+        Guid sourceMessageId, NotificationKind kind, CancellationToken cancellationToken);
 }

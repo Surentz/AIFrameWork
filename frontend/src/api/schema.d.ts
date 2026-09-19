@@ -1224,6 +1224,8 @@ export interface components {
         readonly OrderListItemResponse: {
             /** Format: uuid */
             readonly id: string;
+            /** @description Serialized as its name — see `NotificationResponse.Kind`. */
+            readonly status: components["schemas"]["OrderStatus"];
             readonly sku: string;
             /** Format: int32 */
             readonly quantity: number | string;
@@ -1246,6 +1248,18 @@ export interface components {
         readonly OrderResponse: {
             /** Format: uuid */
             readonly id: string;
+            /** @description Serialized as its name — see `NotificationResponse.Kind`. */
+            readonly status: components["schemas"]["OrderStatus"];
+            /**
+             * Format: date-time
+             * @description Null unless OrderStatus OrderResponse.Status is Shipped.
+             */
+            readonly shippedAt?: null | string;
+            /**
+             * Format: date-time
+             * @description Null unless OrderStatus OrderResponse.Status is Cancelled.
+             */
+            readonly cancelledAt?: null | string;
             readonly sku: string;
             /** Format: int32 */
             readonly quantity: number | string;

@@ -1,7 +1,9 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Domain.Orders;
 
 namespace AiFramework.Application.Orders;
 
+/// <summary>Carries Status for the reason given on <see cref="OrderView"/>.</summary>
 public sealed record OrderListItem(
     Guid Id,
     string Sku,
@@ -9,7 +11,8 @@ public sealed record OrderListItem(
     DateTimeOffset PlacedAt,
     Guid? ProductId,
     string? ProductName,
-    decimal? UnitPrice);
+    decimal? UnitPrice,
+    OrderStatus Status);
 
 public sealed record OrderPage(IReadOnlyList<OrderListItem> Items, string? NextCursor);
 
@@ -87,7 +90,7 @@ public sealed class GetOrdersHandler(IOrderRepository orders, ICurrentUser curre
         var page = rows.Take(query.Limit)
             .Select(o => new OrderListItem(
                 o.Id, o.Sku, o.Quantity, o.PlacedAt,
-                o.Product?.ProductId, o.Product?.Name, o.Product?.UnitPrice))
+                o.Product?.ProductId, o.Product?.Name, o.Product?.UnitPrice, o.Status))
             .ToArray();
 
         var next = hasMore

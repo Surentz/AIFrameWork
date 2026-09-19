@@ -51,6 +51,7 @@ public sealed class OrdersController(
                     ProductId = i.ProductId,
                     ProductName = i.ProductName,
                     UnitPrice = i.UnitPrice,
+                    Status = i.Status,
                 })],
                 NextCursor = result.Value.NextCursor,
             })
@@ -119,6 +120,9 @@ public sealed class OrdersController(
                 ProductId = result.Value.ProductId,
                 ProductName = result.Value.ProductName,
                 UnitPrice = result.Value.UnitPrice,
+                Status = result.Value.Status,
+                ShippedAt = result.Value.ShippedAt,
+                CancelledAt = result.Value.CancelledAt,
             })
             : result.Problem(HttpContext);
     }

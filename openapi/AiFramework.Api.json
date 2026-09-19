@@ -1623,6 +1623,7 @@
       "OrderListItemResponse": {
         "required": [
           "id",
+          "status",
           "sku",
           "quantity",
           "placedAt"
@@ -1632,6 +1633,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "status": {
+            "description": "Serialized as its name — see `NotificationResponse.Kind`.",
+            "$ref": "#/components/schemas/OrderStatus"
           },
           "sku": {
             "type": "string"
@@ -1697,6 +1702,7 @@
       "OrderResponse": {
         "required": [
           "id",
+          "status",
           "sku",
           "quantity",
           "placedAt"
@@ -1706,6 +1712,26 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "status": {
+            "description": "Serialized as its name — see `NotificationResponse.Kind`.",
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "shippedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null unless OrderStatus OrderResponse.Status is Shipped.",
+            "format": "date-time"
+          },
+          "cancelledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null unless OrderStatus OrderResponse.Status is Cancelled.",
+            "format": "date-time"
           },
           "sku": {
             "type": "string"

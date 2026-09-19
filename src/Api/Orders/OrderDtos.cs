@@ -18,6 +18,15 @@ public sealed record OrderResponse
 {
     public required Guid Id { get; init; }
 
+    /// <summary>Serialized as its name — see <c>NotificationResponse.Kind</c>.</summary>
+    public required OrderStatus Status { get; init; }
+
+    /// <summary>Null unless <see cref="Status"/> is Shipped.</summary>
+    public DateTimeOffset? ShippedAt { get; init; }
+
+    /// <summary>Null unless <see cref="Status"/> is Cancelled.</summary>
+    public DateTimeOffset? CancelledAt { get; init; }
+
     public required string Sku { get; init; }
 
     public required int Quantity { get; init; }
@@ -38,6 +47,9 @@ public sealed record OrderResponse
 public sealed record OrderListItemResponse
 {
     public required Guid Id { get; init; }
+
+    /// <summary>Serialized as its name — see <c>NotificationResponse.Kind</c>.</summary>
+    public required OrderStatus Status { get; init; }
 
     public required string Sku { get; init; }
 

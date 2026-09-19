@@ -45,6 +45,14 @@ public sealed partial class SignalRNotificationPush(
     {
         ArgumentNullException.ThrowIfNull(notification);
 
+        // Mapped to the Api DTO before it goes out, NOT pushed as the Application view it
+        // arrives as. The pushed object is part of the HTTP contract exactly as much as the REST
+        // body is, so it has to be the type that appears in openapi/AiFramework.Api.json and
+        // therefore in schema.d.ts — otherwise a client has one generated type for the feed and
+        // an undocumented shape for the push, and the Application record's next change alters
+        // the wire silently. Same mapper the controller uses, so the two cannot drift.
+        var payload = notification.ToResponse();
+
         // Clients.User targets every connection whose UserIdentifier matches - by default the
         // NameIdentifier claim, which AuthController stamps with the user id. That covers the
         // same person on two tabs or two devices without any group bookkeeping here, and with a
@@ -54,7 +62,7 @@ public sealed partial class SignalRNotificationPush(
             await hub.Clients.User(userId.ToString())
                 .SendAsync(
                     NotificationHub.NotificationReceived,
-                    notification,
+                    payload,
                     cancellationToken)
                 .ConfigureAwait(false);
         }

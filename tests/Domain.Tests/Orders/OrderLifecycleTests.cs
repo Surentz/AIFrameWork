@@ -154,6 +154,53 @@ public sealed class OrderLifecycleTests
     }
 
     [Fact]
+    public void Cancel_WithNoReason_DoesNotThrowAStateException()
+    {
+        // The distinction the handlers map to different HTTP statuses: a missing reason is a
+        // malformed input (400), not a conflict with existing state (409). Catching the base
+        // DomainException in CancelOrderHandler answered 409 for both, and was only ever correct
+        // because the validator rejects this first.
+        var order = Placed();
+
+        var act = () => order.Cancel("   ", CancelledAt);
+
+        act.Should().Throw<DomainException>().And.Should().NotBeOfType<OrderStateException>();
+    }
+
+    [Fact]
+    public void Cancel_WithAnOverlongReason_DoesNotThrowAStateException()
+    {
+        var order = Placed();
+
+        var act = () => order.Cancel(
+            new string('a', Order.MaxCancellationReasonLength + 1), CancelledAt);
+
+        act.Should().Throw<DomainException>().And.Should().NotBeOfType<OrderStateException>();
+    }
+
+    [Fact]
+    public void Cancel_OnAShippedOrder_ThrowsAStateException()
+    {
+        var order = Placed();
+        order.Ship(ShippedAt);
+
+        var act = () => order.Cancel("Changed my mind.", CancelledAt);
+
+        act.Should().Throw<OrderStateException>();
+    }
+
+    [Fact]
+    public void Ship_Twice_ThrowsAStateException()
+    {
+        var order = Placed();
+        order.Ship(ShippedAt);
+
+        var act = () => order.Ship(ShippedAt.AddHours(1));
+
+        act.Should().Throw<OrderStateException>();
+    }
+
+    [Fact]
     public void Cancel_WithAReasonOverTheLimit_Throws()
     {
         var order = Placed();

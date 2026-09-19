@@ -34,12 +34,30 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
         // it would add a column that duplicates ReadAt and could disagree with it.
         builder.Ignore(n => n.IsRead);
 
-        // What actually makes the event handlers idempotent. The ExistsAsync-style check in
+        ConfigureIndexes(builder);
+    }
+
+    /// <summary>
+    /// Split out of <see cref="Configure"/> to stay under MA0051's line limit — the rule is
+    /// satisfied rather than suppressed.
+    /// </summary>
+    private static void ConfigureIndexes(EntityTypeBuilder<Notification> builder)
+    {
+        // What actually makes the event handlers idempotent. The dedupe read in
         // NotificationFanOut is an optimization; THIS is the guarantee — two concurrent
-        // deliveries of one message cannot both land a row for the same recipient.
-        builder.HasIndex(n => new { n.SourceMessageId, n.UserId })
+        // deliveries of one message cannot both land a row for the same (message, recipient,
+        // kind).
+        //
+        // Kind is part of the key, and leaving it out was a latent trap rather than a
+        // simplification. One event may legitimately have more than one notifier (OrderPlaced
+        // already carries two HANDLERS today). The moment a second notifier writes a different
+        // KIND for the same recipient off the same message, a (SourceMessageId, UserId) key
+        // makes them collide: one insert throws, the outbox retries, and the retry's dedupe
+        // read then suppresses BOTH — losing the second notification permanently while the
+        // outbox row reads Processed.
+        builder.HasIndex(n => new { n.SourceMessageId, n.UserId, n.Kind })
             .IsUnique()
-            .HasDatabaseName("IX_Notifications_SourceMessageId_UserId");
+            .HasDatabaseName("IX_Notifications_SourceMessageId_UserId_Kind");
 
         // Both of the next two cover the SAME property set, so they MUST use the named
         // HasIndex overload. EF identifies an index by its properties: called unnamed, the second
