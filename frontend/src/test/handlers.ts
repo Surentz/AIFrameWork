@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { Session } from '../features/auth/types';
+import type { Notification } from '../features/notifications/types';
 import type { Order } from '../features/orders/types';
 import type { Product } from '../features/products/types';
 
@@ -26,6 +27,17 @@ export const aProduct: Product = {
   price: 9.99,
   createdAt: '2026-09-02T10:00:00+00:00',
   updatedAt: '2026-09-02T10:00:00+00:00',
+};
+
+// Unread by default (readAt absent). The read case is scripted per test, because "already read"
+// is the branch that hides the Mark read button and that is worth asking for explicitly.
+export const aNotification: Notification = {
+  id: '66666666-6666-6666-6666-666666666666',
+  kind: 'OrderPlaced',
+  title: 'Order placed',
+  body: 'Your order for 2 x SKU-1 is in.',
+  subjectId: anOrder.id,
+  createdAt: '2026-09-02T10:05:00+00:00',
 };
 
 export const aSession: Session = {
@@ -67,6 +79,31 @@ export const handlers = [
   ),
   http.post('/api/products', () => HttpResponse.json(aProduct.id, { status: 201 })),
   http.put('/api/products/:id', () => new HttpResponse(null, { status: 204 })),
+  // All four notification endpoints, not just the ones a given screen uses: onUnhandledRequest
+  // is 'error', and the bell's polling unread-count query rides along in every test that renders
+  // AppLayout. A missing handler there would fail a suite that has nothing to do with the feed.
+  http.get('/api/notifications', () =>
+    HttpResponse.json({
+      items: [
+        aNotification,
+        {
+          ...aNotification,
+          id: '77777777-7777-7777-7777-777777777777',
+          kind: 'OrderShipped',
+          title: 'Order shipped',
+          readAt: '2026-09-02T11:00:00+00:00',
+        },
+      ],
+      nextCursor: null,
+    }),
+  ),
+  http.get('/api/notifications/unread-count', () => HttpResponse.json({ unreadCount: 1 })),
+  http.post('/api/notifications/:id/read', () =>
+    HttpResponse.json({ markedCount: 1, unreadCount: 0 }),
+  ),
+  http.post('/api/notifications/read-all', () =>
+    HttpResponse.json({ markedCount: 1, unreadCount: 0 }),
+  ),
 ];
 
 export const server = setupServer(...handlers);

@@ -4,6 +4,7 @@ import { ChangePasswordPage } from './features/auth/ChangePasswordPage';
 import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { RequireAuth } from './features/auth/RequireAuth';
+import { NotificationList } from './features/notifications/NotificationList';
 import { OrderDetail } from './features/orders/OrderDetail';
 import { OrderList } from './features/orders/OrderList';
 import { PlaceOrderForm } from './features/orders/PlaceOrderForm';
@@ -34,6 +35,7 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/products/new" element={<CreateProductForm />} />
           <Route path="/products/:id" element={<ProductDetail />} />
           <Route path="/products/:id/edit" element={<EditProductForm />} />
+          <Route path="/notifications" element={<NotificationList />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
         </Route>
       </Route>

@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Mark } from './components/Mark';
 import { useLogout, useSession } from './features/auth/queries';
+import { NotificationBell } from './features/notifications/NotificationBell';
 import './AppLayout.css';
 
 export function AppLayout(): React.JSX.Element {
@@ -31,6 +32,9 @@ export function AppLayout(): React.JSX.Element {
         </nav>
 
         <div className="shell__session">
+          {/* Inside the layout, so it renders on every signed-in screen and nowhere else - the
+              feed is per-user and the query would 401 on /login. */}
+          <NotificationBell />
           {/* RequireAuth guards this subtree, so session is set by the time the shell renders -
               but the query can still be refetching, so this stays defensive rather than
               asserting. */}
