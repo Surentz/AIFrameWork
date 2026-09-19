@@ -80,12 +80,49 @@ open follow-on; this host joining the poll is a step toward it, not the finished
 intent ever becomes "only the worker polls", that is an explicit opt-out in `AddOutbox`, not a
 side effect to rely on.
 
+## Scheduling
+
+Scheduled jobs fire here, and only here: `Program.cs` calls `AddJobScheduling(connectionString)`
+(`src/Infrastructure/Jobs/Scheduling/QuartzRegistration.cs`), which starts a clustered Quartz
+scheduler over the `quartz` schema. The API registers no Quartz at all, and
+`ApiHasNoSchedulerTests` keeps it that way. ADR 0017.
+
+- **`EnqueueScheduledJob` is the only Quartz job there should ever be.** It enqueues through
+  `IJobScheduler` and returns; Wolverine runs the work on its lane. A second `IJob` would be a
+  second way to write a job, with no lane, retry policy or dead-letter queue.
+  `[DisallowConcurrentExecution]` is on it so one schedule cannot overlap itself on a node.
+- **`ScheduleSynchronizer` runs once at startup, before the scheduler starts** (its hosted service
+  is registered ahead of `AddQuartzHostedService`). It writes one durable job and one cron trigger
+  per scheduled job, keyed by the job's type name in the `jobs` group, and deletes anything else in
+  that group. It never touches another group.
+- **It preserves a pause.** A trigger whose cron is unchanged is left completely alone, so neither
+  its paused state nor a pending misfire catch-up is lost on a redeploy. Only a real cron change
+  rebuilds the trigger, and then re-pauses it if it was paused. There is a brief unpaused window
+  in that one case; the class remarks explain why Quartz cannot close it.
+- **The last build to start wins.** An old-build pod that restarts mid-rollout re-syncs the
+  store to *its* schedules — deleting jobs only the new build has, reverting changed crons — and
+  it stays that way until a new-build worker starts. If a schedule is missing or wrong after a
+  rollout, restart a worker. ADR 0017.
+- **Every node needs its own instance id.** `ProcessInstanceIdGenerator` supplies one; with
+  clustering on and no generator configured, Quartz 4.1 names every node `NON_CLUSTERED` and two
+  pods look like one. `SchedulingTests` asserts both halves.
+- **`SchemaProvisioning.Validate` means a missing migration stops the worker.** If the worker
+  refuses to start naming a `qrtz_` table, run `dotnet ef database update`; do not switch to
+  `CreateIfMissing`.
+- **Tracing** adds the `Quartz` activity source in `WorkerObservability`, so a trigger firing and
+  the Wolverine job it enqueued share one trace. **Readiness** includes Quartz's own health check,
+  from `AddQuartzHealthChecks()`.
+
+In tests, fire a trigger with `IScheduler.TriggerJob(...)` and observe the job through a Wolverine
+tracking session — never wait for a cron to come round.
+
 ## Configuration
 
 | Key | Why it matters |
 |---|---|
 | `Jobs__Queues` | The lanes this pod consumes, comma-separated. **This one value is the host split** — a host listing no lane is publish-only, which is what the Api does. An unknown name fails at startup rather than leaving a queue unconsumed |
 | `Jobs__LightParallelism` / `Jobs__HeavyParallelism` | Per-pod concurrency per lane. Heavy defaults to 2 deliberately; scale replicas, not this |
+| `Jobs__Schedules__<JobName>` | Overrides one scheduled job's cron (Quartz syntax, seconds first). An unknown job name or an invalid cron fails startup naming the key. Only the timing is configurable; which jobs are scheduled is code |
 | `Cache__Enabled` | **`false` here, in `appsettings.json` and in the manifest.** See root `CLAUDE.md`'s Jobs section |
 | `Observability__ServiceName` | `aiframework-worker`, so the two hosts are distinguishable in the log store |
 

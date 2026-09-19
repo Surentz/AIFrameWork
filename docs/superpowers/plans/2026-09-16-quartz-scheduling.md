@@ -88,6 +88,39 @@ FluentAssertions + NSubstitute, Testcontainers.
 
 ## Task 1: Spike — Quartz 4.1 against a real Postgres, before anything is built
 
+> **RESULT (2026-09-16):** All three findings confirmed on the first run — no schema-transformation
+> retry was needed.
+>
+> 1. **`Validate` accepted `quartz.qrtz_` on the first attempt.** The exact transformation: read the
+>    embedded resource `Quartz.Impl.AdoJobStore.Schema.create_postgres.sql` off `typeof(IJob).Assembly`,
+>    then `.Replace("{0}", "quartz.qrtz_")`, `.Replace("{1}", "qrtz_")`, `.Replace("--;;", "")`, prefix
+>    with `CREATE SCHEMA IF NOT EXISTS quartz;`, and run the **whole result as one `NpgsqlCommand`** —
+>    the `--;;` statement separators do **not** need to be split into separate commands; Npgsql's
+>    simple-query protocol executes the semicolon-delimited batch in a single `ExecuteNonQueryAsync()`
+>    call. Log evidence: `Successfully validated presence of 19 schema objects` /
+>    `LocalTransactionJobStore initialized.` — no validation exception.
+> 2. **A clustered scheduler started and fired the job.** `UsePersistentStore` +
+>    `UseClustering(c => c.Enabled = true)` produced `Using job store
+>    'Quartz.Impl.AdoJobStore.LocalTransactionJobStore', supports persistence: True, clustered: True`,
+>    the hosted service started it (`Scheduler QuartzScheduler_$_NON_CLUSTERED started.`), and
+>    `TriggerJob` fired `SpikeJob` (`[SPIKE] fired=True`). **Caveat for later tasks:** with no
+>    `InstanceId` configured, Quartz falls back to the literal string `"NON_CLUSTERED"` as the
+>    instance id even though `clustered: True` — every replica would collide on that same id in a
+>    real multi-pod cluster. A real deployment needs `s.InstanceId = "AUTO"` (or equivalent) set
+>    explicitly; this spike didn't need it because only one instance ever ran.
+> 3. **The job is resolved from a child scope, not the root.** `SpikeJob`'s injected
+>    `IServiceProvider` was compared by reference against the root captured before `host.StartAsync()`;
+>    `[SPIKE] job resolved from a child scope, not the root: True` confirms
+>    `MicrosoftDependencyInjectionJobFactory` creates a DI scope per job execution. As noted in the
+>    task brief, `EnqueueScheduledJob` (Task 4) creates its own scope via `IServiceScopeFactory`
+>    regardless, so no later code depends on this finding either way.
+>
+> One incidental fix needed to get the spike to *build* (not part of the three findings): Quartz
+> 4.1's `IJob.Execute` declares `CancellationToken cancellationToken = default` (has a default
+> value) — overriding it without the default value fails the repo's analyzers (`MA0061`/`S1006`,
+> "method overrides should not change default values"). The brief's spike code as written did not
+> compile until `= default` was added to the override.
+
 The spec lists three things not yet verified. This task proves them in a throwaway test, records
 the results in this plan, and deletes the test. **Nothing in later tasks may be built on an
 assumption this task could have checked.**
@@ -1516,3 +1549,23 @@ git commit -m "docs(jobs): ADR 0017 and framework guidance for scheduled jobs"
       log that the scheduler started clustered, and run `./deploy/e2e-k8s.ps1`.
 - [ ] Dispatch `dotnet-reviewer` over `git diff main...HEAD`.
 - [ ] `openapi/AiFramework.Api.json` unchanged.
+
+### Results (2026-09-19)
+
+- Debug and Release builds: 0 warnings, 0 errors.
+- Tests, Debug and Release, one project at a time: Domain 83, Application 122, Infrastructure 210,
+  Worker 14, Api 128 (129 in Release) — all passed.
+- `codegen write` for both hosts: no content diff (line endings only, which git normalises).
+- `openapi/AiFramework.Api.json` and `schema.d.ts`: unchanged.
+- Local worker against the dev database after `dotnet ef database update`: clustered, instance id
+  `<host>-<pid>-<ticks>`, logged `Schedule PruneProcessedOutbox = '0 5 * * * ?' (paused: False).`,
+  `/health/ready` 200. Run with `dotnet run --project src/Worker` rather than `dev.ps1`.
+- kind: the `migrate` Job applied `AddQuartzSchema`; the worker pod validated 19 schema objects,
+  started clustered with a pod-named instance id, and logged the schedule. `e2e-k8s.ps1`: 11 passed.
+- `dotnet-reviewer`: no blockers. Fixed in `d7927dc`: removal logged once, scheduled-descriptor
+  invariant pinned by a test, `!` removed, Quartz activity source re-exported from Infrastructure,
+  instance-id comment corrected. Documented rather than engineered: the mixed-build rollout gap and
+  the two-node pause race (ADR 0017, `ScheduleSynchronizer` remarks, `src/Worker/CLAUDE.md`).
+- Seen, not caused by this branch: every API and worker pod logs
+  `libgssapi_krb5.so.2: cannot open shared object file` once at startup — Npgsql probing for
+  Kerberos in the runtime image. The API pods, which have no Quartz, log it too.

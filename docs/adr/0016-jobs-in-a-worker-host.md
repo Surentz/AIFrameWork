@@ -170,3 +170,12 @@ replica count is free to change.
 author. Rejected because it has no scheduling, no lanes and no concurrency control per message
 type, and adding all three would rebuild what Wolverine already provides and ADR 0005 already paid
 for. The outbox stays what it is: the domain-event delivery path.
+
+## Superseded in part by ADR 0017
+
+Recurring jobs are no longer self-rescheduling durable messages. The first real recurring job
+exposed that seeding the chain from more than one worker replica double-fires it, with no misfire
+handling and no way to pause a schedule short of a redeploy. ADR 0017 adopts Quartz.NET as the job
+clock instead: Quartz decides when, Wolverine still runs every job exactly as this ADR describes.
+Nothing else here changes — the lane, the queue, the retry policy, and the worker-only placement
+all stand.

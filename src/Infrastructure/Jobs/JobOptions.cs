@@ -35,6 +35,15 @@ public sealed class JobOptions
     public int HeavyParallelism { get; set; } = 2;
 
     /// <summary>
+    /// Per-environment cron overrides, keyed by job type name —
+    /// <c>Jobs__Schedules__PruneProcessedOutbox</c>. A job without an entry keeps the cron its
+    /// registration declares. Get-only: the configuration binder fills an existing dictionary,
+    /// confirmed against Microsoft.Extensions.Configuration.Binder 10.0.
+    /// </summary>
+    public IDictionary<string, string> Schedules { get; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>
     /// <see cref="Queues"/> parsed, or throws naming the offending value. Used by both the
     /// listener registration and the options validation, so a name that parses here is a name
     /// that will be listened on — the two cannot disagree.
@@ -79,6 +88,41 @@ public sealed class JobOptions
         }
 
         ParseQueues();
+        ValidateSchedules();
+    }
+
+    /// <summary>
+    /// An override must name a job that exists AND is scheduled, and carry a cron Quartz accepts.
+    /// Anything else fails startup naming the key, rather than being ignored — an ignored override
+    /// is a schedule an operator believes they changed.
+    /// </summary>
+    private void ValidateSchedules()
+    {
+        foreach (var (name, cron) in Schedules)
+        {
+            var job = Scheduling.JobSchedules.Find(name);
+
+            if (job is null)
+            {
+                throw new InvalidOperationException(
+                    $"Jobs:Schedules:{name} names no job. Scheduled jobs are: " +
+                    $"{string.Join(", ", JobRegistration.Jobs.Where(j => j.IsScheduled).Select(j => j.Name))}.");
+            }
+
+            if (!job.IsScheduled)
+            {
+                throw new InvalidOperationException(
+                    $"Jobs:Schedules:{name} is set, but {name} is not a scheduled job and cannot be " +
+                    "made one by configuration.");
+            }
+
+            if (!Scheduling.JobSchedules.IsValidCron(cron))
+            {
+                throw new InvalidOperationException(
+                    $"Jobs:Schedules:{name} = '{cron}' is not a Quartz cron expression " +
+                    "(seconds first, e.g. '0 5 * * * ?').");
+            }
+        }
     }
 
     /// <summary>

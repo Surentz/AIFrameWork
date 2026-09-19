@@ -1,5 +1,7 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Maintenance;
 using AiFramework.Application.Orders;
+using AiFramework.Infrastructure.Outbox;
 using JasperFx.CodeGeneration.Model;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -11,25 +13,51 @@ using Wolverine.Postgresql;
 namespace AiFramework.Infrastructure.Jobs;
 
 /// <summary>
-/// One job's registration: its type, its lane, and how it is routed. The job-side equivalent of
+/// One job's registration: its type, its lane, how it is routed, and — for a scheduled job — its
+/// default cron and how to create one. The job-side equivalent of
 /// <c>CommandDescriptor</c>/<c>QueryDescriptor</c>.
 /// </summary>
 /// <remarks>
-/// <see cref="Route"/> is a delegate captured over the closed generic at construction time, so
-/// routing stays <b>reflection-free</b> — the same posture <c>AddCommand</c>/<c>AddQuery</c> hold,
-/// and the reason <c>src/Infrastructure/CLAUDE.md</c> says not to "simplify" dispatch into
-/// <c>MakeGenericType</c>. <see cref="JobType"/> exists so a completeness test can read the list
-/// without executing it.
+/// <see cref="Route"/> and <see cref="EnqueueNew"/> are delegates captured over the closed generic
+/// at construction time, so routing and scheduled enqueueing stay <b>reflection-free</b> — the same
+/// posture <c>AddCommand</c>/<c>AddQuery</c> hold. <see cref="JobType"/> exists so completeness
+/// tests can read the list without executing it.
 /// </remarks>
-public sealed record JobDescriptor(Type JobType, JobLane Lane, Action<WolverineOptions> Route)
+public sealed record JobDescriptor(
+    Type JobType,
+    JobLane Lane,
+    Action<WolverineOptions> Route,
+    string? DefaultCron = null,
+    Func<IJobScheduler, CancellationToken, Task>? EnqueueNew = null)
 {
+    /// <summary>The job's key everywhere a string is needed: Quartz keys and config overrides.</summary>
+    public string Name => JobType.Name;
+
+    public bool IsScheduled => DefaultCron is not null;
+
     public static JobDescriptor For<TJob>()
         where TJob : IJob =>
+        new(typeof(TJob), TJob.Lane, RouteFor<TJob>());
+
+    /// <summary>
+    /// A job that also runs on a schedule. <c>new()</c> is the point: a schedule fires with no caller
+    /// and no arguments, so a job that needs data (an owner, an id) cannot be scheduled, and the
+    /// compiler says so rather than a worker firing it with defaults. ADR 0017.
+    /// </summary>
+    /// <param name="cron">A Quartz cron expression — seconds first, e.g. <c>"0 5 * * * ?"</c>.</param>
+    public static JobDescriptor Scheduled<TJob>(string cron)
+        where TJob : IJob, new() =>
         new(
             typeof(TJob),
             TJob.Lane,
-            opts => opts.PublishMessage<TJob>()
-                .ToPostgresqlQueue(JobRegistration.QueueFor(TJob.Lane)));
+            RouteFor<TJob>(),
+            cron,
+            static (jobs, cancellationToken) => jobs.EnqueueAsync(new TJob(), cancellationToken));
+
+    private static Action<WolverineOptions> RouteFor<TJob>()
+        where TJob : IJob =>
+        static opts => opts.PublishMessage<TJob>()
+            .ToPostgresqlQueue(JobRegistration.QueueFor(TJob.Lane));
 }
 
 /// <summary>
@@ -54,6 +82,10 @@ public static class JobRegistration
     [
         JobDescriptor.For<SendOrderConfirmation>(),
         JobDescriptor.For<RebuildOrderReport>(),
+
+        // Hourly at :05. Retention is seven days, so hourly is already generous; the old
+        // five-minute cadence existed only because the sweep piggy-backed on the poll loop.
+        JobDescriptor.Scheduled<PruneProcessedOutbox>("0 5 * * * ?"),
     ];
 
     /// <summary>
@@ -105,7 +137,8 @@ public static class JobRegistration
 
         opts.Discovery
             .IncludeType<SendOrderConfirmationHandler>()
-            .IncludeType<RebuildOrderReportHandler>();
+            .IncludeType<RebuildOrderReportHandler>()
+            .IncludeType<PruneProcessedOutboxHandler>();
 
         // Set on the WORKER only — the API keeps Wolverine 6's NotAllowed default, so this
         // relaxation reaches exactly the host that needs it.
@@ -231,6 +264,7 @@ public static class JobRegistration
         // replacing them costs (one class each, no caller affected).
         services.AddScoped<IOrderNotifier, LoggingOrderNotifier>();
         services.AddScoped<IOrderReportWriter, LoggingOrderReportWriter>();
+        services.AddScoped<IOutboxRetention, OutboxRetention>();
 
         return services;
     }
@@ -248,14 +282,14 @@ internal sealed class JobOptionsValidator : IValidateOptions<JobOptions>
 
         try
         {
-            options.ParseQueues();
+            options.Validate();
             return ValidateOptionsResult.Success;
         }
         catch (InvalidOperationException exception)
         {
-            // Narrow by type, not a bare catch: ParseQueues throws exactly this for an unknown
-            // lane, and anything else here is a genuine fault that must not be reported as a
-            // configuration problem. CA1031 stays satisfied on its own terms.
+            // Narrow by type, not a bare catch: ParseQueues/ValidateSchedules throw exactly this
+            // for a bad value, and anything else here is a genuine fault that must not be
+            // reported as a configuration problem. CA1031 stays satisfied on its own terms.
             return ValidateOptionsResult.Fail(exception.Message);
         }
     }
