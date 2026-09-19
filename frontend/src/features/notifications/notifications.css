@@ -1,0 +1,139 @@
+/* The bell in the app chrome, and the feed screen. Shares .page-header, .card, .btn, .alert and
+   .spinner with the rest of the app - only what is specific to notifications lives here. */
+
+/* ---------------------------------------------------------------- the bell */
+
+.bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md, 8px);
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.bell:hover {
+  color: var(--color-accent);
+  background: var(--color-surface-raised, rgb(0 0 0 / 4%));
+}
+
+/* The count request failed and the badge may be stale. Dimmed and dotted rather than recoloured,
+   so the cue survives a colour-blind reader; the link's own title carries the reason. */
+.bell--stale {
+  opacity: 0.6;
+  outline: 1px dotted currentcolor;
+  outline-offset: -2px;
+}
+
+.bell__icon {
+  display: block;
+}
+
+.bell__badge {
+  position: absolute;
+  /* Nudged onto the bell's shoulder rather than centred on the corner, so a two-digit count
+     grows outward instead of over the icon. */
+  inset-block-start: 0.1rem;
+  inset-inline-start: 1.2rem;
+  min-width: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--color-danger, #d4351c);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.1rem;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- the feed */
+
+.notifications__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.notifications__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.notifications__empty-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.notifications__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notifications__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-block-end: 1px solid var(--color-border, rgb(0 0 0 / 8%));
+}
+
+.notifications__item:last-child {
+  border-block-end: none;
+}
+
+/* Unread is carried by a left rule and weight, not by colour alone - the dot beside the title
+   is the non-colour cue for anyone who cannot see the tint. */
+.notifications__item.is-unread {
+  border-inline-start: 3px solid var(--color-accent);
+  background: var(--color-surface-raised, rgb(0 0 0 / 2%));
+}
+
+.notifications__body {
+  min-width: 0;
+}
+
+.notifications__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-weight: 600;
+}
+
+.notifications__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.notifications__text {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.notifications__when {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs, 0.75rem);
+}
+
+.notifications__error {
+  margin-block-start: var(--space-4);
+}
+
+.notifications__more {
+  display: flex;
+  justify-content: center;
+  margin-block-start: var(--space-4);
+}
