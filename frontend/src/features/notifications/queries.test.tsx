@@ -78,7 +78,7 @@ describe('marking read and the unread badge', () => {
       { wrapper: withQueryClient() },
     );
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Mark read' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Mark Order placed read' }));
 
     expect(
       await screen.findByRole('link', { name: 'Notifications, none unread' }),

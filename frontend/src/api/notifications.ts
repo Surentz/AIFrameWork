@@ -30,8 +30,10 @@ export function getUnreadCount(): Promise<UnreadCount> {
 }
 
 // POST with no body: the id is in the path and there is nothing else to send. `request` rather
-// than the 204 helper because both mark-read endpoints answer 200 with the new counts, which is
-// what lets the bell update without a second round-trip.
+// than a 204 helper because both mark-read endpoints answer 200 with the new counts. The hooks
+// in features/notifications/queries.ts invalidate instead of seeding the cache from that body,
+// so the counts are currently typed and returned but unused — deliberately: one source of truth
+// for the badge, refetched, beats two that can disagree.
 export function markNotificationRead(id: string): Promise<NotificationReadResult> {
   return request<NotificationReadResult>(`/api/notifications/${id}/read`, { method: 'POST' });
 }

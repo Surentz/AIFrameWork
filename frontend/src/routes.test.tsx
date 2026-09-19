@@ -27,6 +27,18 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: 'Catalogue' })).toBeInTheDocument();
   });
 
+  it('renders the notifications feed inside the app shell, with the bell in the chrome', async () => {
+    // The bell lives in AppLayout rather than on any one screen, so this is the only place that
+    // pins it to the signed-in shell at all - a bell moved out of the layout would still pass
+    // every test in features/notifications.
+    renderAt('/notifications');
+
+    expect(await screen.findByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('link', { name: 'Notifications, 1 unread' }),
+    ).toBeInTheDocument();
+  });
+
   it('matches /products/new as the create screen rather than as an id', async () => {
     // The route order is what decides this; declared the other way round, "new" would be
     // captured as :id and the detail screen would request /api/products/new.

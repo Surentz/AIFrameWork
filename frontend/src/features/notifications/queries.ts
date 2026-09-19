@@ -55,8 +55,11 @@ export function useUnreadCount(): UseQueryResult<UnreadCount, ApiError> {
     queryKey: notificationKeys.unreadCount(),
     queryFn: getUnreadCount,
     refetchInterval: UnreadPollIntervalMs,
-    // Without this the badge only moves while the tab is focused, which is the case where the
-    // user is least likely to need telling. It is one small GET.
+    // The default, stated explicitly because it is a decision rather than an oversight: false
+    // means the interval fires only while the tab is focused (query-core checks
+    // `refetchIntervalInBackground || focusManager.isFocused()` before fetching). A backgrounded
+    // tab polling for a badge nobody is looking at is a load generator; it catches up on the
+    // refetch that focus itself triggers.
     refetchIntervalInBackground: false,
   });
 }

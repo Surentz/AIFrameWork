@@ -15,17 +15,27 @@ export function NotificationBell(): React.JSX.Element {
   // types.ts to look tidier would be a lie (see frontend/CLAUDE.md).
   const unread = data === undefined ? 0 : Number(data.unreadCount);
 
-  // A failed count must not take the header down or hide the way to the feed. The bell still
-  // links; it just shows no badge, and the feed itself reports the error properly.
-  const label =
-    error !== null
-      ? 'Notifications'
-      : unread === 0
-        ? 'Notifications, none unread'
-        : `Notifications, ${String(unread)} unread`;
+  // Keyed off `data`, never off `error`, because the two are not alternatives. A failed poll
+  // KEEPS the last good `data`, so a count still painted in the badge has to stay in the
+  // accessible name too — dropping it there would take the number away from screen-reader users
+  // while leaving it on screen for everyone else. And before the first response `data` is
+  // undefined while `error` is still null, where "none unread" would assert a fact nothing has
+  // fetched yet.
+  const count = data === undefined ? null : unread === 0 ? 'none unread' : `${String(unread)} unread`;
+
+  // A failed count must not take the header down or hide the way to the feed, but it must not
+  // vanish either: it is said here, and shown by .bell--stale below.
+  const label = ['Notifications', count, error !== null ? 'count may be out of date' : null]
+    .filter((part): part is string => part !== null)
+    .join(', ');
 
   return (
-    <Link className="bell" to="/notifications" aria-label={label} title={label}>
+    <Link
+      className={error !== null ? 'bell bell--stale' : 'bell'}
+      to="/notifications"
+      aria-label={label}
+      title={error !== null ? `${label} — ${error.message}` : label}
+    >
       <svg
         className="bell__icon"
         viewBox="0 0 24 24"

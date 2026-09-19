@@ -20,6 +20,14 @@
   background: var(--color-surface-raised, rgb(0 0 0 / 4%));
 }
 
+/* The count request failed and the badge may be stale. Dimmed and dotted rather than recoloured,
+   so the cue survives a colour-blind reader; the link's own title carries the reason. */
+.bell--stale {
+  opacity: 0.6;
+  outline: 1px dotted currentcolor;
+  outline-offset: -2px;
+}
+
 .bell__icon {
   display: block;
 }

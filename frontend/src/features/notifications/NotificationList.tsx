@@ -12,11 +12,20 @@ import './notifications.css';
  * Where a notification's subject lives, or null when there is nowhere useful to go.
  *
  * A switch over the string union rather than an `if` chain, and with no `default` branch, so
- * that adding a kind to the backend contract is a COMPILE error here — TypeScript narrows the
- * union to `never` at the end only when every member is handled. That is the whole reason the
- * API serializes enums by name (see types.ts).
+ * that adding a kind to the backend contract is a COMPILE error here: the switch stops being
+ * exhaustive, the end of the function becomes reachable, and `noImplicitReturns` rejects it.
+ * That is the whole reason the API serializes enums by name (see types.ts).
+ *
+ * `| undefined` in the return type is that compile-time check being honest about its own reach:
+ * it only bites once `schema.d.ts` is regenerated, so a deployed backend that has added a kind
+ * while a browser still holds the previous bundle falls out of here as `undefined`. Callers have
+ * to collapse that — `<Link to={undefined}>` resolves against the current location, and a "View"
+ * that silently goes nowhere is worse than no "View" at all.
  */
-function subjectPath(kind: NotificationKind, subjectId: string | null | undefined): string | null {
+function subjectPath(
+  kind: NotificationKind,
+  subjectId: string | null | undefined,
+): string | null | undefined {
   if (subjectId === null || subjectId === undefined) {
     return null;
   }
@@ -43,13 +52,23 @@ function NotificationRow({
   isMarking,
 }: NotificationRowProps): React.JSX.Element {
   const isRead = notification.readAt !== null && notification.readAt !== undefined;
-  const target = subjectPath(notification.kind, notification.subjectId);
+  // ?? null collapses the unknown-kind case, so the `target !== null` guard below cannot let an
+  // undefined through into <Link to={...}>.
+  const target = subjectPath(notification.kind, notification.subjectId) ?? null;
 
   return (
     <li className={isRead ? 'notifications__item' : 'notifications__item is-unread'}>
       <div className="notifications__body">
         <p className="notifications__title">
-          {!isRead && <span className="notifications__dot" aria-label="Unread" />}
+          {/* The dot is the non-colour cue, but aria-label is PROHIBITED on an empty span's
+              implicit `generic` role and browsers do not expose it - so the word is carried by
+              real, visually hidden text instead. */}
+          {!isRead && (
+            <>
+              <span className="notifications__dot" aria-hidden="true" />
+              <span className="visually-hidden">Unread</span>
+            </>
+          )}
           {notification.title}
         </p>
         <p className="notifications__text">{notification.body}</p>
@@ -58,7 +77,11 @@ function NotificationRow({
           {target !== null && (
             <>
               {' · '}
-              <Link to={target}>View</Link>
+              {/* Named for its subject: twenty rows of "View" is twenty indistinguishable
+                  entries in a screen reader's elements list. */}
+              <Link to={target} aria-label={`View ${notification.title}`}>
+                View
+              </Link>
             </>
           )}
         </p>
@@ -69,6 +92,7 @@ function NotificationRow({
           className="btn btn--secondary"
           type="button"
           disabled={isMarking}
+          aria-label={`Mark ${notification.title} read`}
           onClick={() => {
             onMarkRead(notification.id);
           }}
@@ -80,17 +104,19 @@ function NotificationRow({
   );
 }
 
+interface NotificationHeaderProps {
+  readonly unreadOnly: boolean;
+  readonly onToggle: () => void;
+  readonly onMarkAll: () => void;
+  readonly isMarkingAll: boolean;
+}
+
 function Header({
   unreadOnly,
   onToggle,
   onMarkAll,
   isMarkingAll,
-}: {
-  readonly unreadOnly: boolean;
-  readonly onToggle: () => void;
-  readonly onMarkAll: () => void;
-  readonly isMarkingAll: boolean;
-}): React.JSX.Element {
+}: NotificationHeaderProps): React.JSX.Element {
   return (
     <div className="page-header">
       <div>
@@ -182,7 +208,10 @@ export function NotificationList(): React.JSX.Element {
             <NotificationRow
               key={notification.id}
               notification={notification}
-              isMarking={markRead.isPending}
+              // Scoped to the row actually in flight: markRead.isPending alone would grey out
+              // every other row's button too, for the whole mutation AND the invalidation it
+              // awaits.
+              isMarking={markRead.isPending && markRead.variables === notification.id}
               onMarkRead={(id) => {
                 markRead.mutate(id);
               }}

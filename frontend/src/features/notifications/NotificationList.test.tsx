@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
@@ -21,6 +21,9 @@ describe('NotificationList', () => {
 
     expect(await screen.findByText('Order placed')).toBeInTheDocument();
     expect(screen.getByText('Order shipped')).toBeInTheDocument();
+    // The count, not just the presence of both: two findByText calls pass identically if the
+    // rows were duplicated by a flattening or key bug across infinite pages.
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
   });
 
   it('announces the loading state before the feed arrives', async () => {
@@ -37,7 +40,11 @@ describe('NotificationList', () => {
     renderList();
 
     expect(await screen.findByText('Order placed')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Mark read' })).toHaveLength(1);
+    // Scoped to the list, so the header's own "Mark all read" is not counted.
+    expect(within(screen.getByRole('list')).getAllByRole('button')).toHaveLength(1);
+    expect(
+      screen.getByRole('button', { name: 'Mark Order placed read' }),
+    ).toBeInTheDocument();
   });
 
   it('deep-links an order notification at its order and a product one at its product', async () => {
@@ -61,7 +68,8 @@ describe('NotificationList', () => {
 
     renderList();
 
-    const links = await screen.findAllByRole('link', { name: 'View' });
+    // Each View link is named for its own subject, so match the prefix.
+    const links = await screen.findAllByRole('link', { name: /^View / });
 
     // Mapped rather than indexed: noUncheckedIndexedAccess types links[0] as possibly
     // undefined, and asserting the whole array at once also proves there is no third link.
@@ -84,7 +92,7 @@ describe('NotificationList', () => {
     renderList();
 
     expect(await screen.findByText('Order placed')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'View' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^View / })).not.toBeInTheDocument();
   });
 
   it('marks a single notification read and refetches the feed', async () => {
@@ -110,11 +118,11 @@ describe('NotificationList', () => {
 
     renderList();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Mark read' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Mark Order placed read' }));
 
     await screen.findByText('Order placed');
     expect(marked).toBe(aNotification.id);
-    expect(screen.queryByRole('button', { name: 'Mark read' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark Order placed read' })).not.toBeInTheDocument();
   });
 
   it('marks everything read from the header', async () => {
@@ -189,7 +197,7 @@ describe('NotificationList', () => {
 
     renderList();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Mark read' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Mark Order placed read' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not mark it read.');
     expect(screen.getByText('Order placed')).toBeInTheDocument();
