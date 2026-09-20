@@ -476,6 +476,44 @@ A blank or over-long entry in `Admin__Usernames` fails startup with an
 
 See ADR 0020.
 
+## The sign-in audit
+
+Every attempt to authenticate writes a `sign_in_events` row: the outcome, the username as typed,
+the caller's address and user-agent, and a `TraceId`. `User.LastSeenAt` is stamped alongside it,
+which is what "online now" on the monitoring page means.
+
+**The audit records the difference the endpoint itself refuses to reveal.** `SignInHandler`
+answers every failure with one uniform error — unknown username, wrong password and locked-out
+are indistinguishable to the caller, deliberately (ADR 0006), and both the unknown-user and
+locked-out branches hash a password they then discard so the timings match too. The audit
+separates them because an operator investigating an attack needs that; the response does not,
+because an attacker must not have it. `SignInAuditTests` asserts the two responses are identical
+field for field, excluding only the per-request `traceId`.
+
+Four things that will cost you time:
+
+- **`sign_in_events` is personal data.** It holds an IP address and a user-agent against a
+  username. `PruneSignInEvents` runs daily and keeps thirty days
+  (`Monitoring__SignInEventRetentionDays`); that sweep is a requirement of the feature, not
+  housekeeping, and lengthening the window is a decision rather than a default.
+- **`LastSeenAt` is written on the hottest path in the application**, beside ADR 0011's uncached
+  stamp read. The throttle is the UPDATE's own `WHERE` clause — one write per user per minute
+  regardless of request volume, with no read to race against. Never make it read-modify-write, and
+  never let it fail a request: `Program.cs` swallows `DbException` and EF's
+  `RetryLimitExceededException` there on purpose.
+- **`X-Forwarded-For` only means anything behind the ingress.** `ForwardedHeaders__Enabled` is set
+  in the Kubernetes overlay; without it every address recorded in the cluster is the ingress pod's
+  rather than the caller's — audit data that looks right until someone tries to use it.
+  `ClientContext` reads the resolved `RemoteIpAddress`, so whatever that middleware decided is
+  what gets stored.
+- **`IClientContext` is registered per host, like `ICurrentUser`.** The API binds it to
+  `HttpContext`; the worker registers `NoClientContext`. It cannot simply be absent there — the
+  generic host validates every registered descriptor when it builds its container, so a missing
+  implementation fails `codegen write` at container-build time, nowhere near a sign-in path that
+  host does not have.
+
+See ADR 0021.
+
 ## Caching
 
 Queries opt in by implementing `ICacheable` (`src/Application/Abstractions/Caching.cs`); commands

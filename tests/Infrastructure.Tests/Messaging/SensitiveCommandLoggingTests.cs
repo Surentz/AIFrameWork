@@ -40,6 +40,11 @@ public sealed class SensitiveCommandLoggingTests
         // call whose argument a naive logging "improvement" would be tempted to capture.
         services.AddSingleton(Substitute.For<IUserRepository>());
         services.AddSingleton(Substitute.For<IPasswordHasher>());
+
+        // The sign-in audit records the attempted USERNAME and never the password — which is the
+        // property this class exists to defend, now that there is a second place a credential
+        // could leak. Substituted so nothing is written; the assertion below covers the log.
+        services.AddSingleton(Substitute.For<ISignInAudit>());
         services.AddSingleton<IClock>(new TestClock(DateTimeOffset.UtcNow));
 
         await using var provider = services.BuildServiceProvider();

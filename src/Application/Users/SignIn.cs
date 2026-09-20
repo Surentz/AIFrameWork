@@ -20,7 +20,8 @@ public sealed class SignInValidator : AbstractValidator<SignIn>
     }
 }
 
-public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher, IClock clock)
+public sealed class SignInHandler(
+    IUserRepository users, IPasswordHasher hasher, IClock clock, ISignInAudit audit)
     : ICommandHandler<SignIn, SessionView>
 {
     /// <summary>
@@ -47,7 +48,12 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
             // wrong password - without this, response time answers "does this account exist?".
             _ = hasher.Hash(command.Password);
 
-            return Result.Failure<SessionView>(Failed);
+            // Recorded with no user id and the username as typed: an attempt against an account
+            // that does not exist is exactly what an enumeration sweep looks like, and it is
+            // invisible unless the attempted name is kept.
+            return await RefuseAsync(
+                SignInOutcome.UnknownUser, command.Username, null, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var now = clock.UtcNow;
@@ -60,14 +66,18 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
             // a lockout must not extend it.
             _ = hasher.Hash(command.Password);
 
-            return Result.Failure<SessionView>(Failed);
+            return await RefuseAsync(
+                SignInOutcome.LockedOut, command.Username, user.Id, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (!hasher.Verify(user.PasswordHash, command.Password))
         {
             await RecordFailureAsync(user, now, cancellationToken).ConfigureAwait(false);
 
-            return Result.Failure<SessionView>(Failed);
+            return await RefuseAsync(
+                SignInOutcome.BadCredentials, command.Username, user.Id, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         // Only when there is something to clear: an ordinary sign-in is the common case and must
@@ -78,8 +88,30 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
             await users.ClearSignInFailuresAsync(user.Id, cancellationToken).ConfigureAwait(false);
         }
 
+        await audit
+            .RecordAsync(SignInOutcome.Succeeded, command.Username, user.Id, cancellationToken)
+            .ConfigureAwait(false);
+
         return Result.Success(
             new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp, user.Role));
+    }
+
+    /// <summary>
+    /// Audits the attempt and returns the ONE failure every refusal shares.
+    /// </summary>
+    /// <remarks>
+    /// Every refusal in this handler goes through here, which is what makes the uniform answer
+    /// structural rather than a thing three branches each remember. The audit gets the real
+    /// outcome; the caller gets <see cref="Failed"/> whatever it was. A differing message — or a
+    /// differing shape of code path that ends up differing in timing — is the account-enumeration
+    /// oracle ADR 0006 exists to close.
+    /// </remarks>
+    private async Task<Result<SessionView>> RefuseAsync(
+        SignInOutcome outcome, string username, Guid? userId, CancellationToken cancellationToken)
+    {
+        await audit.RecordAsync(outcome, username, userId, cancellationToken).ConfigureAwait(false);
+
+        return Result.Failure<SessionView>(Failed);
     }
 
     /// <summary>

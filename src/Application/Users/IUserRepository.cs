@@ -83,4 +83,24 @@ public interface IUserRepository
     /// <param name="cancellationToken">Propagated to the query.</param>
     public Task<IReadOnlyList<User>> ListForRoleReconciliationAsync(
         string[] usernamesNormalized, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stamps <see cref="User.LastSeenAt"/>, but only if the stored value is older than
+    /// <paramref name="staleBefore"/>. Returns nothing: the caller cannot act on the outcome and
+    /// must not wait to find out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One conditional UPDATE, never read-modify-write.</b> This runs on the session-validation
+    /// path, which is every authenticated request — ADR 0011 already pays one uncached read there.
+    /// The throttle lives in the statement's own WHERE clause so the cost is at most one write per
+    /// user per minute regardless of request volume, and there is no read to race with.
+    /// </para>
+    /// <para>
+    /// Writes immediately, outside the unit of work, for the same reason the failed-sign-in
+    /// counter does: there is no command in flight to commit it.
+    /// </para>
+    /// </remarks>
+    public Task TouchLastSeenAsync(
+        Guid userId, DateTimeOffset now, DateTimeOffset staleBefore, CancellationToken cancellationToken);
 }

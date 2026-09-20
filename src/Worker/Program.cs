@@ -6,6 +6,7 @@ using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Jobs.Scheduling;
 using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Persistence;
+using AiFramework.Infrastructure.Security;
 using AiFramework.Infrastructure.Resilience;
 using AiFramework.Worker.Observability;
 using JasperFx;
@@ -37,6 +38,13 @@ builder.Services.AddJobScheduling(connectionString);
 // the API's CurrentUser — last registration wins — and every authenticated request would report
 // no caller. Who the caller is, is a host-level decision. See JobRegistration.AddJobs.
 builder.Services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<JobCurrentUser>());
+
+// The worker has no HTTP request, so no caller address to record. Registered anyway, and here
+// rather than in AddInfrastructure for the same host-level reason as ICurrentUser above: the
+// generic host validates every registered descriptor when it builds its container, so a missing
+// implementation fails `codegen write` at container-build time rather than on a sign-in path this
+// host does not have. See NoClientContext.
+builder.Services.AddScoped<IClientContext, NoClientContext>();
 
 builder.Services.Configure<JobOptions>(builder.Configuration.GetSection("Jobs"));
 

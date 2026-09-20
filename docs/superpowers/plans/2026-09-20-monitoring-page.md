@@ -344,29 +344,53 @@ Indexed on `(StartedAt DESC)` and `(Status, StartedAt DESC)` — the two orders 
 
 ### Tasks
 
-- [ ] **3.1** `IClientContext` port exposing caller IP and user-agent, registered **per host** —
+- [x] **3.1** `IClientContext` port exposing caller IP and user-agent, registered **per host** —
       the API binds it to `HttpContext`, and it is simply absent in the worker. This mirrors
       `ICurrentUser` exactly, including its trap: register it in `AddInfrastructure` and the
       API's registration is replaced, because the last registration wins.
-- [ ] **3.2** `ISignInAudit` port + adapter writing via immediate SQL. Called from the sign-in and
+- [x] **3.2** `ISignInAudit` port + adapter writing via immediate SQL. Called from the sign-in and
       sign-out-everywhere paths.
-- [ ] **3.3** Record every outcome, including `UnknownUser`. **The response must not change** — a
+- [x] **3.3** Record every outcome, including `UnknownUser`. **The response must not change** — a
       differing message or timing between "no such user" and "wrong password" is a username
       oracle. Assert the responses are identical in a test.
-- [ ] **3.4** Migration `AddSignInEventsAndLastSeen`.
-- [ ] **3.5** `LastSeenAt` write in `Program.cs`'s `OnValidatePrincipal`, throttled: a **single
+- [x] **3.4** Migration `AddSignInEventsAndLastSeen`.
+- [x] **3.5** `LastSeenAt` write in `Program.cs`'s `OnValidatePrincipal`, throttled: a **single
       conditional `UPDATE`** (`WHERE "LastSeenAt" IS NULL OR "LastSeenAt" < @cutoff`), never
       read-modify-write. That callback already costs one uncached read on **every authenticated
       request**; this must add at most one write per user per minute, and must never fail the
       request if it fails.
-- [ ] **3.6** Queries: `GetSignInEvents` (paged, filter by outcome/user/date), `GetLockedOutUsers`,
+- [x] **3.6** Queries: `GetSignInEvents` (paged, filter by outcome/user/date), `GetLockedOutUsers`,
       `GetActiveUsers` (seen within N minutes, N configurable).
-- [ ] **3.7** Frontend `/monitoring/logins`: the event table with outcome filters, a locked-out
+- [x] **3.7** Frontend `/monitoring/logins`: the event table with outcome filters, a locked-out
       panel, and an online-now count. Polling at ~30s.
-- [ ] **3.8** Retention: a scheduled pruning job at 30 days, same shape as Phase 2's.
-- [ ] **3.9** Tests: an unknown-username attempt is recorded and the response is byte-identical to
+- [x] **3.8** Retention: a scheduled pruning job at 30 days, same shape as Phase 2's.
+- [x] **3.9** Tests: an unknown-username attempt is recorded and the response is byte-identical to
       a wrong-password one; a lockout is recorded; `LastSeenAt` is not written twice inside the
       throttle window (asserted through `IClock`, not by waiting).
+
+### What changed during implementation
+
+- **The worker needs an `IClientContext` implementation even though it never signs anyone in.**
+  Task 3.1 said to register it in the API only and leave it absent in the worker; that fails,
+  because the generic host validates EVERY registered descriptor when it builds its container.
+  "Never resolved in practice" is not enough — `codegen write` on the worker died with "Unable to
+  resolve service for type IClientContext", at container-build time and nowhere near a sign-in.
+  `NoClientContext` is the null object it registers instead, still per host rather than in
+  `AddInfrastructure`, so the API's real one cannot be replaced by a shared registration.
+- **`GetLockedOutUsers` and `GetActiveUsers` are one query, not three.** The logins overview
+  shows all three numbers at once and re-reads them on a timer, so `GetSignInHealth` answers them
+  together rather than costing three round trips per poll.
+- **The username-oracle test compares the responses field by field, not byte for byte.** Whole-body
+  equality fails on `traceId`, which differs per request by construction and says nothing about
+  which account was named. Comparing everything but that still fails on a differing title, detail
+  or status — the parts that would actually leak. The test caught this on its first run, which is
+  the right way round.
+- **`User.LastSeenAt` is `init`, not `private set`.** Nothing in the domain ever assigns it — the
+  write is a conditional UPDATE translated to SQL, which calls no setter — so a private setter is
+  dead code and S1144 says so.
+- **`SensitiveCommandLoggingTests` grew a dependency and a reason to exist.** Adding an audit adds
+  a second place a credential could leak; the audit records the attempted USERNAME and never the
+  password, and that test now stands over both.
 
 ### Traps
 

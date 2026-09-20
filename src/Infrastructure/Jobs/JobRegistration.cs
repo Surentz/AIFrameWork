@@ -92,6 +92,11 @@ public static class JobRegistration
         // Daily at 03:20. Retention is thirty days (ADR 0021), so a daily sweep is ample, and
         // running it off-peak keeps one DELETE over a large table away from busy hours.
         JobDescriptor.Scheduled<PruneJobRuns>("0 20 3 * * ?"),
+
+        // Daily at 03:25, just after the job-run sweep. This one is not optional housekeeping:
+        // sign_in_events holds IP addresses and user-agents, so this is what bounds how long this
+        // application keeps personal data. ADR 0021.
+        JobDescriptor.Scheduled<PruneSignInEvents>("0 25 3 * * ?"),
     ];
 
     /// <summary>
@@ -164,7 +169,8 @@ public static class JobRegistration
             .IncludeType<SendOrderConfirmationHandler>()
             .IncludeType<RebuildOrderReportHandler>()
             .IncludeType<PruneProcessedOutboxHandler>()
-            .IncludeType<PruneJobRunsHandler>();
+            .IncludeType<PruneJobRunsHandler>()
+            .IncludeType<PruneSignInEventsHandler>();
 
         // Set on the WORKER only — the API keeps Wolverine 6's NotAllowed default, so this
         // relaxation reaches exactly the host that needs it.
@@ -310,6 +316,8 @@ public static class JobRegistration
         services.AddScoped<IDeadLetterStore, DeadLetterStore>();
         services.AddScoped<ITriggerableJobs, TriggerableJobs>();
         services.AddScoped<IJobRunRetention, JobRunRetention>();
+        services.AddScoped<ISignInEventReader, SignInEventReader>();
+        services.AddScoped<ISignInEventRetention, SignInEventRetention>();
 
         return services;
     }

@@ -40,6 +40,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasDefaultValue(UserRole.Member)
             .HasConversion<string>();
 
+        // Nullable: "never seen" is a real state, distinct from "seen at the epoch". Indexed
+        // because the only query that reads it asks who was seen within the last N minutes.
+        builder.Property(u => u.LastSeenAt);
+        builder.HasIndex(u => u.LastSeenAt).HasDatabaseName("IX_Users_LastSeenAt");
+
         builder.Property(u => u.SecurityStamp).IsRequired().HasMaxLength(User.MaxSecurityStampLength);
 
         // DomainEvents is transient state the interceptor drains before save; it is not

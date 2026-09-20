@@ -7,6 +7,30 @@ public interface IClock
 }
 
 /// <summary>
+/// Where the current request came from, as the audit needs it. Both properties are null outside a
+/// request — the worker has no HTTP context at all, and neither does a background pump.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Registered <b>per host</b>, never in <c>AddInfrastructure</c>, exactly as
+/// <see cref="ICurrentUser"/> is and for the same reason: the last registration wins, so one made
+/// inside a shared registration method silently replaces the host's own.
+/// </para>
+/// <para>
+/// <b>The address is only as trustworthy as the hop in front of it.</b> Behind the ingress that
+/// means <c>ForwardedHeaders__Enabled</c> must be on, or every address recorded in the cluster is
+/// the ingress pod's rather than the caller's. A single underscore binds nothing and warns
+/// nothing. See ADR 0021.
+/// </para>
+/// </remarks>
+public interface IClientContext
+{
+    public string? IpAddress { get; }
+
+    public string? UserAgent { get; }
+}
+
+/// <summary>
 /// The signed-in caller, or null when there is no session. Nullable rather than throwing:
 /// the outbox pumps resolve scopes with no HTTP context at all, and a handler that returns
 /// ErrorKind.Unauthorized produces a 401 where a throw would produce a 500.

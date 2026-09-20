@@ -101,6 +101,42 @@ export const handlers = [
       page: 1,
     }),
   ),
+  http.get('/api/monitoring/sign-ins/health', () =>
+    HttpResponse.json({
+      succeeded: 9,
+      badCredentials: 3,
+      lockedOut: 1,
+      unknownUser: 4,
+      since: '2026-09-20T00:00:00+00:00',
+      activeUsers: 2,
+      activeWindowMinutes: 15,
+      lockedOutUsers: [
+        {
+          userId: '99999999-9999-9999-9999-999999999999',
+          username: 'grace',
+          lockedOutUntil: '2026-09-20T12:15:00+00:00',
+        },
+      ],
+    }),
+  ),
+  http.get('/api/monitoring/sign-ins', () =>
+    HttpResponse.json({
+      items: [
+        {
+          id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          at: '2026-09-20T11:59:00+00:00',
+          userId: null,
+          usernameAttempted: 'nosuchuser',
+          outcome: 'UnknownUser',
+          ipAddress: '203.0.113.7',
+          userAgent: 'curl/8.7.1',
+          traceId: 'def456',
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+    }),
+  ),
   http.get('/api/monitoring/access', () =>
     HttpResponse.json({
       userId: anAdminSession.userId,

@@ -1,4 +1,5 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Users;
 using AiFramework.Domain.Users;
 
 namespace AiFramework.Api.Monitoring;
@@ -113,4 +114,73 @@ public sealed record JobHealthResponse
 public sealed record TriggerJobRequest
 {
     public required string JobName { get; init; }
+}
+
+/// <summary>One attempt to authenticate.</summary>
+public sealed record SignInEventResponse
+{
+    public required Guid Id { get; init; }
+
+    public required DateTimeOffset At { get; init; }
+
+    /// <summary>Null when the attempt named an account that does not exist.</summary>
+    public Guid? UserId { get; init; }
+
+    /// <summary>What was typed. The only record of an attempt against a name that does not exist.</summary>
+    public required string UsernameAttempted { get; init; }
+
+    /// <summary>
+    /// The distinction the sign-in endpoint itself never reveals: it answers every failure
+    /// identically, because a differing answer is an account-enumeration oracle (ADR 0006). An
+    /// operator investigating an attack needs the difference; an attacker must not have it.
+    /// </summary>
+    public required SignInOutcome Outcome { get; init; }
+
+    public string? IpAddress { get; init; }
+
+    public string? UserAgent { get; init; }
+
+    public string? TraceId { get; init; }
+}
+
+public sealed record SignInEventPageResponse
+{
+    public required IReadOnlyList<SignInEventResponse> Items { get; init; }
+
+    public required int TotalCount { get; init; }
+
+    public required int Page { get; init; }
+}
+
+public sealed record LockedOutUserResponse
+{
+    public required Guid UserId { get; init; }
+
+    public required string Username { get; init; }
+
+    public required DateTimeOffset LockedOutUntil { get; init; }
+}
+
+/// <summary>Sign-in counts, who is locked out, and who is about.</summary>
+public sealed record SignInHealthResponse
+{
+    public required int Succeeded { get; init; }
+
+    public required int BadCredentials { get; init; }
+
+    public required int LockedOut { get; init; }
+
+    public required int UnknownUser { get; init; }
+
+    public required DateTimeOffset Since { get; init; }
+
+    /// <summary>
+    /// Users seen within the active window. A cookie session has no logout event to key off, so
+    /// "online" can only ever mean "seen recently" — the window says how recently.
+    /// </summary>
+    public required int ActiveUsers { get; init; }
+
+    public required int ActiveWindowMinutes { get; init; }
+
+    public required IReadOnlyList<LockedOutUserResponse> LockedOutUsers { get; init; }
 }

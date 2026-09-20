@@ -68,6 +68,25 @@ public sealed class User : Entity
     /// </summary>
     public UserRole Role { get; private set; }
 
+    /// <summary>
+    /// When this user was last seen making an authenticated request, or null if never.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Written by the session-validation path, not by anything in this type: it is a throttled,
+    /// conditional UPDATE issued at most once per user per minute, and a tracked mutation on the
+    /// hottest path in the application would be a change-tracker entry on every request. See
+    /// <c>IUserRepository.TouchLastSeenAsync</c> and ADR 0021.
+    /// </para>
+    /// <para>
+    /// <c>init</c> rather than <c>private set</c>, and that is the reason: no method in this type
+    /// ever assigns it, so a private setter is genuinely dead code and S1144 says so. EF still
+    /// materialises it; the UPDATE that writes it is an expression tree translated to SQL and
+    /// never calls a setter at all.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? LastSeenAt { get; init; }
+
     /// <summary>Consecutive failures since the last successful sign-in.</summary>
     public int FailedSignInAttempts { get; private set; }
 

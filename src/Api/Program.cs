@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Claims;
@@ -23,6 +24,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
 
@@ -156,6 +158,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             }
 
             ApplyRole(context, principal, authority.Role);
+
+            await TouchLastSeenAsync(context, id).ConfigureAwait(false);
         };
     });
 
@@ -176,6 +180,12 @@ builder.Services.AddAdministratorRoles();
 // from a handler; scoped because "who is calling" is per-request.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+
+// Where the caller came from, for the sign-in audit. Registered HERE and not in
+// AddInfrastructure, exactly as ICurrentUser is: the last registration wins, so one made inside a
+// shared registration method would silently replace this. The worker registers none — it never
+// authenticates anyone. See ADR 0021.
+builder.Services.AddScoped<IClientContext, ClientContext>();
 
 // Volume defence on the credential endpoints, alongside the per-account lockout in
 // SignInHandler. Partitioned by remote address, not by username: the limiter runs before model
@@ -433,6 +443,46 @@ static async Task<int> RunTheWebApplicationAsync(WebApplication webApplication)
 {
     await webApplication.RunAsync();
     return 0;
+}
+
+// Stamps "this user was seen just now", at most once per user per minute.
+//
+// This runs on the hottest path in the application - every authenticated request, beside ADR
+// 0011's uncached stamp read - so the throttle is not a nicety. It lives in the UPDATE's own
+// WHERE clause rather than in a read-then-write here: there is no read to race with, and the
+// cost is one write per user per minute regardless of how many requests they make.
+//
+// A failure NEVER fails the request. Somebody's last-seen timestamp being stale is not a reason
+// to refuse them the page they asked for, so a database fault here is swallowed deliberately -
+// the one place in this file where that is the right answer. DbException and the execution
+// strategy's own exhaustion are the two shapes it arrives in, the same pair AdminReconciler
+// catches and for the same reason. See ADR 0021.
+static async Task TouchLastSeenAsync(CookieValidatePrincipalContext context, Guid userId)
+{
+    // How stale a LastSeenAt may be before the next authenticated request refreshes it. One
+    // minute: long enough that the write is rare, short enough that "online now" means it.
+    // Inline rather than a captured local, because a static local function cannot close over one
+    // and this function must stay static to avoid capturing the enclosing scope per request.
+    var throttle = TimeSpan.FromMinutes(1);
+
+    var users = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+    var clock = context.HttpContext.RequestServices.GetRequiredService<IClock>();
+    var now = clock.UtcNow;
+
+    try
+    {
+        await users
+            .TouchLastSeenAsync(userId, now, now - throttle, context.HttpContext.RequestAborted)
+            .ConfigureAwait(false);
+    }
+    catch (DbException)
+    {
+        // Deliberately ignored: see above. Observability must not be able to fail a request.
+    }
+    catch (RetryLimitExceededException)
+    {
+        // The same fault, wrapped by EnableRetryOnFailure's execution strategy once it gives up.
+    }
 }
 
 // Replaces the request's principal with one carrying the role just read from the database.

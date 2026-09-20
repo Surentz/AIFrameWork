@@ -52,6 +52,11 @@ export function MonitoringPage(): React.JSX.Element {
         <Link to="/monitoring/jobs">Job runs and dead letters</Link>
       </p>
 
+      <h2>Sign-ins</h2>
+      <p>
+        <Link to="/monitoring/logins">Sign-in history, locked accounts and who is online</Link>
+      </p>
+
       <p className="muted">
         Counts cover the last 24 hours, except dead letters — those are the whole queue, because a
         message stuck for a week is exactly the one worth seeing.

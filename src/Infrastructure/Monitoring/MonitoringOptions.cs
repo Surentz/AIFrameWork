@@ -17,4 +17,11 @@ public sealed class MonitoringOptions
     /// that the table stays a working set rather than an archive.
     /// </summary>
     public int JobRunRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Thirty days, per ADR 0021. This table holds an IP address and a user-agent against a
+    /// username, so this is not a tuning knob for table size — it is how long this application
+    /// keeps personal data, and lengthening it is a decision rather than a default.
+    /// </summary>
+    public int SignInEventRetentionDays { get; set; } = 30;
 }

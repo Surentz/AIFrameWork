@@ -10,8 +10,8 @@ using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
-using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Jobs;
+using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Messaging;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
@@ -79,12 +79,11 @@ public static class InfrastructureRegistration
         services.AddCommand<ReconcileAdministrators, AdministratorReconciliation,
             ReconcileAdministratorsHandler>();
 
-        services.AddQuery<GetJobRuns, JobRunPage, GetJobRunsHandler>();
-        services.AddQuery<GetJobRun, JobRunView, GetJobRunHandler>();
-        services.AddQuery<GetDeadLetters, DeadLetterPage, GetDeadLettersHandler>();
-        services.AddQuery<GetJobHealth, JobHealthView, GetJobHealthHandler>();
-        services.AddCommand<RetryDeadLetter, bool, RetryDeadLetterHandler>();
-        services.AddCommand<TriggerJob, bool, TriggerJobHandler>();
+        // Immediate-SQL writer, like OrderAuditWriter: three of its five outcomes are failures,
+        // and CommitAsync commits only a successful Result. See ISignInAudit.
+        services.AddScoped<ISignInAudit, SignInAudit>();
+
+        RegisterMonitoring(services);
 
         RegisterValidators(services);
         RegisterDomainEvents(services);
@@ -97,6 +96,23 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedConfirmationHandler>();
 
         return services;
+    }
+
+    /// <summary>
+    /// The monitoring page's queries and its two actions. Split out of
+    /// <see cref="AddMessaging"/> for the same MA0051 reason as the validators below, and
+    /// grouped because they arrive and change together.
+    /// </summary>
+    private static void RegisterMonitoring(IServiceCollection services)
+    {
+        services.AddQuery<GetJobRuns, JobRunPage, GetJobRunsHandler>();
+        services.AddQuery<GetJobRun, JobRunView, GetJobRunHandler>();
+        services.AddQuery<GetDeadLetters, DeadLetterPage, GetDeadLettersHandler>();
+        services.AddQuery<GetJobHealth, JobHealthView, GetJobHealthHandler>();
+        services.AddCommand<RetryDeadLetter, bool, RetryDeadLetterHandler>();
+        services.AddCommand<TriggerJob, bool, TriggerJobHandler>();
+        services.AddQuery<GetSignInEvents, SignInEventPage, GetSignInEventsHandler>();
+        services.AddQuery<GetSignInHealth, SignInHealthView, GetSignInHealthHandler>();
     }
 
     /// <summary>

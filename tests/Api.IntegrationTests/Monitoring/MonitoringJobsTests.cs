@@ -21,6 +21,8 @@ public sealed class MonitoringJobsTests(ApiFactory factory)
         data.Add("/api/monitoring/jobs/health");
         data.Add("/api/monitoring/jobs/runs");
         data.Add("/api/monitoring/jobs/dead-letters");
+        data.Add("/api/monitoring/sign-ins");
+        data.Add("/api/monitoring/sign-ins/health");
 
         return data;
     }

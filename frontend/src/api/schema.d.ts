@@ -1227,6 +1227,134 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/monitoring/sign-ins/health": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Counts by outcome, the locked-out accounts, and the active-user count. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly windowHours?: number | string;
+                    readonly activeWindowMinutes?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["SignInHealthResponse"];
+                        readonly "application/json": components["schemas"]["SignInHealthResponse"];
+                        readonly "text/json": components["schemas"]["SignInHealthResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/sign-ins": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The sign-in audit trail, newest first. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly outcome?: components["schemas"]["SignInOutcome"];
+                    readonly username?: string;
+                    readonly page?: number | string;
+                    readonly pageSize?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["SignInEventPageResponse"];
+                        readonly "application/json": components["schemas"]["SignInEventPageResponse"];
+                        readonly "text/json": components["schemas"]["SignInEventPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/auth/register": {
         readonly parameters: {
             readonly query?: never;
@@ -1689,6 +1817,13 @@ export interface components {
          * @enum {unknown}
          */
         readonly JobRunStatus: "Running" | "Succeeded" | "Failed";
+        readonly LockedOutUserResponse: {
+            /** Format: uuid */
+            readonly userId: string;
+            readonly username: string;
+            /** Format: date-time */
+            readonly lockedOutUntil: string;
+        };
         readonly LoginRequest: {
             readonly username: string;
             readonly password: string;
@@ -1902,6 +2037,63 @@ export interface components {
              */
             readonly role: components["schemas"]["UserRole"];
         };
+        readonly SignInEventPageResponse: {
+            readonly items: readonly components["schemas"]["SignInEventResponse"][];
+            /** Format: int32 */
+            readonly totalCount: number | string;
+            /** Format: int32 */
+            readonly page: number | string;
+        };
+        /** @description One attempt to authenticate. */
+        readonly SignInEventResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            /** Format: date-time */
+            readonly at: string;
+            /**
+             * Format: uuid
+             * @description Null when the attempt named an account that does not exist.
+             */
+            readonly userId?: null | string;
+            /** @description What was typed. The only record of an attempt against a name that does not exist. */
+            readonly usernameAttempted: string;
+            /**
+             * @description The distinction the sign-in endpoint itself never reveals: it answers every failure
+             *     identically, because a differing answer is an account-enumeration oracle (ADR 0006). An
+             *     operator investigating an attack needs the difference; an attacker must not have it.
+             */
+            readonly outcome: components["schemas"]["SignInOutcome"];
+            readonly ipAddress?: null | string;
+            readonly userAgent?: null | string;
+            readonly traceId?: null | string;
+        };
+        /** @description Sign-in counts, who is locked out, and who is about. */
+        readonly SignInHealthResponse: {
+            /** Format: int32 */
+            readonly succeeded: number | string;
+            /** Format: int32 */
+            readonly badCredentials: number | string;
+            /** Format: int32 */
+            readonly lockedOut: number | string;
+            /** Format: int32 */
+            readonly unknownUser: number | string;
+            /** Format: date-time */
+            readonly since: string;
+            /**
+             * Format: int32
+             * @description Users seen within the active window. A cookie session has no logout event to key off, so
+             *     "online" can only ever mean "seen recently" — the window says how recently.
+             */
+            readonly activeUsers: number | string;
+            /** Format: int32 */
+            readonly activeWindowMinutes: number | string;
+            readonly lockedOutUsers: readonly components["schemas"]["LockedOutUserResponse"][];
+        };
+        /**
+         * @description What happened on one attempt to authenticate.
+         * @enum {unknown}
+         */
+        readonly SignInOutcome: "Succeeded" | "BadCredentials" | "LockedOut" | "UnknownUser" | "SignedOutEverywhere";
         readonly TriggerJobRequest: {
             readonly jobName: string;
         };

@@ -4,6 +4,7 @@ using AiFramework.Domain.Products;
 using AiFramework.Domain.Users;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Outbox;
+using AiFramework.Infrastructure.Security;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +26,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     public DbSet<Notification> Notifications => Set<Notification>();
 
     public DbSet<JobRun> JobRuns => Set<JobRun>();
+
+    public DbSet<SignInEvent> SignInEvents => Set<SignInEvent>();
 
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 

@@ -11,7 +11,7 @@ namespace Internal.Generated.WolverineHandlers
 
         public override System.Type[] HandlerTypes()
         {
-            return new System.Type[] { typeof(AiFramework.Application.Maintenance.PruneProcessedOutboxHandler), typeof(AiFramework.Application.Monitoring.PruneJobRunsHandler), typeof(AiFramework.Application.Orders.RebuildOrderReportHandler), typeof(AiFramework.Application.Orders.SendOrderConfirmationHandler), typeof(AiFramework.Infrastructure.EventPath.OrderPlacedNotificationHandler) };
+            return new System.Type[] { typeof(AiFramework.Application.Maintenance.PruneProcessedOutboxHandler), typeof(AiFramework.Application.Monitoring.PruneJobRunsHandler), typeof(AiFramework.Application.Monitoring.PruneSignInEventsHandler), typeof(AiFramework.Application.Orders.RebuildOrderReportHandler), typeof(AiFramework.Application.Orders.SendOrderConfirmationHandler), typeof(AiFramework.Infrastructure.EventPath.OrderPlacedNotificationHandler) };
         }
 
 

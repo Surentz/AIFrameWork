@@ -46,3 +46,26 @@ public sealed record DeadLetterPage(IReadOnlyList<DeadLetterView> Items, int Tot
 /// <summary>Counts by outcome over a window, for the overview tiles.</summary>
 public sealed record JobHealthView(
     int Running, int Succeeded, int Failed, int DeadLettered, DateTimeOffset Since);
+
+/// <summary>One attempt to authenticate, as the monitoring page shows it.</summary>
+public sealed record SignInEventView(
+    Guid Id,
+    DateTimeOffset At,
+    Guid? UserId,
+    string UsernameAttempted,
+    Users.SignInOutcome Outcome,
+    string? IpAddress,
+    string? UserAgent,
+    string? TraceId);
+
+public sealed record SignInEventPage(
+    IReadOnlyList<SignInEventView> Items, int TotalCount, int Page);
+
+/// <summary>An account currently serving a lockout (ADR 0008).</summary>
+public sealed record LockedOutUserView(Guid UserId, string Username, DateTimeOffset LockedOutUntil);
+
+/// <summary>
+/// Who is about. "Online" means seen within a window, because a cookie session has no logout
+/// event to key off — the user who closed their browser looks identical to the one reading.
+/// </summary>
+public sealed record ActiveUsersView(int Count, TimeSpan Window);

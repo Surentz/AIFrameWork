@@ -4,6 +4,9 @@ import type {
   JobRunPage,
   JobRunStatus,
   MonitoringAccess,
+  SignInEventPage,
+  SignInHealth,
+  SignInOutcome,
 } from '../features/monitoring/types';
 import { request, requestVoid } from './client';
 
@@ -47,4 +50,25 @@ export function triggerJob(jobName: string): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ jobName }),
   });
+}
+
+export function getSignInHealth(): Promise<SignInHealth> {
+  return request<SignInHealth>('/api/monitoring/sign-ins/health');
+}
+
+export function listSignInEvents(params: {
+  outcome?: SignInOutcome | undefined;
+  username?: string | undefined;
+  page?: number | undefined;
+}): Promise<SignInEventPage> {
+  const search = new URLSearchParams();
+  search.set('page', String(params.page ?? 1));
+  if (params.outcome !== undefined) {
+    search.set('outcome', params.outcome);
+  }
+  if (params.username !== undefined && params.username !== '') {
+    search.set('username', params.username);
+  }
+
+  return request<SignInEventPage>(`/api/monitoring/sign-ins?${search.toString()}`);
 }

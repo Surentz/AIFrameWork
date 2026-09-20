@@ -4,8 +4,10 @@ import type { ApiError } from '../../api/client';
 import {
   getJobHealth,
   getMonitoringAccess,
+  getSignInHealth,
   listDeadLetters,
   listJobRuns,
+  listSignInEvents,
   retryDeadLetter,
   triggerJob,
 } from '../../api/monitoring';
@@ -15,6 +17,9 @@ import type {
   JobRunPage,
   JobRunStatus,
   MonitoringAccess,
+  SignInEventPage,
+  SignInHealth,
+  SignInOutcome,
 } from './types';
 
 export const monitoringKeys = {
@@ -25,6 +30,10 @@ export const monitoringKeys = {
   jobRuns: (status: JobRunStatus | undefined, jobName: string, page: number) =>
     [...monitoringKeys.jobs(), 'runs', status ?? 'all', jobName, page] as const,
   deadLetters: () => [...monitoringKeys.jobs(), 'dead-letters'] as const,
+  signIns: () => [...monitoringKeys.all, 'sign-ins'] as const,
+  signInHealth: () => [...monitoringKeys.signIns(), 'health'] as const,
+  signInEvents: (outcome: SignInOutcome | undefined, username: string, page: number) =>
+    [...monitoringKeys.signIns(), 'events', outcome ?? 'all', username, page] as const,
 };
 
 /**
@@ -98,5 +107,33 @@ export function useTriggerJob(): UseMutationResult<void, ApiError, string> {
   return useMutation({
     mutationFn: triggerJob,
     onSuccess: () => client.invalidateQueries({ queryKey: monitoringKeys.jobs() }),
+  });
+}
+
+/**
+ * The logins panels refresh more slowly than the jobs ones. A sign-in is a human-paced event and
+ * the table is personal data, so re-reading it every ten seconds would be cost without insight.
+ */
+const SignInRefreshMs = 30_000;
+
+export function useSignInHealth(): UseQueryResult<SignInHealth, ApiError> {
+  return useQuery({
+    queryKey: monitoringKeys.signInHealth(),
+    queryFn: getSignInHealth,
+    refetchInterval: SignInRefreshMs,
+    retry: false,
+  });
+}
+
+export function useSignInEvents(
+  outcome: SignInOutcome | undefined,
+  username: string,
+  page: number,
+): UseQueryResult<SignInEventPage, ApiError> {
+  return useQuery({
+    queryKey: monitoringKeys.signInEvents(outcome, username, page),
+    queryFn: () => listSignInEvents({ outcome, username, page }),
+    refetchInterval: SignInRefreshMs,
+    retry: false,
   });
 }
