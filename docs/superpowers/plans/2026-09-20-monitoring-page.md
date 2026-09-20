@@ -19,7 +19,8 @@ of them.
 Quartz 4.1.0, React 19.3 + TanStack Query 5, Vite 8, xUnit + FluentAssertions + NSubstitute,
 Testcontainers, Playwright.
 
-**ADRs to write:** `0020-an-administrator-role.md`, `0021-operational-telemetry-in-postgres.md`
+**ADRs:** [`0020-an-administrator-role.md`](../../adr/0020-an-administrator-role.md),
+[`0021-operational-telemetry-in-postgres.md`](../../adr/0021-operational-telemetry-in-postgres.md)
 
 **Anchored in ADR 0017**, whose Context already names this work:
 
@@ -106,9 +107,13 @@ authenticated user is equal: `[Authorize(Policy` appears nowhere in the solution
 ### Tasks
 
 - [ ] **1.1** Add `UserRole` and `User.Role` to `src/Domain/Users/User.cs`, with a
-      `ChangeRole(UserRole)` method that **rotates `SecurityStamp`**. ADR 0011's own summary says a
-      permission change is a stamp-rotating event ("and (from plan 2) a permission change"); this
-      is plan 2. Unit tests in `tests/Domain.Tests`.
+      `ChangeRole(UserRole)` method that **does NOT rotate `SecurityStamp`** — see ADR 0020. The
+      role is read from the database on every request rather than carried in the cookie, so there
+      is no issued credential holding stale authority to invalidate, and rotating would sign a user
+      out of a session they remain entitled to hold. **Correct `User.SecurityStamp`'s summary in
+      the same commit**: its "(from plan 2) a permission change" parenthetical is superseded, and
+      the list of rotation triggers stays at three. Unit tests in `tests/Domain.Tests`, including
+      one asserting a role change leaves the stamp untouched.
 - [ ] **1.2** EF configuration + migration `AddUserRole`. Store the enum as a **string**, not an
       int: `NotificationKind` and `OrderStatus` already cross the wire as names for exactly the
       reason that reordering members silently changes what stored values mean.
@@ -117,26 +122,39 @@ authenticated user is equal: `[Authorize(Policy` appears nowhere in the solution
 - [ ] **1.4** `AdminReconciler` — an idempotent single-statement `UPDATE` promoting listed
       usernames and demoting anyone holding `Admin` who is no longer listed, run by a hosted
       service at API startup. Idempotent because **both API replicas run it**; concurrent identical
-      updates are harmless. Demotion must rotate the stamp, so a revoked admin's live sessions die.
-      Match on `UsernameNormalized`, never `Username` — `User.Normalize` is the only lookup key.
-- [ ] **1.5** Authorization policy. Write the role into the cookie at sign-in as a standard
-      `ClaimTypes.Role` claim (alongside `SessionClaims.SecurityStamp`), register a
-      `"Monitoring"` policy requiring `UserRole.Admin`, and add the claim constant next to
-      `SessionClaims.SecurityStamp` so the write and read sites cannot drift.
+      updates are harmless, and the `UPDATE` is conditional on the role actually differing, so an
+      unchanged list writes nothing at all. Demotion needs no stamp rotation: the role is read per
+      request, so it takes effect on the demoted user's next one. Match on `UsernameNormalized`,
+      never `Username` — `User.Normalize` is the only lookup key.
+- [ ] **1.5** Authorization policy, fed by a **per-request read**. Widen `ISessionValidator` from
+      `IsStampCurrentAsync` returning `bool` to a validation returning the verdict **and** the
+      role: `SessionValidator` already issues one projected, uncached, primary-key read per
+      authenticated request, so adding `Role` to that `Select` is the same row on the same index
+      seek. `OnValidatePrincipal` then attaches the role to the principal for the current request
+      with `ReplacePrincipal`, **without** renewing the cookie. Register a `"Monitoring"` policy
+      requiring `UserRole.Admin`. **The role is never written into the cookie** — that is the whole
+      point, and it is what makes a demotion take effect immediately. Every call site and test
+      double of `ISessionValidator` moves with the signature.
 - [ ] **1.6** Extend `GET /api/auth/me`'s `SessionView` with the role, so the SPA can decide
       whether to render the nav entry. Regenerate the contract.
 - [ ] **1.7** Frontend: a `RequireRole` route element mirroring `RequireAuth`, the `/monitoring`
       route behind it, and a nav entry rendered only for admins. The page itself is a stub this
       phase.
 - [ ] **1.8** Integration tests: a `Member` gets **403** (not 404, not 401) on a monitoring
-      endpoint; an `Admin` gets 200; an anonymous caller gets 401. Vitest coverage for
-      `RequireRole` and for the nav entry being absent for a member.
+      endpoint; an `Admin` gets 200; an anonymous caller gets 401; and **a demotion takes effect on
+      the next request of an already-signed-in admin, with no re-authentication** — the test that
+      proves the role is not cookie-borne. Vitest coverage for `RequireRole` and for the nav entry
+      being absent for a member.
 
 ### Traps
 
-- **Existing cookies carry no role claim.** They will read as `Member`, which is the safe
-  direction, and a promotion rotates the stamp so the affected user is re-issued a cookie
-  immediately. Nobody else is signed out. This is a property to assert in a test, not assume.
+- **This deploy signs nobody out**, in pointed contrast with ADR 0011's own. The role is not a
+  claim, so a cookie minted before this change is missing nothing — the role is supplied fresh from
+  the database on every request. Existing rows default to `Member`, the safe direction. Assert it,
+  do not assume it.
+- **Configuration is the authority, so a hand-written SQL promotion is reverted at the next API
+  start.** That is the declarative property working correctly, and it is exactly the kind of silent
+  reversal that costs an afternoon. It belongs in the root `CLAUDE.md` when this phase lands.
 - **Hiding the nav entry is not authorization.** The server check is the control; the nav entry is
   cosmetics. Both, and the test suite must cover the server side independently.
 - **`AdminReconciler` runs before the database may be ready.** It must tolerate a startup where
@@ -377,4 +395,4 @@ tree leaves Debug green and breaks Release at startup.
 | Write volume on the hot path (`LastSeenAt`, traffic flush) | Both are bounded by construction — one write per user per minute, one upsert per bucket per name per pod — and both must be measured, not assumed |
 | The page becomes a second, worse log viewer | It deliberately stores *operational facts*, not log lines, and deep-links to OpenSearch for the rest |
 | Four migrations across four phases | Each phase adds its own; never amend an applied one |
-| Admin role interacts with session invalidation | Every role change rotates the security stamp, tested explicitly in 1.1 and 1.4 |
+| Admin role interacts with session invalidation | The role is read per request and never carried in the cookie, so a role change needs no rotation at all — ADR 0020. Tested by 1.8's demotion case |
