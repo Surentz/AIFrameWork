@@ -50,3 +50,7 @@ Thumbs.db
 
 # Claude Code worktrees: local isolated checkouts, never repository content.
 .claude/worktrees/
+
+# Eval run output. The suites under .claude/skills/*/evals/ are committed; their
+# results are per-run, per-machine, and can be large.
+.claude/skills/*/evals/results/
