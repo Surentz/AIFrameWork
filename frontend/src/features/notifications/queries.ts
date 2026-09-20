@@ -18,7 +18,7 @@ import type { NotificationPage, NotificationReadResult, UnreadCount } from './ty
  * How often the badge re-asks the server, in milliseconds.
  *
  * Polling, not a push, and that is a deliberate gap rather than an oversight: the backend can
- * push over SignalR (`/hubs/notifications`, ADR 0016), but it is off unless `Realtime__Enabled`
+ * push over SignalR (`/hubs/notifications`, ADR 0019), but it is off unless `Realtime__Enabled`
  * is set, and nothing here speaks that protocol yet. Until it does, this interval is the only
  * thing that makes a notification raised by the outbox appear without a reload — the feed is
  * written by a background pump, so no request the user makes will ever return it as a side

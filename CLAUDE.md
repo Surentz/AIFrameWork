@@ -614,7 +614,26 @@ Realtime push is opt-in (`Realtime__Enabled`, default `false`) and **best-effort
 the feed is the truth. Above one replica it needs the Redis backplane, because the pod that writes
 a notification is whichever one's outbox pump claimed the row and is unrelated to the pod holding
 that user's connection; the ingress cookie affinity of ADR 0010 does not help, since the pump is
-not serving that user's request. See ADR 0016.
+not serving that user's request. See ADR 0019.
+
+**It is ON in two places, for two different reasons.** In Development
+(`src/Api/appsettings.Development.json`) with **no** backplane: a developer's `dotnet run` is a
+single process, the one configuration where push cannot reach the wrong replica. And in the
+Kubernetes overlay (`k8s/overlays/local/config.yaml`) **with** one —
+`Realtime__RedisConnectionString: 'redis:6379'`, against the Redis that `k8s/base/redis.yaml`
+deploys for exactly this purpose, because that cluster runs two API replicas and a push must
+reach a user whose connection is held by the other pod.
+
+It stays **off** everywhere else: `appsettings.json`'s default, `ApiFactory`, and the Playwright
+`webServer` — the last pinned explicitly, since the e2e run sets
+`ASPNETCORE_ENVIRONMENT=Development` and would otherwise inherit the dev value.
+
+**Without push the badge is up to thirty seconds stale, by construction.** The outbox pump polls
+every second, so the notification row exists almost immediately; `useUnreadCount`'s interval is
+the only other thing that would ever ask. That gap is what `frontend/src/features/notifications/
+stream.ts` closes — and a `ProductPriceChanged` aimed at someone who took no action has no other
+trigger at all, since no client-side invalidation can fire on a user who did nothing. The
+frontend needs `/hubs` proxied for any of it to work in dev; see `frontend/CLAUDE.md`.
 
 ## Resilience
 

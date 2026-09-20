@@ -2,12 +2,19 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Mark } from './components/Mark';
 import { useLogout, useSession } from './features/auth/queries';
 import { NotificationBell } from './features/notifications/NotificationBell';
+import { useNotificationStream } from './features/notifications/stream';
 import './AppLayout.css';
 
 export function AppLayout(): React.JSX.Element {
   const { data: session } = useSession();
   const logout = useLogout();
   const navigate = useNavigate();
+
+  // Here rather than inside NotificationBell: one connection per signed-in session, not one per
+  // component that happens to care. The layout is also the only thing guaranteed mounted for the
+  // whole session, so the connection's lifetime matches the session's rather than a screen's.
+  // Its error is intentionally not rendered - see NotificationStreamState.error.
+  useNotificationStream();
 
   return (
     <div className="shell">
