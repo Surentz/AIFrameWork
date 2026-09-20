@@ -6,11 +6,12 @@
 A .NET 10 and React 19 reference application built on Clean Architecture, where the
 architectural rules are enforced by tooling rather than by convention.
 
-The domain is deliberately small — users place orders — so that the interesting part is the
-scaffolding around it: a hook that blocks a layering violation at edit time, a transactional
-outbox, a durable event path on PostgreSQL with no broker, an API contract generated from the
-application and committed to the repository, and a local Kubernetes cluster that runs the whole
-stack at two replicas to rehearse the failures that only appear above one.
+The domain is deliberately small — users place orders against a catalogue — so that the
+interesting part is the scaffolding around it: a hook that blocks a layering violation at edit
+time, a transactional outbox, a durable event path on PostgreSQL with no broker, background jobs
+in a worker host of their own, an API contract generated from the application and committed to
+the repository, and a local Kubernetes cluster that runs the whole stack at two replicas to
+rehearse the failures that only appear above one.
 
 ## Table of contents
 
@@ -48,44 +49,69 @@ live in [`CLAUDE.md`](CLAUDE.md) and in a per-layer `CLAUDE.md` inside each proj
 
 ## Architecture
 
-Four projects, dependencies pointing inward only.
+Five projects: three inner layers, and **two composition roots over them**. Dependencies point
+inward only.
 
 ```
-                ┌─────────────────────────────────────────┐
-                │                   Api                   │
-                │  Controllers, DTOs, exception handler,  │
-                │          composition root               │
-                └───────┬──────────────┬──────────────────┘
-                        │              │ DI registration only
-                        ▼              ▼
-        ┌───────────────────────┐   ┌──────────────────────────────┐
-        │      Application      │◄──│        Infrastructure        │
-        │  Use cases, ports,    │   │  EF Core, repositories,      │
-        │  Result<T>, validators│   │  outbox, cache, Wolverine    │
-        └───────────┬───────────┘   └──────────────┬───────────────┘
-                    │                              │
-                    ▼                              ▼
-                ┌─────────────────────────────────────────┐
-                │                 Domain                  │
-                │  Entities, value objects, domain events │
-                └─────────────────────────────────────────┘
+     ┌─────────────────────────────┐   ┌─────────────────────────────┐
+     │             Api             │   │           Worker            │
+     │  Controllers, DTOs, hub,    │   │  Job handlers, scheduler,   │
+     │  exception handler          │   │  outbox pumps               │
+     └──────┬───────────────┬──────┘   └──────┬───────────────┬──────┘
+            │               │ DI only         │ DI only       │
+            │               ▼                 ▼               │
+            │        ┌──────────────────────────────┐         │
+            │        │        Infrastructure        │         │
+            │        │  EF Core, repositories,      │         │
+            │        │  outbox, cache, Wolverine    │         │
+            │        └──────────────┬───────────────┘         │
+            ▼                       ▼                         ▼
+     ┌───────────────────────────────────────────────────────────────┐
+     │                          Application                          │
+     │           Use cases, ports, Result<T>, validators             │
+     └───────────────────────────────┬───────────────────────────────┘
+                                     ▼
+     ┌───────────────────────────────────────────────────────────────┐
+     │                            Domain                             │
+     │          Entities, value objects, domain events               │
+     └───────────────────────────────────────────────────────────────┘
 ```
 
-| From ↓ / To → | Domain | Application | Infrastructure | Api |
-| --- | --- | --- | --- | --- |
-| **Domain** | — | ✗ | ✗ | ✗ |
-| **Application** | ✓ | — | ✗ | ✗ |
-| **Infrastructure** | ✓ | ✓ | — | ✗ |
-| **Api** | ✓ | ✓ | ✓ DI only | — |
+| From ↓ / To → | Domain | Application | Infrastructure | Api | Worker |
+| --- | --- | --- | --- | --- | --- |
+| **Domain** | — | ✗ | ✗ | ✗ | ✗ |
+| **Application** | ✓ | — | ✗ | ✗ | ✗ |
+| **Infrastructure** | ✓ | ✓ | — | ✗ | ✗ |
+| **Api** | ✓ | ✓ | ✓ DI only | — | ✗ |
+| **Worker** | ✓ | ✓ | ✓ DI only | ✗ | — |
+
+**`Api` and `Worker` are siblings, not layers**, and neither may reference the other (ADR 0016).
+`Worker → Api` is blocked for a concrete reason beyond tidiness: it is exactly what would let
+the two share one Wolverine generated-code tree, and keeping them separate is what makes each
+host's `codegen write` independently correct.
 
 `.claude/hooks/dependency-rule.ps1` blocks an edit that would violate any cell except
-`Api → Infrastructure`, which cannot be distinguished mechanically from a legitimate
-`services.AddScoped<>()` registration and is carried by review instead. `Domain` additionally
-may not reference EF Core, ASP.NET Core, the DI abstractions, `System.Data`, or
-`System.ComponentModel.DataAnnotations`, and architecture tests assert the same rules from
-inside the test suite.
+`Api → Infrastructure` and `Worker → Infrastructure`, which cannot be distinguished mechanically
+from a legitimate `services.AddScoped<>()` registration and are carried by review instead.
+`Domain` additionally may not reference EF Core, ASP.NET Core, the DI abstractions,
+`System.Data`, or `System.ComponentModel.DataAnnotations`.
 
-Three mechanisms are worth knowing about before reading the code:
+Two caveats are worth knowing before trusting the ✗ marks in that table:
+
+> **The hooks are PowerShell, and they are invoked as `powershell.exe`.** On Linux or macOS
+> without PowerShell installed, none of them run — the dependency rule, the secrets guard, and
+> the migration guard are all silently inert. Architecture tests in `Domain.Tests`,
+> `Application.Tests`, and `Infrastructure.Tests` assert the inward-pointing rules from inside
+> the suite and run everywhere, but they do not currently cover the `Api` or `Worker` rows, so
+> on a non-Windows machine those two are carried by review alone.
+
+> **Three cells are unenforced by accident**, and are tracked in [`CLAUDE.md`](CLAUDE.md):
+> the hook's banned-namespace table lists `Worker` only under `Api`, so `Domain → Worker`,
+> `Application → Worker`, and `Infrastructure → Worker` pass it. Nothing in the repository
+> violates them today. The hook also matches `using` directives only, so a fully-qualified
+> inline reference is invisible to it, as is a `<ProjectReference>` in a `.csproj`.
+
+Four mechanisms are worth knowing about before reading the code:
 
 - **In-process messaging without MediatR.** `ICommandHandler<TCommand, TResponse>` and
   `IQueryHandler<TQuery, TResponse>` are dispatched through `ICommandDispatcher` and
@@ -98,6 +124,11 @@ Three mechanisms are worth knowing about before reading the code:
 - **Opt-in query caching, scoped to the caller.** A query implements `ICacheable`, a command
   implements `IInvalidatesCache`, and the behavior composes the cache key from the query type
   and the current user's id. Nothing on the authentication path is cached. See ADR 0009.
+- **Background jobs in a worker host of their own.** A job is a message with a lane
+  (`Light`/`Heavy`, one PostgreSQL queue each), enqueued through `IJobScheduler`. **The API
+  publishes and listens to nothing**; the worker is the only host with listeners, which is
+  asserted from the runtime's own endpoint list rather than intended. Scheduled jobs use Quartz
+  as the clock and fire on exactly one worker. See ADR 0016 and ADR 0017.
 
 ## Tech stack
 
@@ -108,10 +139,14 @@ Three mechanisms are worth knowing about before reading the code:
 | Runtime | .NET 10 (`net10.0`), C# 14, SDK 10.0.400 |
 | Web | ASP.NET Core, controller-based |
 | Persistence | PostgreSQL 17 via EF Core 10 and Npgsql |
-| Messaging | Hand-rolled dispatchers; WolverineFx 6 for the durable event path |
+| Messaging | Hand-rolled dispatchers; WolverineFx 6 for the durable event path and the job queues |
+| Jobs | Worker host over the PostgreSQL transport; Quartz.NET 4 as the scheduler clock |
 | Caching | `HybridCache` (L1 only today) |
+| Realtime | SignalR, opt-in, with a Redis backplane above one replica |
 | Validation | FluentValidation |
-| Auth | Cookie session, Data Protection key ring persisted to PostgreSQL |
+| Auth | Cookie session with a rotating security stamp; Data Protection key ring in PostgreSQL |
+| Resilience | `Microsoft.Extensions.Http.Resilience` outbound; `EnableRetryOnFailure` on Npgsql |
+| Observability | `Microsoft.Extensions.Logging` + OpenTelemetry over OTLP; Seq locally, OpenSearch in-cluster |
 | API docs | `Microsoft.AspNetCore.OpenApi` rendered by Scalar |
 | Analysis | .NET analyzers, SonarAnalyzer, Meziantou.Analyzer, AsyncFixer — all as errors |
 
@@ -148,23 +183,31 @@ Exact pins live in [`CLAUDE.md`](CLAUDE.md), `Directory.Build.props`, the `.cspr
 ├── src/
 │   ├── Domain/            Entities, value objects, domain events, domain exceptions
 │   ├── Application/       Use cases, ports, Result<T>, validators
-│   ├── Infrastructure/    EF Core, repositories, outbox, caching, Wolverine, security
-│   └── Api/               Controllers, DTOs, exception handling, composition root
+│   ├── Infrastructure/    EF Core, repositories, outbox, caching, Wolverine, jobs, security
+│   ├── Api/               Controllers, DTOs, the SignalR hub, exception handling, composition root
+│   │   └── Internal/Generated/    Wolverine adapters for the event path — committed
+│   └── Worker/            The job host: handlers, Quartz scheduling, the outbox pumps
+│       └── Internal/Generated/    Wolverine adapters for the jobs — committed, and its own
 ├── tests/
 │   ├── Domain.Tests/
 │   ├── Application.Tests/
 │   ├── Infrastructure.Tests/     Testcontainers-backed PostgreSQL fixtures
-│   └── Api.IntegrationTests/     WebApplicationFactory over the real pipeline
+│   ├── Api.IntegrationTests/     WebApplicationFactory over the real pipeline
+│   └── Worker.IntegrationTests/  Job delivery, scheduling, and the worker's codegen
 ├── frontend/              Vite + React workspace, Vitest specs, Playwright e2e
-├── k8s/                   Kustomize base and the local overlay
+├── k8s/
+│   ├── base/              api, web, worker, postgres, redis, ingress, autoscaling
+│   ├── components/        observability — the OTel Collector and OpenSearch, opt-in
+│   └── overlays/          local, and local-observability
 ├── deploy/                kind cluster definition and deployment scripts
 ├── scripts/               Development loop and prerequisite scripts
 ├── local-run/             control-panel.bat, a double-clickable menu
 ├── openapi/               The committed API contract
 ├── docs/
 │   ├── adr/               Architecture decision records
+│   ├── local-development.md
 │   └── superpowers/       Specs and implementation plans
-└── .claude/               Hooks, agents, and slash commands
+└── .claude/               Hooks, agents, skills, and slash commands
 ```
 
 ## Install
@@ -208,18 +251,25 @@ first run needs no separate step.
 
 ### Running locally
 
-One command starts PostgreSQL, applies migrations, and launches the API and the Vite dev server
-in windows of their own:
+One command starts PostgreSQL, applies migrations, and launches the API, the **job worker**, and
+the Vite dev server in windows of their own:
 
 ```powershell
-./scripts/dev.ps1
+./scripts/dev.ps1              # three windows: API (5234), worker (5235), Vite (5173)
+./scripts/dev.ps1 -WithSeq     # same, plus Seq for structured logs at localhost:55341
+./scripts/worker.ps1           # just the worker, in this window — for restarting it alone
 ```
 
-To stop all three:
+To stop all of it:
 
 ```powershell
 ./scripts/stop-dev.ps1
 ```
+
+The worker is not optional scenery: jobs run there and **the API listens to nothing**, so
+without that window an enqueued job simply sits in PostgreSQL and nothing says so.
+`worker.ps1` exists because `codegen write` requires a worker restart before new adapters take
+effect, and restarting it otherwise means stopping everything.
 
 By hand, if you want the pieces separately:
 
@@ -227,6 +277,7 @@ By hand, if you want the pieces separately:
 docker compose up -d --wait
 dotnet ef database update --project src/Infrastructure --startup-project src/Infrastructure
 dotnet run --project src/Api
+dotnet run --project src/Worker
 npm start --prefix frontend
 ```
 
@@ -239,14 +290,29 @@ Further detail, including one-keystroke startup in Rider and Visual Studio, is i
 
 ### Running on Kubernetes
 
-A local kind cluster that runs the stack at two API replicas, to rehearse what only breaks above
-one: a shared Data Protection key ring, and cache eviction under ingress cookie affinity. Docker
-Compose remains the inner development loop; this is additive.
+A local kind cluster that runs the stack at **two API replicas across two worker nodes**, to
+rehearse what only breaks above one: a shared Data Protection key ring, cache eviction under
+ingress cookie affinity, and a realtime push that has to reach a user whose connection is held
+by the other pod. Docker Compose remains the inner development loop; this is additive.
 
 ```powershell
 ./deploy/start-cluster.ps1     # creates the cluster if missing, otherwise redeploys
+./deploy/deploy.ps1            # rebuild, migrate, roll out onto an existing cluster
+./deploy/deploy.ps1 -WithObservability   # same, plus the OTel Collector -> OpenSearch stack
 ./deploy/teardown.ps1          # deletes the cluster, and the data inside it
 ```
+
+Two replicas means two *failure domains*, not two processes: `deploy/kind-cluster.yaml` declares
+a control-plane node plus two workers, and `api` spreads across them with
+`whenUnsatisfiable: DoNotSchedule`. HPAs cover `api` and `web` with `minReplicas: 2` as a floor,
+and all three workloads have PodDisruptionBudgets. The **worker has a budget but no autoscaler**
+— its work arrives through queues, so queue depth is the signal an autoscaler would need, and
+CPU would scale it down exactly when it is blocked and falling behind. See ADR 0018.
+
+`-WithObservability` is opt-in and is by a wide margin the largest thing in the cluster
+(OpenSearch wants real JVM heap, Dashboards is a second Node process) — reach for it only when
+the logging pipeline itself is what you are rehearsing. It is deliberately **not** part of the
+`e2e-k8s.ps1` readiness gate: a log store has no business in the readiness path of an e2e run.
 
 The deployment is three phases in a fixed order, because Kustomize has no hook mechanism:
 configuration and PostgreSQL first, then migrations as a Job run to completion, and only then the
@@ -257,10 +323,16 @@ there is nothing to add to your `hosts` file, and the certificate is self-signed
 warns once. The ingress is published on 8080/8443 rather than 80/443 because those ports are
 frequently taken on Windows by IIS or BranchCache through `http.sys`.
 
-Three things that will cost you time are documented in [`CLAUDE.md`](CLAUDE.md): TLS is not
+Four things that will cost you time are documented in [`CLAUDE.md`](CLAUDE.md): TLS is not
 optional in Production because the session cookie is `Secure`; configuration keys need double
-underscores; and the migration Job is deleted before being re-applied, because a completed Job
-has immutable fields.
+underscores (`Cache__Enabled`, not `Cache_Enabled` — a single underscore binds nothing and warns
+nothing); the migration Job is deleted before being re-applied, because a completed Job has
+immutable fields; and **metrics-server is installed patched with `--kubelet-insecure-tls`**,
+without which every HPA reports `unknown` and never scales — as a *condition on the HPA*, not as
+a deploy failure, so the cluster looks healthy while the autoscalers do nothing.
+
+PostgreSQL is pinned to whichever node it first scheduled on by kind's node-local storage class,
+so draining that node will not reschedule it. Target a different node for a drain test.
 
 > The local overlay commits a PostgreSQL password and a self-signed private key on purpose.
 > They are throwaway values for a localhost-only cluster that is never deployed, each file says
@@ -273,9 +345,11 @@ has immutable fields.
 | --- | --- | --- |
 | 5173 | Vite dev server | `frontend/vite.config.ts` |
 | 5234 | API | `src/Api/Properties/launchSettings.json` |
+| 5235 | Job worker (health endpoints only) | `src/Worker/Properties/launchSettings.json` |
 | 4173 | Vite preview, used by the e2e suite | `frontend/vite.config.ts` |
 | 55433 | Development PostgreSQL, data persists | `docker-compose.yml` |
 | 55432 | End-to-end PostgreSQL, throwaway | `docker-compose.e2e.yml` |
+| 55341 | Seq, only with `dev.ps1 -WithSeq` | `docker-compose.yml` (`observability` profile) |
 | 8080/8443 | kind ingress | `deploy/kind-cluster.yaml` |
 
 The two databases are meant to coexist. The two *API processes* are not: `npm run e2e` starts its
@@ -299,8 +373,31 @@ defence, so no antiforgery token is issued.
 | `POST` | `/api/orders` | cookie | Place an order |
 | `GET` | `/api/orders` | cookie | List your orders, paged |
 | `GET` | `/api/orders/{id}` | cookie | One of your orders |
+| `POST` | `/api/orders/{id}/ship` | cookie | Mark one of your orders shipped; 409 on an illegal transition |
+| `POST` | `/api/orders/{id}/cancel` | cookie | Cancel one of your orders; 409 on an illegal transition |
+| `POST` | `/api/products` | cookie | Add a product to the catalogue |
+| `GET` | `/api/products` | cookie | List the catalogue, paged |
+| `GET` | `/api/products/{id}` | cookie | One product |
+| `PUT` | `/api/products/{id}` | cookie | Replace a product's editable fields — not the sku |
+| `GET` | `/api/notifications` | cookie | Your notification feed, newest first, paged |
+| `GET` | `/api/notifications/unread-count` | cookie | Your unread count, for the badge |
+| `POST` | `/api/notifications/{id}/read` | cookie | Mark one notification read |
+| `POST` | `/api/notifications/read-all` | cookie | Mark every unread notification read |
+| `GET` | `/api/rates?from=&to=` | cookie | An exchange rate; 503 once the provider's retry budget is spent |
 | `GET` | `/health` | anonymous | Liveness; never touches the database |
 | `GET` | `/health/ready` | anonymous | Readiness; checks PostgreSQL |
+
+The worker serves `/health` and `/health/ready` of its own on 5235, and nothing else — it is a
+web host only so that Kubernetes has something to probe.
+
+`/hubs/notifications` is a SignalR hub, mapped only when `Realtime__Enabled` is on. It is
+**best-effort by contract**: the feed is the truth, and the push only closes the window in which
+the badge would otherwise be up to thirty seconds stale. See ADR 0019.
+
+The catalogue is `[Authorize]` rather than anonymous even for reads, and that is mechanical
+rather than a product decision: an `ICacheable` query dispatched with no current user throws,
+because the cache key is composed with `ICurrentUser.Id` and an unscoped entry would be shared
+across every caller.
 
 Orders belong to the user who placed them and are never reassigned (ADR 0007), so a request for
 someone else's order is a 404 rather than a 403.
@@ -315,6 +412,16 @@ Credential endpoints are protected twice over (ADR 0008): a fixed-window rate li
 by remote address, and a self-expiring per-account lockout after five failed attempts. The
 lockout is deliberately silent, so that neither mechanism reveals which accounts exist.
 
+**Sessions can be invalidated after the fact** (ADR 0011). Each user carries a rotating
+`SecurityStamp`; the cookie carries the stamp it was issued under, and every authenticated
+request compares the two in `OnValidatePrincipal` before the endpoint sees it. Three things
+rotate it — a password change, the failed sign-in that locks an account, and
+`POST /api/auth/sign-out-everywhere` — and a rotation ends every cookie already issued for that
+user. That read is deliberately uncached and always will be: `HybridCache` here is L1-only, so
+caching it would let a revoked session survive on another replica for the length of the TTL.
+Changing your own password re-issues your own cookie, which is why `ChangePassword` returns a
+`SessionView` rather than a bool.
+
 The interactive reference is Scalar at `/scalar/v1`, and it is **Development only** — a deployed
 instance must not publish its endpoint surface, and an integration test asserts that in both
 directions.
@@ -325,8 +432,10 @@ directions.
 frontend/src/
 ├── api/            Generated schema, typed client, endpoint wrappers
 ├── features/
-│   ├── auth/       Login, register, change password, RequireAuth guard
-│   └── orders/     List, detail, place-order form, query hooks
+│   ├── auth/           Login, register, change password, RequireAuth guard
+│   ├── orders/         List, detail, place-order form, query hooks
+│   ├── products/       Catalogue list, detail, create and edit forms
+│   └── notifications/  The header bell, the feed, and the SignalR stream
 ├── components/
 ├── styles/         tokens.css, global.css, controls.css
 ├── test/           MSW handlers, setup, query-client helper
@@ -341,7 +450,15 @@ frontend/src/
 | `/orders` | `OrderList` | authenticated |
 | `/orders/new` | `PlaceOrderForm` | authenticated |
 | `/orders/:id` | `OrderDetail` | authenticated |
+| `/products` | `ProductList` | authenticated |
+| `/products/new` | `CreateProductForm` | authenticated |
+| `/products/:id` | `ProductDetail` | authenticated |
+| `/products/:id/edit` | `EditProductForm` | authenticated |
+| `/notifications` | `NotificationList` | authenticated |
 | `/account/password` | `ChangePasswordPage` | authenticated |
+
+`/products/new` is declared before `/products/:id` so that `new` matches the literal route
+rather than being captured as an id.
 
 `RequireAuth` wraps the layout rather than the other way round, so a signed-out visitor is
 redirected before a header they cannot use is rendered. Server state is TanStack Query; there is
@@ -377,16 +494,26 @@ startup guard rejects an empty connection string, and a durable Wolverine dials 
 connection string is never actually opened. It is an explicit MSBuild target rather than part of
 `dotnet build`, so that an ordinary build stays ordinary.
 
-**Wolverine handler adapters.** Wolverine builds its adapters with Roslyn, and Release ships
-without the compiler because it costs 33MB. Release loads adapters generated ahead of time under
-`src/Api/Internal/Generated`. After adding or changing a handler:
+**Wolverine handler adapters — there are TWO trees, not one.** Wolverine builds its adapters
+with Roslyn, and Release ships without the compiler because it costs 33MB (measured: a Release
+publish is 17MB without it, 50MB with). Release instead loads adapters generated ahead of time.
+`TypeLoadMode.Static` resolves them out of each host's own `opts.ApplicationAssembly`, and the
+worker cannot share the API's — that would need the `Worker → Api` reference the dependency rule
+forbids. After adding or changing a handler, regenerate the tree(s) it belongs to:
 
 ```bash
-dotnet run --project src/Api -- codegen write
+dotnet run --project src/Api -- codegen write      # event-path handlers
+dotnet run --project src/Worker -- codegen write   # job handlers, and JobUserMiddleware
 ```
 
 This is the trap the Release dimension in CI exists for: stale generated code leaves Debug green
-and the build succeeding, and fails only in Release, at startup.
+and the build succeeding, and fails only in Release, at startup. Debug stays green with *either*
+tree stale, and CI checks both.
+
+**CI's Linux output is the authority, and Windows does not always match it.** If a Windows
+regeneration reorders statements inside a handler you did not change, keep the committed
+version — the two orders do the same thing, each platform is stable, and CI's "generated code is
+current" job is what decides.
 
 **EF Core migrations.** Never hand-edit an applied migration; add a new one.
 `.claude/hooks/protect-migrations.ps1` enforces this against git history, so a migration you have
@@ -396,13 +523,14 @@ refused even if you delete the file first.
 ## Testing
 
 ```bash
-dotnet test                          # 246 test cases across four projects
+dotnet test                          # five projects, ~95 test files
 npm test --prefix frontend -- --run  # Vitest
 npm run e2e --prefix frontend        # Playwright
 ```
 
-Inside Claude Code, `/verify` runs all of the above plus both lint steps and reports what
-actually ran, skipping any toolchain that is not installed rather than reporting a false pass.
+Inside Claude Code, `/verify` runs all of the above plus both lint steps **and the two
+generated-artifact drift checks**, and reports what actually ran — skipping any toolchain that
+is not installed rather than reporting a false pass.
 
 | Suite | What belongs there |
 | --- | --- |
@@ -410,12 +538,21 @@ actually ran, skipping any toolchain that is not installed rather than reporting
 | `Application.Tests` | Handlers against substituted ports; architecture tests |
 | `Infrastructure.Tests` | Repositories, outbox, caching, against real PostgreSQL via Testcontainers |
 | `Api.IntegrationTests` | The real pipeline through `WebApplicationFactory` |
+| `Worker.IntegrationTests` | Job delivery, Quartz scheduling, and the worker's own codegen |
 | `frontend/src/**/*.test.tsx` | Components and hooks, with MSW standing in for the API |
-| `frontend/e2e/*.spec.ts` | Two browser journeys against a built preview bundle |
+| `frontend/e2e/*.spec.ts` | Browser journeys against a built preview bundle |
 
-Testcontainers needs a running Docker daemon. The caching behavior and the rate limiter are both
-disabled by default under test and re-enabled by the specific suites that exercise them, so that
-neither becomes an intermittent failure in tests that are not about them.
+Testcontainers needs a running Docker daemon. The caching behavior, the rate limiter, and the
+resilience pipeline's retries are all disabled by default under test and re-enabled by the
+specific suites that exercise them, so that none becomes an intermittent failure — or a source
+of backoff delay — in tests that are not about them.
+
+Several suites exist specifically to catch a class of regression that review alone would miss:
+`JobRegistrationTests` fails the build on an unregistered job, `ApiPublishesOnlyTests` asserts
+against the runtime's own endpoint list that no `jobs_*` queue has a listener on the API host,
+`SensitiveCommandLoggingTests` catches a logging change that would write plaintext passwords to
+the log store, and `WolverineCodegenTests`/`WorkerCodegenTests` catch stale adapters in Debug —
+where they would otherwise stay invisible until Release.
 
 ## Continuous integration
 
@@ -425,7 +562,7 @@ pull request:
 | Job | What it proves |
 | --- | --- |
 | `backend (Debug)` / `backend (Release)` | Builds and tests in both configurations |
-| `generated code is current` | Re-runs `codegen write` and fails on any diff |
+| `generated code is current` | Re-runs `codegen write` for **both** trees and fails on any diff |
 | `api contract is current` | Regenerates the OpenAPI document and the TypeScript schema, and fails on any diff |
 | `frontend` | Lint, build, and Vitest |
 | `e2e` | Playwright, gated behind the fast jobs |
@@ -433,6 +570,11 @@ pull request:
 Release is a separate matrix leg rather than an afterthought: Release was broken in this
 repository for the whole life of the Wolverine spike without anyone noticing, because
 `dotnet build` succeeded with zero warnings and only the startup failed.
+
+The two "is current" jobs fail on a **diff**, not on a build error, which is what lets a working
+tree build, test, and lint clean while CI rejects it. `/verify` runs both as its step 3 for
+exactly that reason — so the one thing CI does that a local `/verify` does not is the Release
+leg.
 
 ## Conventions
 
@@ -447,9 +589,16 @@ Non-negotiable, and mostly machine-checked:
   `throw;`, never `throw ex;`. CA1031 is an error everywhere except the outbox's background
   pumps, which have no such parameter and must not die mid-loop.
 - **No secrets in `appsettings*.json`.** Use `dotnet user-secrets` or environment variables. A
-  hook blocks the commit. The committed development connection string and the local Kubernetes
-  overlay are deliberate, documented exceptions: throwaway credentials for localhost-only
-  containers that are never deployed.
+  pre-edit hook refuses the write (not the commit — nothing here hooks git). The committed
+  development connection string and the local Kubernetes overlay are deliberate, documented
+  exceptions: throwaway credentials for localhost-only containers that are never deployed.
+- **Never hand-edit an applied EF migration.** Add a new one. The hook keys on git history, so a
+  migration you have just generated and not yet committed is still yours to adjust, while one
+  that is in `HEAD` is refused even if you delete the file first.
+- **Handlers do not log their own outcome.** Every command and query is already wrapped by a
+  logging behavior that records outcome and duration, and it logs `typeof(TRequest).Name` rather
+  than the request instance — `SignIn`, `RegisterUser`, and `ChangePassword` all carry a
+  plaintext password field. See ADR 0015.
 
 Per-language detail lives in the `dotnet-conventions`, `dotnet-testing`, `react-conventions`, and
 `react-testing` skills, and each layer has a `CLAUDE.md` of its own.
@@ -470,8 +619,19 @@ All accepted, in [`docs/adr/`](docs/adr/).
 | [0008](docs/adr/0008-brute-force-protection.md) | Brute-force protection: rate limiting and a self-expiring lockout |
 | [0009](docs/adr/0009-caching-scoped-to-the-caller.md) | Query caching: an opt-in pipeline behavior, scoped to the caller |
 | [0010](docs/adr/0010-running-on-kubernetes.md) | Running on Kubernetes: shared state across two replicas |
+| [0011](docs/adr/0011-session-invalidation-on-a-security-stamp.md) | Session invalidation on a rotating security stamp |
+| [0012](docs/adr/0012-end-to-end-test-architecture.md) | End-to-end test architecture |
+| [0013](docs/adr/0013-a-global-catalogue-behind-a-caller-scoped-cache.md) | A global catalogue behind a caller-scoped cache |
+| [0014](docs/adr/0014-retry-and-resilience-policies.md) | Retry and resilience policies on the request path |
+| [0015](docs/adr/0015-centralized-logging-with-opentelemetry.md) | Centralized logging with MEL and OpenTelemetry |
+| [0016](docs/adr/0016-jobs-in-a-worker-host.md) | Jobs run in a worker host, with lanes as queues, on the PostgreSQL transport |
+| [0017](docs/adr/0017-quartz-as-the-job-clock.md) | Quartz.NET as the job clock |
+| [0018](docs/adr/0018-load-balancing-within-the-affinity-constraint.md) | Load balancing within the affinity constraint |
+| [0019](docs/adr/0019-realtime-notifications-over-signalr.md) | Realtime notifications over SignalR, with a Redis backplane |
 
-Record a new one with `/adr <title>`.
+Record a new one with `/adr <title>`. **Check the open branches as well as `docs/adr/` before
+taking a number** — two branches that each take "the next one" produce a duplicate, which has
+happened once already and needed a renumbering commit to undo.
 
 ## Troubleshooting
 
@@ -506,12 +666,14 @@ reload once and it resolves.
 ## Contributing
 
 1. Read [`CLAUDE.md`](CLAUDE.md) and the `CLAUDE.md` of the layer you are touching.
-2. Scaffold with `/feature <name>` or `/react-feature <name>` so the layering and the tests come
-   out right the first time.
-3. Keep the dependency rule intact. The hook will stop you, but the hook is a backstop, not a
-   design tool.
-4. Regenerate and commit any affected [generated code](#generated-code).
-5. Run `/verify` before opening a pull request. CI runs the same thing plus the Release
+2. Scaffold with `/feature <name>`, `/react-feature <name>`, or `/job <Name>` so the layering
+   and the tests come out right the first time.
+3. Keep the dependency rule intact. The hook will stop you on Windows — but it is a backstop,
+   not a design tool, and on Linux or macOS it is not running at all.
+4. Regenerate and commit any affected [generated code](#generated-code): the API contract after
+   touching a controller, a DTO, or a `[ProducesResponseType]`; the Wolverine tree(s) after
+   touching a handler.
+5. Run `/verify` before opening a pull request. CI runs the same checks plus the Release
    configuration.
 6. Record anything architecturally load-bearing with `/adr <title>`.
 

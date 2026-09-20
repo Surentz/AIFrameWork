@@ -57,10 +57,21 @@ which blocks the edit rather than warning about it.
 | **Api** | ✓ | ✓ | ✓ DI only | — | ✗ |
 | **Worker** | ✓ | ✓ | ✓ DI only | ✗ | — |
 
-> The `Api → Infrastructure` and `Worker → Infrastructure` cells are the two rows the hook does
-> **not** enforce: nothing distinguishes a `services.AddScoped<>()` registration from a controller
-> reaching into a repository, so "DI only" is carried by review and `dotnet-reviewer`. Every other
-> cell blocks.
+> The `Api → Infrastructure` and `Worker → Infrastructure` cells are unenforced *by design*:
+> nothing distinguishes a `services.AddScoped<>()` registration from a controller reaching into a
+> repository, so "DI only" is carried by review and `dotnet-reviewer`.
+>
+> **Three further cells are unenforced by accident, and should not be relied on.** The hook's
+> `$banned` table lists `Worker` only under `Api`, so `Domain → Worker`,
+> `Application → Worker`, and `Infrastructure → Worker` are marked ✗ above but pass the hook.
+> The fix is to add `"$root.Worker"` to those three lists in
+> `.claude/hooks/dependency-rule.ps1`; until then, treat the ✗ in those three cells as a rule
+> carried by review. Nothing in the repo violates them today.
+>
+> Two limits apply to *every* cell, and are accepted rather than open bugs: the hook matches
+> `using` directives, so a fully-qualified inline reference with no `using` is invisible to it;
+> and it gates on `\.cs$`, so a `<ProjectReference>` in a `.csproj` — the coarsest possible
+> violation — is invisible too.
 
 > **`Api` and `Worker` are siblings, not layers** — two composition roots over the same three
 > inner layers (ADR 0016). Neither may reference the other. `Worker → Api` is blocked for a
@@ -702,13 +713,25 @@ See ADR 0014.
 `.github/workflows/ci.yml` runs what `/verify` runs, on every push to `main` and every pull
 request: backend build and test, frontend lint/build/test, and the Playwright e2e suite.
 
-Two things it does that a local `/verify` does not:
+Five jobs: `backend` (a Debug/Release matrix), `codegen`, `contract`, `frontend`, and `e2e`.
+
+One thing it does that a local `/verify` does not:
 
 - **Builds and tests both Debug and Release.** Release was broken in this repo for the whole life
   of the Wolverine spike without anyone noticing, because `dotnet build` succeeded with zero
   warnings and only the *startup* failed. Debug alone is not evidence.
-- **Checks the committed generated code is current**, by re-running `codegen write` and failing on
-  any diff — see "Wolverine codegen" above.
+
+And two it shares with `/verify`, both of which fail on a **diff** rather than on a build error —
+which is what lets a working tree build, test and lint clean while CI rejects it:
+
+- **`codegen`: the committed generated code is current**, by re-running `codegen write` for
+  **both** trees and failing on any diff — see "Wolverine codegen" above.
+- **`contract`: the committed API contract is current**, by regenerating
+  `openapi/AiFramework.Api.json` and `frontend/src/api/schema.d.ts` and failing on any diff — see
+  "The API contract" above.
+
+`/verify` grew those two checks as its step 3 for exactly this reason; before that it could go
+green on a tree CI would reject.
 
 ## More context
 

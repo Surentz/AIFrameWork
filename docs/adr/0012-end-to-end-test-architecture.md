@@ -181,6 +181,11 @@ rather than duplicating it.
 and this ADR takes the next number, **0012**, rather than the gap — 0011 stays reserved for
 whoever eventually writes the session-invalidation ADR it already implies exists.
 
+> **Resolved 2026-09-20.** That reservation was taken up:
+> [ADR 0011](0011-session-invalidation-on-a-security-stamp.md) is now written. Its D4 fixture
+> rationale below — session-invalidating actions taking an isolated user — is the direct
+> consequence of the stamp rotation that ADR now records.
+
 ### Accepted trade-offs
 
 **The kind run's coverage is smaller than the local run's, by design, and that gap could grow.**
