@@ -19,3 +19,14 @@ nodes:
       - containerPort: 443
         hostPort: 8443
         protocol: TCP
+  # Two worker nodes, so "two replicas" means two failure domains rather than two processes on
+  # one machine. Without them the topology spread constraints in k8s/base are unsatisfiable by
+  # construction - every pod lands on the control-plane node and a drain takes the whole
+  # deployment with it, which is precisely the class of failure this cluster exists to rehearse.
+  #
+  # Two rather than three: the ingress is pinned to the control-plane node by the ingress-ready
+  # label above, so the control-plane is carrying that already. Each extra node is another full
+  # kubelet and container runtime on the developer's machine, and the observability profile is
+  # already the heaviest thing here.
+  - role: worker
+  - role: worker

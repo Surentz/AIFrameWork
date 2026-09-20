@@ -1,0 +1,140 @@
+# Horizontal autoscaling and disruption budgets for the two request-serving Deployments.
+#
+# READ THIS BEFORE EXPECTING TOO MUCH OF IT. The api Ingress pins each user to a pod with a
+# cookie for an hour (ADR 0010), so scaling out does NOT rebalance anyone already connected -
+# a new pod only ever receives sessions that start after it does. That bound is not a defect
+# in these manifests, it is the affinity doing its job, and ADR 0010's 2026-09-20 amendment
+# records why the affinity cannot currently be removed. Autoscaling here buys headroom for NEW
+# traffic and survives node pressure; it does not even out load across existing sessions.
+#
+# The worker deliberately has no HPA - see the note at the foot of this file.
+#
+# api.yaml and web.yaml still declare `replicas: 2`, and that is a deliberate choice rather than
+# an oversight. `kubectl apply` writes the field, so every deploy.ps1 run resets the count to the
+# manifest value and the HPA scales back up from there. The usual advice is to drop `replicas`
+# from an autoscaled Deployment to stop the two fighting - here the manifest value IS the HPA's
+# own minReplicas, so "resetting" means returning to the floor the autoscaler would enforce
+# anyway, and a deploy recreates every pod regardless. Keeping the field is what leaves
+# "two replicas is the point of this cluster" stated where a reader of the Deployment sees it.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  # Never below two. Two replicas is the whole point of this cluster (ADR 0010): dropping to one
+  # under light load would quietly stop rehearsing every multi-instance failure the deployment
+  # exists to surface, and the first anyone would know is when production met one.
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    # Against the pod's CPU *request* (200m), not a limit - api.yaml deliberately sets no CPU
+    # limit. 70% of 200m is 140m sustained before a scale-out.
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Memory as well as CPU, because this workload's pressure is not only compute: HybridCache's
+    # L1 and the EF change tracker both live in the heap, and the 768Mi limit is what turns
+    # memory exhaustion into an OOMKill rather than a slow pod. 80% of the 256Mi request.
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      # The default is 0s, which reacts to a single spiky scrape. 60s is still responsive and
+      # stops a burst of traffic producing a burst of pods that are not needed by the time they
+      # finish their startupProbe - which for this API is slow by design, since durable
+      # Wolverine does schema work at boot.
+      stabilizationWindowSeconds: 60
+    scaleDown:
+      # Five minutes, well above the cache's 30-second TTL and the session cookie's usefulness.
+      # Removing a pod evicts every session pinned to it, and under affinity those users land
+      # on a pod holding nothing for them - a cold miss and a database read each. Scaling down
+      # eagerly would turn ordinary traffic variation into repeated stampedes.
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    # CPU only. web is nginx serving a static bundle: its memory is flat by construction, so a
+    # memory target would be a metric that never moves.
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# A drain must not take every replica at once. Without this, `kubectl drain` on a node - or any
+# voluntary disruption, which on this cluster means a node upgrade or a rehearsal - is free to
+# evict both api pods simultaneously, and the deployment is down despite having two replicas.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  # minAvailable rather than maxUnavailable, deliberately. With an HPA the replica count moves,
+  # and maxUnavailable is a percentage of a number that changes underneath it; minAvailable: 1
+  # states the actual requirement - never zero serving pods - at any replica count.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: web
+---
+# The worker gets a budget but NO autoscaler, and the asymmetry is deliberate.
+#
+# Its work arrives through Wolverine queues off Postgres, so the thing that says whether it is
+# keeping up is queue depth, not CPU - a worker blocked on a slow query sits at low CPU while
+# falling further behind, and a CPU-driven HPA would scale it down precisely then. Scaling on
+# the right signal needs a queue-depth metric this cluster does not collect. Until it does, the
+# replica count stays an explicit decision in worker.yaml.
+#
+# Nothing about the worker forbids more replicas: OutboxPoller claims rows with FOR UPDATE SKIP
+# LOCKED and Quartz runs clustered, so a second worker is safe by construction (ADR 0010,
+# ADR 0017). The gap is the trigger, not the safety.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker
+spec:
+  # Not minAvailable: 1. The worker runs at a single replica, and minAvailable: 1 on a
+  # one-replica Deployment blocks a node drain indefinitely - the budget can never be satisfied
+  # while the only pod is being evicted. maxUnavailable: 1 lets the drain proceed, which is
+  # correct here: jobs are durable in Postgres and redelivered, so a worker restart costs
+  # latency rather than work. Raise the replica count and this can become minAvailable: 1.
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: worker

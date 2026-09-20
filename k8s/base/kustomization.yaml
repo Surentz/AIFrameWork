@@ -10,3 +10,6 @@ resources:
   - worker.yaml
   - web.yaml
   - ingress.yaml
+  # HorizontalPodAutoscalers and PodDisruptionBudgets. Last, because an HPA that is applied
+  # before its scaleTargetRef exists reports a failure condition until its next sync.
+  - autoscaling.yaml
