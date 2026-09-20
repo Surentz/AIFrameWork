@@ -33,7 +33,7 @@
       notification runs on EVERY replica and claims rows with FOR UPDATE SKIP LOCKED, so the pod
       that writes is unrelated to the pod holding that user's connection. Without this, a push
       reaches the user only when those happen to coincide - about half the time at the two
-      replicas k8s/base/api.yaml runs - and fails silently the rest. See ADR 0016.
+      replicas k8s/base/api.yaml runs - and fails silently the rest. See ADR 0019.
     -->
     <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.11">
