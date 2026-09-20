@@ -601,7 +601,9 @@ Non-negotiable, and mostly machine-checked:
   plaintext password field. See ADR 0015.
 
 Per-language detail lives in the `dotnet-conventions`, `dotnet-testing`, `react-conventions`, and
-`react-testing` skills, and each layer has a `CLAUDE.md` of its own.
+`react-testing` skills; `regenerate` and `jobs` cover the two procedures most likely to be got
+wrong — which generated artifact to rebuild after a change, and the job framework's traps. Each
+layer has a `CLAUDE.md` of its own.
 
 ## Architecture decision records
 

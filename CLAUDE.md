@@ -736,7 +736,18 @@ green on a tree CI would reject.
 ## More context
 
 Each layer has its own `CLAUDE.md`, loaded when you work in that directory.
-Conventions live in the `dotnet-conventions`, `dotnet-testing`, `react-conventions`,
-and `react-testing` skills.
+
+| Skill | Covers |
+|---|---|
+| `dotnet-conventions` | Nullability, required-ness, exception handling, EF Core patterns |
+| `dotnet-testing` | xUnit, FluentAssertions, NSubstitute, what belongs at each layer |
+| `react-conventions` | Function components, hooks, TanStack Query, forms |
+| `react-testing` | Vitest, React Testing Library, MSW |
+| `regenerate` | Which committed artifact to rebuild after a change, and the exact commands |
+| `jobs` | Editing and debugging jobs, lanes, Quartz, retry and dead-lettering |
+
+`regenerate` and `jobs` carry the detail behind this file's "Wolverine codegen", "The API
+contract" and "Jobs" sections; reach for them rather than re-deriving a command from the prose
+here.
 
 Design rationale: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`

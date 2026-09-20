@@ -70,12 +70,15 @@ public sealed class RebuildOrderReportHandler(IQueryDispatcher queries, IOrderRe
 
 Two lists, and **both** are required:
 
-- `MapJobs` — `PublishJob<TheJob>(opts);` so the job has a route. Runs on every host.
+- The `Jobs` list — add `JobDescriptor.For<TheJob>()`, or
+  `JobDescriptor.Scheduled<TheJob>(cron)` if it also runs on a schedule. This is what gives the
+  job its routing rule; `MapJobs` iterates the list on every host, including the API. Do not add
+  a call inside `MapJobs` itself — there is nothing to add there.
 - `IncludeJobHandlers` — `.IncludeType<TheJobHandler>()` so the worker runs it. **Never called by
   the API**, which is what makes "jobs never run in the API" true.
 
 Register any new port in `AddJobs`. `JobRegistrationTests` fails the build if an `IJob` in the
-Application assembly is missing from `MapJobs`.
+Application assembly is missing from the `Jobs` list.
 
 ## 5. Enqueue it
 
