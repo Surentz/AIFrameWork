@@ -213,7 +213,7 @@ Indexed on `(StartedAt DESC)` and `(Status, StartedAt DESC)` — the two orders 
 
 ### Tasks
 
-- [ ] **2.0 — SPIKE, do this first.** Establish how Wolverine 6.33 surfaces a handler's *outcome*
+- [x] **2.0 — SPIKE, done. Result below.** Establish how Wolverine 6.33 surfaces a handler's *outcome*
       to middleware. `JobUserMiddleware` proves the `Before(Envelope, …)` shape works; what is
       **not** yet established in this repo is whether a `Finally` method can receive the thrown
       exception, and whether it runs before or after the `OnAnyException` policy decides to retry
@@ -222,18 +222,37 @@ Indexed on `(StartedAt DESC)` and `(Status, StartedAt DESC)` — the two orders 
       2. A failure listener / observer registered on `WolverineOptions`, recording the terminal
          outcome separately from the middleware that records the start.
       3. Recording `Failed` from the error-policy continuation itself.
-      **Timebox this and write down what was found**, the way ADR 0017's Quartz-4-vs-3 notes and
-      `src/Worker/CLAUDE.md`'s two codegen failures are written down. The rest of Phase 2 depends
-      on the answer, and guessing it will cost an afternoon.
+      **Result: mechanism 1 works, but only in a shape the plan did not anticipate, and the
+      obvious spelling of it is a silent production bug.** Measured against Wolverine 6.33.0 by
+      generating each candidate shape and reading the emitted adapter; written up in full in
+      `src/Worker/CLAUDE.md`. In short:
+
+      - `After` runs inside the try, immediately after the handler, so it fires on success only.
+      - `OnException` binds the exception **as its first parameter** and can take DI services
+        alongside it. `OnException(Envelope, Exception)` and `OnExceptionAsync(...)` are silently
+        dropped — no warning, green build, method simply absent from the adapter.
+      - **The generated catch block emits no rethrow.** An `OnException` method therefore swallows
+        the failure and silently disables this host's whole retry and dead-letter policy. The
+        middleware must rethrow with `ExceptionDispatchInfo.Capture(exception).Throw()` —
+        `throw exception;` is a CA2200 error here and erases the stack.
+      - `Finally` runs *before* `OnException`, and `Envelope` carries no failure state, so neither
+        is usable as the place to write the outcome.
+
+      **So the recorder is `Before` + `After` + `OnException`, not `Before` + `Finally`.** Task 2.2
+      changes accordingly, and 2.11 gains a test that a failing job still reaches the dead-letter
+      queue — the regression this shape invites.
 - [ ] **2.1** `IJobRunRecorder` port in `src/Application/Abstractions`, with the Infrastructure
       adapter writing via **immediate SQL**, following `OrderAuditWriter`'s precedent — not a
       tracked entity. Two independent reasons: the run record must survive the handler's own
       transaction rolling back, and a middleware that calls `SaveChangesAsync` would commit the
       handler's half-finished work with it.
 - [ ] **2.2** `JobRunMiddleware`, registered beside `JobUserMiddleware` in
-      `src/Infrastructure/Jobs/JobRegistration.cs`. It takes **`Envelope`**, never `IJob` —
-      CLAUDE.md's "JasperFx will not upcast a concrete message to an interface for a middleware
-      parameter" is exactly this situation, and `JobUserMiddleware` already carries the workaround.
+      `src/Infrastructure/Jobs/JobRegistration.cs`, as `Before` + `After` + `OnException` per the
+      spike. `Before` and `After` take **`Envelope`**, never `IJob` — CLAUDE.md's "JasperFx will
+      not upcast a concrete message to an interface for a middleware parameter" is exactly this
+      situation, and `JobUserMiddleware` already carries the workaround. `OnException` takes the
+      **exception first**, then its DI services, and **must end with
+      `ExceptionDispatchInfo.Capture(exception).Throw()`** or it swallows every job failure.
 - [ ] **2.3** Regenerate **both** codegen trees and commit. A middleware change is precisely the
       class of change that leaves Debug green and breaks Release at startup.
 - [ ] **2.4** Dead-letter read adapter. Wolverine's envelope tables live in the **`wolverine`
