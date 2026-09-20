@@ -457,13 +457,17 @@ Four things that will cost you time:
   role, so there is nothing stale to invalidate — and rotating would sign every administrator out
   on every API restart, courtesy of the startup reconciler. ADR 0011's own summary anticipated the
   opposite; ADR 0020 supersedes it, and the rotation list stays at three.
-- **Configuration is the authority, so a promotion made by hand-written SQL is reverted at the
-  next API start.** `Admin__Usernames` is reconciled at startup — promote everyone listed, demote
-  every administrator who is not — which is what makes revocation work by removing a name. The
-  failure mode is "my change silently reverted on the next deploy". **`RegisterUser` reads the
-  same list too**, so a configured operator who registers after the API started holds the role
-  immediately instead of waiting for a restart; both paths ask one `IAdministratorDirectory`, so
-  they cannot disagree.
+- **Configuration is a floor, not a mirror: `Admin__Usernames` only ever PROMOTES.** Startup
+  promotes everyone listed and demotes nobody, so a grant made in the application survives a
+  restart. **`RegisterUser` reads the same list**, so a configured operator who registers after
+  the API started holds the role immediately rather than waiting for one; both paths ask one
+  `IAdministratorDirectory` and both only promote, so they cannot disagree.
+  **Removing an administrator therefore takes TWO steps** — demote them in the application *and*
+  remove the name from `Admin__Usernames`. Either alone is insufficient, and the sharp one is
+  demoting while the name is still configured: the next start promotes them straight back, and it
+  reads as "the demotion didn't save". The reconciler logs one event per promotion naming the
+  user, which is how you diagnose that from the log store. Keeping your own name listed is the
+  deliberate break-glass path back in. ADR 0022 supersedes ADR 0020 here.
 - **`Admin__ReconcileOnStart=false` is required by anything that boots the app without a
   database**, exactly like `Wolverine__Durable=false`. That is the OpenAPI contract command above
   and CI's `contract` job; `HealthTests` sets it too. `codegen write` does not need it — a JasperFx

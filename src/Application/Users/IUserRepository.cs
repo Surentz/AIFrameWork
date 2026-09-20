@@ -67,15 +67,22 @@ public interface IUserRepository
     public Task ClearSignInFailuresAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// The users a role reconcile could possibly change: everyone currently holding
-    /// <see cref="UserRole.Admin"/>, plus everyone named in the configured administrator list.
-    /// Tracked, because the caller mutates what it reads.
+    /// The users a role reconcile could possibly change: everyone named in the configured
+    /// administrator list, and nobody else. Tracked, because the caller mutates what it reads.
     /// </summary>
     /// <remarks>
-    /// Deliberately NOT every user. The result set is bounded by the size of the configured list
-    /// plus the number of current administrators — both small by nature — so this stays a bounded
-    /// read however many accounts exist. Anyone outside both sets is already a Member and already
-    /// unlisted, so loading them could only ever produce a no-op.
+    /// <para>
+    /// Deliberately NOT every user, and — since ADR 0022 — no longer the current administrators
+    /// either. The reconcile only ever promotes, so an administrator this list does not name is
+    /// left exactly as they are and loading them could produce nothing but a no-op. The result
+    /// set is therefore bounded by the configured list alone, which is small by nature, however
+    /// many accounts exist.
+    /// </para>
+    /// <para>
+    /// That narrowing is what makes in-app administration possible at all: while this returned
+    /// the current administrators too, the handler demoted every one of them absent from the
+    /// list, and a grant made anywhere else could not survive a restart.
+    /// </para>
     /// </remarks>
     /// <param name="usernamesNormalized">
     /// Already through <see cref="User.Normalize"/>. Raw usernames match nothing.

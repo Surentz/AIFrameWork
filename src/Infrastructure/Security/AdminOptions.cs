@@ -12,11 +12,14 @@ namespace AiFramework.Infrastructure.Security;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Configuration is the authority, not the database: there is then no bootstrapping paradox —
-/// no administrator is needed to appoint the first administrator — and the same mechanism works
-/// on a fresh database with no users, in <c>ApiFactory</c>, in the e2e stack and in the kind
-/// overlay. The cost is that promoting or revoking someone is a deployment, and that an
-/// administrator appointed by hand-written SQL is demoted at the next API start. See ADR 0020.
+/// Configuration SEEDS the administrator list rather than mirroring it: there is then no
+/// bootstrapping paradox — no administrator is needed to appoint the first administrator — and
+/// the same mechanism works on a fresh database with no users, in <c>ApiFactory</c>, in the e2e
+/// stack and in the kind overlay. Everyone named here is promoted at startup and nobody is
+/// demoted, so a grant made in the application survives a restart and this list doubles as a
+/// break-glass path back in. The cost is that removing a name revokes nothing, and that an
+/// account demoted in the application while still named here is promoted straight back at the
+/// next start. See ADR 0022, which supersedes ADR 0020 on this point.
 /// </para>
 /// <para>
 /// Get-only list: the configuration binder fills an existing collection rather than assigning a

@@ -100,21 +100,21 @@ The whole phase is a subtraction, and it ships on its own.
 
 ### Tasks
 
-- [ ] **1.1** `ReconcileAdministratorsHandler` promotes only. Drop the demotion branch; the
+- [x] **1.1** `ReconcileAdministratorsHandler` promotes only. Drop the demotion branch; the
       candidate query no longer needs to fetch current administrators who are absent from the
       list, only the listed names.
-- [ ] **1.2** `AdministratorReconciliation` loses `Demoted`. It becomes `(Promoted, Unknown)` —
+- [x] **1.2** `AdministratorReconciliation` loses `Demoted`. It becomes `(Promoted, Unknown)` —
       keep `Unknown`, which is the typo-catcher and is now the *only* diagnostic the reconcile
       emits about a name that will never match.
-- [ ] **1.3** `AdminReconciler` logs each promotion at `Information` naming the user, not just a
+- [x] **1.3** `AdminReconciler` logs each promotion at `Information` naming the user, not just a
       count. With configuration now a floor, "why is this person an administrator again" is a
       question someone will ask, and the answer must be greppable.
-- [ ] **1.4** Invert `ReconcileAdministratorsHandlerTests`. Its `Demoted.Should().Be(1)` case
+- [x] **1.4** Invert `ReconcileAdministratorsHandlerTests`. Its `Demoted.Should().Be(1)` case
       becomes the assertion that an administrator absent from the list is **left alone**. That
       test is the one that encodes the whole decision; name it for the rule, not the method.
-- [ ] **1.5** ADR 0022, superseding ADR 0020's "Administrators come from configuration, reconciled
+- [x] **1.5** ADR 0022, superseding ADR 0020's "Administrators come from configuration, reconciled
       at startup" section. ADR 0020 stays correct about everything else.
-- [ ] **1.6** Root `CLAUDE.md`'s administrator section: replace the "promotion made by
+- [x] **1.6** Root `CLAUDE.md`'s administrator section: replace the "promotion made by
       hand-written SQL is reverted" bullet, which stops being true, with the two-step revocation
       trap above.
 
@@ -128,6 +128,33 @@ The whole phase is a subtraction, and it ships on its own.
   removed from config lost the role at the next restart. After: they keep it until someone acts.
   Any account currently holding `Admin` that nobody intends to be an administrator becomes
   permanent on deploy. **Check the `users` table for existing `Admin` rows before shipping this.**
+
+### What changed during implementation
+
+- **The candidate query narrowing turned out to be half the mechanism, not a tidy-up.**
+  `ListForRoleReconciliationAsync` no longer loads current administrators, so the handler never
+  even sees an account it might have demoted. The test deliberately feeds it one anyway — a
+  substitute returns the absent administrator regardless of arguments — so it proves the
+  *handler's* guarantee rather than only the query's. Either alone would be a weaker promise.
+- **A `foreach` survived S3267 with a justified pragma.** The analyzer wanted
+  `candidates.Where(u => u.ChangeRole(...))`, which puts a mutation inside a filter: promotion
+  would become a side effect of a predicate, happening only when something materialises the
+  sequence, and a later `.Take()` would silently promote nobody. The condition reads as a filter
+  and is not one, so the loop stayed.
+- **The promotion log became one event per user rather than one joined line**, and that was
+  forced by CA1873 before it was chosen on merit. `string.Join` at the call site is evaluated
+  before `LoggerMessage`'s own `IsEnabled` check, and the analyzer rejects a compound
+  `IsEnabled(...) && count > 0` guard. Logging per user removes the argument entirely — and gives
+  `{Username}` as a filterable structured property (ADR 0015) instead of a comma-separated blob
+  no log store can query. The analyzer flagged `Information` and not the `Warning` beside it,
+  because Information is a level people actually turn off.
+- **Three doc comments asserted the invariant that was being inverted**, and all three were
+  wrong in a way that would have outlived the change: `AdminOptions` ("an administrator appointed
+  by hand-written SQL is demoted at the next API start" — now exactly false),
+  `IUserRepository.ListForRoleReconciliationAsync`, and `AdministratorDirectoryTests`' own
+  summary. A stale explanation of a safety property is worse than none.
+- **The inverted test was mutation-checked**, not merely observed to pass: restoring the demotion
+  branch turns exactly that one test red, and nothing else.
 
 ---
 

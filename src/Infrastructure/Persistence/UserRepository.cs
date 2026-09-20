@@ -60,8 +60,7 @@ public sealed class UserRepository(AiFrameworkDbContext context) : IUserReposito
     public async Task<IReadOnlyList<User>> ListForRoleReconciliationAsync(
         string[] usernamesNormalized, CancellationToken cancellationToken) =>
         await context.Users
-            .Where(u => u.Role == UserRole.Admin
-                || usernamesNormalized.Contains(u.UsernameNormalized))
+            .Where(u => usernamesNormalized.Contains(u.UsernameNormalized))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
