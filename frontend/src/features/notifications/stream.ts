@@ -15,8 +15,9 @@ export interface NotificationStreamState {
    * best-effort by contract (ADR 0016): the feed is the truth and `useUnreadCount`'s interval
    * still runs, so a closed connection costs latency, not correctness. An alert for a degraded
    * optimization would be noise the reader can do nothing about — and this is the ordinary state
-   * in any environment with `Realtime__Enabled` off, which is the default everywhere but a
-   * developer's own machine.
+   * in any environment with `Realtime__Enabled` off — the default, and what both test hosts
+   * pin. It is on in Development and in the Kubernetes overlay; everywhere else this error is
+   * the expected steady state rather than a fault.
    */
   readonly error: Error | null;
 }

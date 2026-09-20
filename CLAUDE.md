@@ -616,12 +616,17 @@ a notification is whichever one's outbox pump claimed the row and is unrelated t
 that user's connection; the ingress cookie affinity of ADR 0010 does not help, since the pump is
 not serving that user's request. See ADR 0016.
 
-**It is ON in Development and nowhere else**, set in `src/Api/appsettings.Development.json`: a
-developer's `dotnet run` is a single process, which is the one configuration where push needs no
-backplane and cannot reach the wrong replica. Everywhere else the default stands — `ApiFactory`
-and the Playwright `webServer` both pin it to `false` explicitly (the e2e run sets
-`ASPNETCORE_ENVIRONMENT=Development` and would otherwise inherit the dev value), and the
-Kubernetes overlay leaves it off because that cluster runs two API replicas with no Redis.
+**It is ON in two places, for two different reasons.** In Development
+(`src/Api/appsettings.Development.json`) with **no** backplane: a developer's `dotnet run` is a
+single process, the one configuration where push cannot reach the wrong replica. And in the
+Kubernetes overlay (`k8s/overlays/local/config.yaml`) **with** one —
+`Realtime__RedisConnectionString: 'redis:6379'`, against the Redis that `k8s/base/redis.yaml`
+deploys for exactly this purpose, because that cluster runs two API replicas and a push must
+reach a user whose connection is held by the other pod.
+
+It stays **off** everywhere else: `appsettings.json`'s default, `ApiFactory`, and the Playwright
+`webServer` — the last pinned explicitly, since the e2e run sets
+`ASPNETCORE_ENVIRONMENT=Development` and would otherwise inherit the dev value.
 
 **Without push the badge is up to thirty seconds stale, by construction.** The outbox pump polls
 every second, so the notification row exists almost immediately; `useUnreadCount`'s interval is
