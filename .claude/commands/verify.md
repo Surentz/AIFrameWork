@@ -43,13 +43,62 @@ npm test --prefix frontend -- --run
 
 `npm run lint` runs `eslint . --max-warnings 0`: one warning is a failure.
 
-## 3. End-to-end
+## 3. Generated code is current
+
+**This is the step that most often separates a green `/verify` from a red CI.** Both checks
+below are CI jobs of their own (`codegen`, `contract`), and both fail on a *diff* rather than on
+a build error — so the working tree can build, test, and lint clean while CI rejects it. Skip
+this step only if step 1 found no SDK.
+
+### 3a. Wolverine adapters — TWO trees, not one
+
+```
+ConnectionStrings__Default='Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder' \
+  Wolverine__Durable=false \
+  dotnet run --project src/Api -- codegen write
+ConnectionStrings__Default='Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder' \
+  Wolverine__Durable=false \
+  dotnet run --project src/Worker -- codegen write
+git diff --exit-code -- src/Api/Internal src/Worker/Internal
+```
+
+Both variables are required: `codegen write` boots the host, the startup guard in `Program.cs`
+rejects an empty connection string, and a durable Wolverine would dial Postgres. The connection
+string is never opened.
+
+A non-empty diff means the committed adapters are stale. Debug compiles adapters at startup and
+stays green either way; only **Release** breaks, at startup. Report the diff and say the fix is
+to commit the regenerated tree.
+
+**If the only difference is statement ordering inside a handler you did not change, keep the
+committed version.** Windows and Linux each produce a stable but different order, and CI's Linux
+output is the authority — see "Wolverine codegen" in `CLAUDE.md`.
+
+### 3b. The API contract
+
+Skip this half if step 2 found no Node or no `frontend/node_modules` — it needs both.
+
+```
+dotnet restore src/Api
+ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
+  Wolverine__Durable=false \
+  dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
+npm run generate:api --prefix frontend
+git diff --exit-code -- openapi/ frontend/src/api/schema.d.ts
+```
+
+`dotnet restore` is a separate first step on purpose: `dotnet msbuild` does not restore
+implicitly, and folding it in as `-t:"Restore;Build;..."` fails with CS9137 instead. A non-empty
+diff means a controller, DTO, or `[ProducesResponseType]` changed without the contract being
+regenerated.
+
+## 4. End-to-end
 
 ```
 docker info
 ```
 
-Fails? Docker is not running. Say so and skip to step 4 — a skipped e2e run is never
+Fails? Docker is not running. Say so and skip to step 5 — a skipped e2e run is never
 reported as a pass.
 
 `frontend/node_modules` missing? Same skip as step 2.
@@ -71,15 +120,34 @@ This starts a Postgres container, applies migrations, and runs the API and a pre
 under Playwright. It is the slowest step and the one most likely to fail environmentally —
 report the distinction between an environmental failure and an assertion failure.
 
-## 4. Hooks
+## 5. Hooks
+
+The hook suite is PowerShell, and so are the hooks it tests. Check for a shell before using one:
 
 ```
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tests/run-hook-tests.ps1
+pwsh -Version
 ```
 
-This one always runs — it has no toolchain dependency.
+Fails? Try `powershell.exe -Version` (Windows PowerShell). **Neither available — on Linux or
+macOS without PowerShell installed — is a skip, not a pass.** Say so explicitly, and say what it
+means: the five hooks in `.claude/settings.json` are invoked as `powershell.exe`, so on this
+machine none of them are running either. `dependency-rule.ps1`, `no-secrets.ps1`, and
+`protect-migrations.ps1` are not enforcing anything here, and the layering rules are carried by
+the architecture tests in step 1 and by review alone.
+
+With a shell available:
+
+```
+pwsh -NoProfile -File .claude/hooks/tests/run-hook-tests.ps1
+```
+
+(or `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/tests/run-hook-tests.ps1`)
 
 ## Report
 
 A table: step, ran or skipped, result. Then the failures with `file:line`. State plainly which
 steps were skipped and why. Never summarise a skipped step as passing.
+
+Steps 1, 2, 3 and 4 correspond to CI's `backend`, `frontend`, `codegen`+`contract`, and `e2e`
+jobs. The one thing CI does that this command does not is **build and test Release as well as
+Debug** — so a clean `/verify` is not by itself evidence that Release starts.
