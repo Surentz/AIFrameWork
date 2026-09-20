@@ -13,3 +13,10 @@ export type Registration = components['schemas']['RegisterRequest'];
 export type PasswordChange = components['schemas']['ChangePasswordRequest'];
 
 export type Session = components['schemas']['SessionResponse'];
+
+/**
+ * What a user may do beyond their own data. A string union rather than a number because the API
+ * serializes the enum by name — which is what makes adding a member a compile error here instead
+ * of a silent change of meaning. See ADR 0020.
+ */
+export type UserRole = components['schemas']['UserRole'];

@@ -180,6 +180,9 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                     b.Property<int>("FailedSignInAttempts")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("LockedOutUntil")
                         .HasColumnType("timestamp with time zone");
 
@@ -190,6 +193,13 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("RegisteredAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Member");
 
                     b.Property<string>("SecurityStamp")
                         .IsRequired()
@@ -208,11 +218,143 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LastSeenAt")
+                        .HasDatabaseName("IX_Users_LastSeenAt");
+
                     b.HasIndex("UsernameNormalized")
                         .IsUnique()
                         .HasDatabaseName("IX_Users_UsernameNormalized");
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Jobs.JobRun", b =>
+                {
+                    b.Property<Guid>("EnvelopeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("DurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InstanceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("JobName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Lane")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("EnvelopeId", "Attempt");
+
+                    b.HasIndex("StartedAt")
+                        .IsDescending()
+                        .HasDatabaseName("IX_JobRuns_StartedAt_Desc");
+
+                    b.HasIndex("Status", "StartedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_JobRuns_Status_StartedAt_Desc");
+
+                    b.ToTable("job_runs", (string)null);
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Monitoring.TrafficBucket", b =>
+                {
+                    b.Property<DateTimeOffset>("BucketStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("InstanceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("Bucket0")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket1")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket10")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket2")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket3")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket4")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket5")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket6")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket7")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket8")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket9")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("DurationMsTotal")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Faulted")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Succeeded")
+                        .HasColumnType("integer");
+
+                    b.HasKey("BucketStart", "Kind", "Name", "InstanceId");
+
+                    b.HasIndex("BucketStart")
+                        .IsDescending()
+                        .HasDatabaseName("IX_TrafficBuckets_BucketStart_Desc");
+
+                    b.ToTable("traffic_buckets", (string)null);
                 });
 
             modelBuilder.Entity("AiFramework.Infrastructure.Outbox.OutboxMessage", b =>
@@ -278,6 +420,53 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                     b.HasKey("MessageId");
 
                     b.ToTable("order_audit", (string)null);
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Security.SignInEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UsernameAttempted")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At")
+                        .IsDescending()
+                        .HasDatabaseName("IX_SignInEvents_At_Desc");
+
+                    b.HasIndex("Outcome", "At")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_SignInEvents_Outcome_At_Desc");
+
+                    b.ToTable("sign_in_events", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>

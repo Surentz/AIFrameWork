@@ -11,6 +11,7 @@ public sealed class SignOutEverywhereHandlerTests
     private static readonly DateTimeOffset RegisteredAt = new(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
 
     private readonly IUserRepository _users = Substitute.For<IUserRepository>();
+    private readonly ISignInAudit _audit = Substitute.For<ISignInAudit>();
 
     private static User AnAda() =>
         User.Register(Guid.NewGuid(), "ada", "stored-hash", "Ada Lovelace", RegisteredAt);
@@ -21,7 +22,7 @@ public sealed class SignOutEverywhereHandlerTests
         var ada = AnAda();
         var before = ada.SecurityStamp;
         _users.GetAsync(ada.Id, Arg.Any<CancellationToken>()).Returns(ada);
-        var handler = new SignOutEverywhereHandler(_users);
+        var handler = new SignOutEverywhereHandler(_users, _audit);
 
         var result = await handler.HandleAsync(new SignOutEverywhere(ada.Id), CancellationToken.None);
 
@@ -33,7 +34,7 @@ public sealed class SignOutEverywhereHandlerTests
     public async Task HandleAsync_ForAMissingUser_FailsUnauthorized()
     {
         _users.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((User?)null);
-        var handler = new SignOutEverywhereHandler(_users);
+        var handler = new SignOutEverywhereHandler(_users, _audit);
 
         var result = await handler.HandleAsync(
             new SignOutEverywhere(Guid.NewGuid()), CancellationToken.None);

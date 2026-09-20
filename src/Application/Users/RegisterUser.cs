@@ -26,7 +26,11 @@ public sealed class RegisterUserValidator : AbstractValidator<RegisterUser>
     }
 }
 
-public sealed class RegisterUserHandler(IUserRepository users, IPasswordHasher hasher, IClock clock)
+public sealed class RegisterUserHandler(
+    IUserRepository users,
+    IPasswordHasher hasher,
+    IClock clock,
+    IAdministratorDirectory administrators)
     : ICommandHandler<RegisterUser, SessionView>
 {
     public async Task<Result<SessionView>> HandleAsync(
@@ -56,9 +60,19 @@ public sealed class RegisterUserHandler(IUserRepository users, IPasswordHasher h
             command.DisplayName,
             clock.UtcNow);
 
+        // Configuration is the authority on who administers this application, and it is asked
+        // here as well as at startup. Without this, a fresh deployment's operator registers,
+        // holds no access, and needs someone to restart the API before the reconciler can see
+        // them - which is exactly the state AdminReconciler's "names accounts that do not
+        // exist" warning describes. ADR 0020.
+        if (administrators.IsAdministrator(user.Username))
+        {
+            user.ChangeRole(UserRole.Admin);
+        }
+
         await users.AddAsync(user, cancellationToken).ConfigureAwait(false);
 
         return Result.Success(
-            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp));
+            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp, user.Role));
     }
 }

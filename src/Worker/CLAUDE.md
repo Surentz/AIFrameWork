@@ -51,7 +51,7 @@ leaves Debug green and breaks the worker at startup in Release only. `WorkerCode
 catching one that merely drifted. **Both trees must be regenerated** — `src/Api` too, if an event
 handler changed.
 
-Two codegen failures that compile perfectly well and only show up when you run the command:
+Three codegen failures that compile perfectly well and only show up when you run the command:
 
 - **A middleware parameter JasperFx cannot resolve.** It matches chain variables by exact type and
   will not upcast a concrete message to an interface, so `Before(IUserScopedJob job, ...)` fails
@@ -61,6 +61,56 @@ Two codegen failures that compile perfectly well and only show up when you run t
   `IQueryDispatcher`, and ADR 0003's reflection-free dispatchers take `IServiceProvider`, which
   Wolverine 6 refuses under its `NotAllowed` default. `JobRegistration.IncludeJobHandlers` sets
   `ServiceLocationPolicy.AlwaysAllowed` **on this host only** — the Api keeps the strict default.
+- **A middleware method Wolverine silently ignores.** `OnException` binds only when the exception
+  is its FIRST parameter. `OnException(Envelope, Exception)` is dropped with no warning, no error,
+  and a green build — the method simply never appears in the generated adapter. The async spelling
+  is fine: `OnExceptionAsync(Exception, …)` binds and is awaited. Measured against 6.33.0 by
+  generating each shape and reading the output.
+
+## Middleware method names, and the one that will cost you a production incident
+
+`MiddlewarePolicy`'s conventions in Wolverine 6.33.0, read off the assembly rather than the docs:
+`Before`/`BeforeAsync`/`Load`/`LoadAsync`/`Validate`/`ValidateAsync`, `After`/`AfterAsync`/
+`PostProcess`/`PostProcessAsync`, `AfterCommit`/`AfterCommitAsync`, `Finally`/`FinallyAsync`, and
+`OnException`/`OnExceptionAsync`.
+
+They generate into this shape — confirmed by reading a real adapter, not inferred:
+
+```csharp
+try
+{
+    Middleware.Before(context.Envelope, /* DI services */);
+    await handler.Handle(message, cancellation);
+    Middleware.After(context.Envelope);          // success only: inside the try, after the call
+}
+catch (System.Exception exception)
+{
+    Middleware.OnException(exception, /* DI services */);   // NO rethrow is emitted
+}
+```
+
+**The generated catch block does not rethrow, so an `OnException` method swallows the failure.**
+That silently disables `OnAnyException().ScheduleRetry(...).Then.MoveToErrorQueue()` — the whole
+of this host's retry and dead-lettering (ADR 0016) — for every chain the middleware touches. The
+job looks successful, never retries, and never reaches the error queue. Nothing warns.
+
+**A middleware that records failures must therefore rethrow itself**, and `throw exception;` is not
+the way (CA2200 is an error here, and it erases the stack trace). Use
+`ExceptionDispatchInfo.Capture(exception).Throw();`, which preserves the original stack and leaves
+Wolverine's behaviour exactly as if no middleware were present.
+
+**Async works throughout, and the parameter order is the only real constraint.**
+`BeforeAsync`/`AfterAsync`/`OnExceptionAsync` are all generated with `await … .ConfigureAwait(false)`,
+so a recorder that writes to the database needs no sync-over-async anywhere. What is NOT negotiable
+is that the exception comes first in `OnException`; everything after it binds from DI like any
+other middleware parameter.
+
+Two smaller facts from the same measurement: a `Finally` method runs **inside** the handler
+invocation, before Wolverine decides anything about retrying, and it is emitted in an inner
+`try/finally` that sits *within* the outer try — so it runs BEFORE `OnException`, which makes it
+useless as the place to write a failure outcome. And `Envelope` exposes no failure or exception
+property at all (`Attempts`, `Id`, `MessageType` and `Status`, but nothing about the fault), so a
+`Finally` that only takes the envelope cannot tell success from failure.
 
 ## It also runs the outbox pumps
 

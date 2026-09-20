@@ -12,6 +12,7 @@ public sealed class SignInHandlerTests
     private static readonly DateTimeOffset Now = new(2026, 9, 8, 9, 0, 0, TimeSpan.Zero);
 
     private readonly IUserRepository _users = Substitute.For<IUserRepository>();
+    private readonly ISignInAudit _audit = Substitute.For<ISignInAudit>();
     private readonly IPasswordHasher _hasher = Substitute.For<IPasswordHasher>();
     private readonly IClock _clock = Substitute.For<IClock>();
 
@@ -54,12 +55,13 @@ public sealed class SignInHandlerTests
         var ada = AnAda();
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
         _hasher.Verify("stored-hash", "correct horse").Returns(true);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var result = await handler.HandleAsync(new SignIn("Ada", "correct horse"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().Be(new SessionView(ada.Id, "Ada", "Ada Lovelace", ada.SecurityStamp));
+        result.Value.Should().Be(
+            new SessionView(ada.Id, "Ada", "Ada Lovelace", ada.SecurityStamp, UserRole.Member));
     }
 
     [Fact]
@@ -67,7 +69,7 @@ public sealed class SignInHandlerTests
     {
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(AnAda());
         _hasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var result = await handler.HandleAsync(new SignIn("  aDa  ", "correct horse"), CancellationToken.None);
 
@@ -79,7 +81,7 @@ public sealed class SignInHandlerTests
     {
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(AnAda());
         _hasher.Verify("stored-hash", "wrong").Returns(false);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var result = await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
@@ -93,7 +95,7 @@ public sealed class SignInHandlerTests
     {
         _users.GetByNormalizedUsernameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((User?)null);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var unknown = await handler.HandleAsync(new SignIn("nobody", "guess"), CancellationToken.None);
 
@@ -111,7 +113,7 @@ public sealed class SignInHandlerTests
     {
         _users.GetByNormalizedUsernameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((User?)null);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("nobody", "guess"), CancellationToken.None);
 
@@ -124,7 +126,7 @@ public sealed class SignInHandlerTests
     public async Task HandleAsync_WhenLockedOut_FailsWithoutCheckingThePassword()
     {
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ALockedOutAda());
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var result = await handler.HandleAsync(new SignIn("Ada", "correct horse"), CancellationToken.None);
 
@@ -139,7 +141,7 @@ public sealed class SignInHandlerTests
     public async Task HandleAsync_WhenLockedOut_StillHashesThePassword()
     {
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ALockedOutAda());
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "guess"), CancellationToken.None);
 
@@ -152,7 +154,7 @@ public sealed class SignInHandlerTests
     public async Task HandleAsync_WhenLockedOut_DoesNotExtendTheLockout()
     {
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ALockedOutAda());
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "guess"), CancellationToken.None);
 
@@ -166,7 +168,7 @@ public sealed class SignInHandlerTests
     public async Task HandleAsync_WhenLockedOut_FailsWithTheSameErrorAsAWrongPassword()
     {
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ALockedOutAda());
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
         var lockedOut = await handler.HandleAsync(new SignIn("Ada", "guess"), CancellationToken.None);
 
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(AnAda());
@@ -182,7 +184,7 @@ public sealed class SignInHandlerTests
         var ada = AnAda();
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
         _hasher.Verify("stored-hash", "wrong").Returns(false);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
@@ -211,7 +213,7 @@ public sealed class SignInHandlerTests
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(false, true);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var result = await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
@@ -241,7 +243,7 @@ public sealed class SignInHandlerTests
 
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
         _hasher.Verify("stored-hash", "wrong").Returns(false);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
@@ -261,7 +263,7 @@ public sealed class SignInHandlerTests
         ada.RegisterFailedSignIn(Now);
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
         _hasher.Verify("stored-hash", "correct horse").Returns(true);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var result = await handler.HandleAsync(new SignIn("Ada", "correct horse"), CancellationToken.None);
 
@@ -282,7 +284,7 @@ public sealed class SignInHandlerTests
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
         _hasher.Verify("stored-hash", "correct horse").Returns(true);
         _clock.UtcNow.Returns(Now + User.LockoutDuration + TimeSpan.FromMinutes(1));
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var result = await handler.HandleAsync(
             new SignIn("Ada", "correct horse"), CancellationToken.None);
@@ -296,7 +298,7 @@ public sealed class SignInHandlerTests
     {
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(AnAda());
         _hasher.Verify("stored-hash", "correct horse").Returns(true);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "correct horse"), CancellationToken.None);
 
@@ -317,7 +319,7 @@ public sealed class SignInHandlerTests
 
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
         _hasher.Verify("stored-hash", "wrong").Returns(false);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
@@ -336,7 +338,7 @@ public sealed class SignInHandlerTests
         var ada = AnAda();
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
         _hasher.Verify("stored-hash", "wrong").Returns(false);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
@@ -372,7 +374,7 @@ public sealed class SignInHandlerTests
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(false);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
@@ -409,7 +411,7 @@ public sealed class SignInHandlerTests
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(false);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         await handler.HandleAsync(new SignIn("Ada", "wrong"), CancellationToken.None);
 
@@ -428,7 +430,7 @@ public sealed class SignInHandlerTests
         var ada = AnAda();
         _users.GetByNormalizedUsernameAsync("ADA", Arg.Any<CancellationToken>()).Returns(ada);
         _hasher.Verify("stored-hash", "the right password").Returns(true);
-        var handler = new SignInHandler(_users, _hasher, _clock);
+        var handler = new SignInHandler(_users, _hasher, _clock, _audit);
 
         var result = await handler.HandleAsync(
             new SignIn("Ada", "the right password"), CancellationToken.None);

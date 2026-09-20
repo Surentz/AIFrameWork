@@ -65,4 +65,42 @@ public interface IUserRepository
     /// dispatch for the same reason too.
     /// </summary>
     public Task ClearSignInFailuresAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The users a role reconcile could possibly change: everyone currently holding
+    /// <see cref="UserRole.Admin"/>, plus everyone named in the configured administrator list.
+    /// Tracked, because the caller mutates what it reads.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately NOT every user. The result set is bounded by the size of the configured list
+    /// plus the number of current administrators — both small by nature — so this stays a bounded
+    /// read however many accounts exist. Anyone outside both sets is already a Member and already
+    /// unlisted, so loading them could only ever produce a no-op.
+    /// </remarks>
+    /// <param name="usernamesNormalized">
+    /// Already through <see cref="User.Normalize"/>. Raw usernames match nothing.
+    /// </param>
+    /// <param name="cancellationToken">Propagated to the query.</param>
+    public Task<IReadOnlyList<User>> ListForRoleReconciliationAsync(
+        string[] usernamesNormalized, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stamps <see cref="User.LastSeenAt"/>, but only if the stored value is older than
+    /// <paramref name="staleBefore"/>. Returns nothing: the caller cannot act on the outcome and
+    /// must not wait to find out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One conditional UPDATE, never read-modify-write.</b> This runs on the session-validation
+    /// path, which is every authenticated request — ADR 0011 already pays one uncached read there.
+    /// The throttle lives in the statement's own WHERE clause so the cost is at most one write per
+    /// user per minute regardless of request volume, and there is no read to race with.
+    /// </para>
+    /// <para>
+    /// Writes immediately, outside the unit of work, for the same reason the failed-sign-in
+    /// counter does: there is no command in flight to commit it.
+    /// </para>
+    /// </remarks>
+    public Task TouchLastSeenAsync(
+        Guid userId, DateTimeOffset now, DateTimeOffset staleBefore, CancellationToken cancellationToken);
 }

@@ -40,6 +40,7 @@ public sealed class User : Entity
         PasswordHash = passwordHash;
         DisplayName = displayName;
         RegisteredAt = registeredAt;
+        Role = UserRole.Member;
         SecurityStamp = NewStamp();
     }
 
@@ -59,6 +60,33 @@ public sealed class User : Entity
     public string DisplayName { get; private set; }
 
     public DateTimeOffset RegisteredAt { get; private set; }
+
+    /// <summary>
+    /// What this user may do beyond their own data. Every user is constructed as
+    /// <see cref="UserRole.Member"/>; only <see cref="ChangeRole"/> moves it, and its two callers
+    /// — the startup reconciler and registration itself — both read the same configured list
+    /// rather than deciding anything here. See ADR 0020.
+    /// </summary>
+    public UserRole Role { get; private set; }
+
+    /// <summary>
+    /// When this user was last seen making an authenticated request, or null if never.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Written by the session-validation path, not by anything in this type: it is a throttled,
+    /// conditional UPDATE issued at most once per user per minute, and a tracked mutation on the
+    /// hottest path in the application would be a change-tracker entry on every request. See
+    /// <c>IUserRepository.TouchLastSeenAsync</c> and ADR 0021.
+    /// </para>
+    /// <para>
+    /// <c>init</c> rather than <c>private set</c>, and that is the reason: no method in this type
+    /// ever assigns it, so a private setter is genuinely dead code and S1144 says so. EF still
+    /// materialises it; the UPDATE that writes it is an expression tree translated to SQL and
+    /// never calls a setter at all.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? LastSeenAt { get; init; }
 
     /// <summary>Consecutive failures since the last successful sign-in.</summary>
     public int FailedSignInAttempts { get; private set; }
@@ -141,9 +169,46 @@ public sealed class User : Entity
     }
 
     /// <summary>
-    /// Invalidates every session already issued for this user. The single primitive behind
-    /// "sign out everywhere", lockout enforcement, and (in plan 2) permission revocation.
+    /// Grants or revokes administrative access. Returns true when the role actually moved, so a
+    /// caller reconciling a whole list can tell an effective change from a no-op and write nothing
+    /// when the configuration has not changed.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This deliberately does NOT rotate the security stamp, unlike every other change to what a
+    /// session is allowed to do. The role is not carried in the cookie: it is read from this row
+    /// on every authenticated request, alongside the stamp — see <c>SessionValidator</c> — so
+    /// there is no already-issued credential holding stale authority for a rotation to invalidate.
+    /// Rotating here would sign the user out of a session they remain perfectly entitled to hold,
+    /// and a startup reconciler that rotated would log every administrator out on every restart.
+    /// </para>
+    /// <para>
+    /// ADR 0011 anticipated the opposite — its summary lists "(from plan 2) a permission change"
+    /// as a rotation trigger. ADR 0020 supersedes that: the list stays at three.
+    /// </para>
+    /// </remarks>
+    public bool ChangeRole(UserRole role)
+    {
+        if (Role == role)
+        {
+            return false;
+        }
+
+        Role = role;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Invalidates every session already issued for this user. The single primitive behind
+    /// "sign out everywhere", lockout enforcement, and a password change. Those three, and the
+    /// list is closed.
+    /// </summary>
+    /// <remarks>
+    /// A role change is deliberately NOT on that list, though ADR 0011's own summary anticipated
+    /// it would be. Nothing issued carries the role, so there is nothing for a rotation to
+    /// invalidate. See <see cref="ChangeRole"/> and ADR 0020.
+    /// </remarks>
     public void RotateSecurityStamp() => SecurityStamp = NewStamp();
 
     public bool IsLockedOut(DateTimeOffset now) => LockedOutUntil is { } until && until > now;

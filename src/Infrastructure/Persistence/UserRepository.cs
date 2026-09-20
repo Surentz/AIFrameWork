@@ -53,6 +53,34 @@ public sealed class UserRepository(AiFrameworkDbContext context) : IUserReposito
     }
 
     /// <summary>
+    /// Tracked, like <see cref="GetAsync"/> and unlike the other reads here: the reconcile
+    /// handler mutates what this returns, and a no-tracking read would leave every role change
+    /// unsaved with no error at all.
+    /// </summary>
+    public async Task<IReadOnlyList<User>> ListForRoleReconciliationAsync(
+        string[] usernamesNormalized, CancellationToken cancellationToken) =>
+        await context.Users
+            .Where(u => u.Role == UserRole.Admin
+                || usernamesNormalized.Contains(u.UsernameNormalized))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <summary>
+    /// The throttle is the WHERE clause. No read, so nothing to race: a request whose row was
+    /// already stamped inside the window matches zero rows and writes nothing at all.
+    /// </summary>
+    public Task TouchLastSeenAsync(
+        Guid userId,
+        DateTimeOffset now,
+        DateTimeOffset staleBefore,
+        CancellationToken cancellationToken) =>
+        context.Users
+            .Where(u => u.Id == userId && (u.LastSeenAt == null || u.LastSeenAt < staleBefore))
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(u => u.LastSeenAt, now),
+                cancellationToken);
+
+    /// <summary>
     /// Unconditional, unlike the failure write above: clearing is idempotent and a successful
     /// sign-in should win over any concurrent failed one. Immediate for the same reason.
     /// </summary>

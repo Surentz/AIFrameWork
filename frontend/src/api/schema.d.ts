@@ -778,6 +778,707 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/monitoring/access": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Confirms monitoring access and identifies the operator. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["MonitoringAccessResponse"];
+                        readonly "application/json": components["schemas"]["MonitoringAccessResponse"];
+                        readonly "text/json": components["schemas"]["MonitoringAccessResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/jobs/dead-letters": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The dead-letter queue. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly page?: number | string;
+                    readonly pageSize?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["DeadLetterPageResponse"];
+                        readonly "application/json": components["schemas"]["DeadLetterPageResponse"];
+                        readonly "text/json": components["schemas"]["DeadLetterPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/jobs/dead-letters/{messageId}/retry": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Puts one dead-lettered message back in play.
+         * @description The API marks the stored envelope replayable and stops there; the worker picks it up from
+         *     the shared PostgreSQL store on its own. The two hosts never talk, which is what makes this
+         *     page possible without exposing the worker through the ingress. See ADR 0016.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly messageId: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/jobs/runs": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The job-run table, newest first. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly status?: components["schemas"]["JobRunStatus"];
+                    readonly jobName?: string;
+                    readonly page?: number | string;
+                    readonly pageSize?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["JobRunPageResponse"];
+                        readonly "application/json": components["schemas"]["JobRunPageResponse"];
+                        readonly "text/json": components["schemas"]["JobRunPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/jobs/runs/{envelopeId}/{attempt}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** One attempt, with its full error text. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly envelopeId: string;
+                    readonly attempt: number;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["JobRunResponse"];
+                        readonly "application/json": components["schemas"]["JobRunResponse"];
+                        readonly "text/json": components["schemas"]["JobRunResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/jobs/health": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Counts by outcome over a trailing window, for the overview tiles. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly windowHours?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["JobHealthResponse"];
+                        readonly "application/json": components["schemas"]["JobHealthResponse"];
+                        readonly "text/json": components["schemas"]["JobHealthResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/jobs/trigger": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Runs a scheduled job now, without waiting for its cron. */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["TriggerJobRequest"];
+                    readonly "text/json": components["schemas"]["TriggerJobRequest"];
+                    readonly "application/*+json": components["schemas"]["TriggerJobRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description Accepted */
+                readonly 202: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/sign-ins/health": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Counts by outcome, the locked-out accounts, and the active-user count. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly windowHours?: number | string;
+                    readonly activeWindowMinutes?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["SignInHealthResponse"];
+                        readonly "application/json": components["schemas"]["SignInHealthResponse"];
+                        readonly "text/json": components["schemas"]["SignInHealthResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/sign-ins": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The sign-in audit trail, newest first. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly outcome?: components["schemas"]["SignInOutcome"];
+                    readonly username?: string;
+                    readonly page?: number | string;
+                    readonly pageSize?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["SignInEventPageResponse"];
+                        readonly "application/json": components["schemas"]["SignInEventPageResponse"];
+                        readonly "text/json": components["schemas"]["SignInEventPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/traffic": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Traffic over a trailing window, whole and per endpoint or handler. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly windowMinutes?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["TrafficSummaryResponse"];
+                        readonly "application/json": components["schemas"]["TrafficSummaryResponse"];
+                        readonly "text/json": components["schemas"]["TrafficSummaryResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/traffic/series": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The per-minute series behind the traffic chart. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly windowMinutes?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["TrafficSeriesResponse"];
+                        readonly "application/json": components["schemas"]["TrafficSeriesResponse"];
+                        readonly "text/json": components["schemas"]["TrafficSeriesResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/auth/register": {
         readonly parameters: {
             readonly query?: never;
@@ -1153,6 +1854,26 @@ export interface components {
             /** Format: double */
             readonly price: number | string;
         };
+        readonly DeadLetterPageResponse: {
+            readonly items: readonly components["schemas"]["DeadLetterResponse"][];
+            /** Format: int32 */
+            readonly totalCount: number | string;
+            /** Format: int32 */
+            readonly page: number | string;
+        };
+        /** @description A message that exhausted its retries, from Wolverine's own dead-letter queue. */
+        readonly DeadLetterResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            readonly messageType: string;
+            readonly exceptionType: string;
+            readonly exceptionMessage: string;
+            /** Format: date-time */
+            readonly sentAt: string;
+            readonly receivedAt?: null | string;
+            /** @description True once an operator has asked for it to be retried. */
+            readonly replayable: boolean;
+        };
         readonly ExchangeRateResponse: {
             readonly from: string;
             readonly to: string;
@@ -1160,6 +1881,72 @@ export interface components {
             readonly rate: number | string;
             /** Format: date */
             readonly asOf: string;
+        };
+        /** @description Counts by outcome over a trailing window, for the overview tiles. */
+        readonly JobHealthResponse: {
+            /** Format: int32 */
+            readonly running: number | string;
+            /** Format: int32 */
+            readonly succeeded: number | string;
+            /** Format: int32 */
+            readonly failed: number | string;
+            /**
+             * Format: int32
+             * @description The WHOLE dead-letter queue, not just the window: a message stuck for a week is exactly
+             *     the one worth seeing, and windowing it would hide the oldest failures behind the newest.
+             */
+            readonly deadLettered: number | string;
+            /** Format: date-time */
+            readonly since: string;
+            /** @description The scheduled jobs this operator may start on demand. */
+            readonly triggerableJobs: readonly string[];
+        };
+        /** @enum {unknown} */
+        readonly JobLane: "Light" | "Heavy" | null;
+        readonly JobRunPageResponse: {
+            readonly items: readonly components["schemas"]["JobRunResponse"][];
+            /** Format: int32 */
+            readonly totalCount: number | string;
+            /** Format: int32 */
+            readonly page: number | string;
+        };
+        /** @description One attempt at one job. */
+        readonly JobRunResponse: {
+            /**
+             * Format: uuid
+             * @description Wolverine's message id. Stable across every attempt at the same job.
+             */
+            readonly envelopeId: string;
+            /** Format: int32 */
+            readonly attempt: number | string;
+            readonly jobName: string;
+            readonly lane?: null | components["schemas"]["JobLane"];
+            readonly status: components["schemas"]["JobRunStatus"];
+            /** Format: date-time */
+            readonly startedAt: string;
+            /** Format: date-time */
+            readonly completedAt?: null | string;
+            /** Format: int64 */
+            readonly durationMs?: null | number | string;
+            /** Format: uuid */
+            readonly ownerId?: null | string;
+            /** @description The exception's type and message. The full stack is in the log store. */
+            readonly error?: null | string;
+            /** @description The W3C trace id, for the deep link into the log store. */
+            readonly traceId?: null | string;
+            readonly instanceId?: null | string;
+        };
+        /**
+         * @description What became of one attempt at one job.
+         * @enum {unknown}
+         */
+        readonly JobRunStatus: "Running" | "Succeeded" | "Failed";
+        readonly LockedOutUserResponse: {
+            /** Format: uuid */
+            readonly userId: string;
+            readonly username: string;
+            /** Format: date-time */
+            readonly lockedOutUntil: string;
         };
         readonly LoginRequest: {
             readonly username: string;
@@ -1169,6 +1956,18 @@ export interface components {
              *     IsPersistent, which is the whole of what "remember me" means under cookie authentication.
              */
             readonly rememberMe: boolean;
+        };
+        /** @description Who is looking at the monitoring page. */
+        readonly MonitoringAccessResponse: {
+            /** Format: uuid */
+            readonly userId: string;
+            readonly username: string;
+            /**
+             * @description Always UserRole.Admin on a successful response — the policy admits nobody
+             *     else. Returned anyway so the page can render who it is showing, and so a future read-only
+             *     operator role has somewhere to appear without a contract change.
+             */
+            readonly role: components["schemas"]["UserRole"];
         };
         /**
          * @description What a notification is about. Persisted by name rather than by number (see the EF
@@ -1353,6 +2152,135 @@ export interface components {
             readonly userId: string;
             readonly username: string;
             readonly displayName: string;
+            /**
+             * @description What the caller may do beyond their own data. Published so the SPA can decide whether to
+             *     render the monitoring nav entry — cosmetics, not the control. Authorization is the policy
+             *     on the server, which reads the role from the database on every request and never from
+             *     anything the client was told. Crosses the wire as a NAME ("Admin"), via the
+             *     JsonStringEnumConverter registered on both JsonOptions types in Program.cs. See ADR 0020.
+             */
+            readonly role: components["schemas"]["UserRole"];
+        };
+        readonly SignInEventPageResponse: {
+            readonly items: readonly components["schemas"]["SignInEventResponse"][];
+            /** Format: int32 */
+            readonly totalCount: number | string;
+            /** Format: int32 */
+            readonly page: number | string;
+        };
+        /** @description One attempt to authenticate. */
+        readonly SignInEventResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            /** Format: date-time */
+            readonly at: string;
+            /**
+             * Format: uuid
+             * @description Null when the attempt named an account that does not exist.
+             */
+            readonly userId?: null | string;
+            /** @description What was typed. The only record of an attempt against a name that does not exist. */
+            readonly usernameAttempted: string;
+            /**
+             * @description The distinction the sign-in endpoint itself never reveals: it answers every failure
+             *     identically, because a differing answer is an account-enumeration oracle (ADR 0006). An
+             *     operator investigating an attack needs the difference; an attacker must not have it.
+             */
+            readonly outcome: components["schemas"]["SignInOutcome"];
+            readonly ipAddress?: null | string;
+            readonly userAgent?: null | string;
+            readonly traceId?: null | string;
+        };
+        /** @description Sign-in counts, who is locked out, and who is about. */
+        readonly SignInHealthResponse: {
+            /** Format: int32 */
+            readonly succeeded: number | string;
+            /** Format: int32 */
+            readonly badCredentials: number | string;
+            /** Format: int32 */
+            readonly lockedOut: number | string;
+            /** Format: int32 */
+            readonly unknownUser: number | string;
+            /** Format: date-time */
+            readonly since: string;
+            /**
+             * Format: int32
+             * @description Users seen within the active window. A cookie session has no logout event to key off, so
+             *     "online" can only ever mean "seen recently" — the window says how recently.
+             */
+            readonly activeUsers: number | string;
+            /** Format: int32 */
+            readonly activeWindowMinutes: number | string;
+            readonly lockedOutUsers: readonly components["schemas"]["LockedOutUserResponse"][];
+        };
+        /**
+         * @description What happened on one attempt to authenticate.
+         * @enum {unknown}
+         */
+        readonly SignInOutcome: "Succeeded" | "BadCredentials" | "LockedOut" | "UnknownUser" | "SignedOutEverywhere";
+        /**
+         * @description What kind of work a traffic measurement counted.
+         * @enum {unknown}
+         */
+        readonly TrafficKind: "Http" | "Command" | "Query";
+        /** @description One minute of the whole application's traffic. */
+        readonly TrafficPointResponse: {
+            /** Format: date-time */
+            readonly bucketStart: string;
+            /** Format: int64 */
+            readonly total: number | string;
+            /** Format: int64 */
+            readonly failed: number | string;
+            /** Format: int64 */
+            readonly faulted: number | string;
+            /** Format: double */
+            readonly p95Ms?: null | number | string;
+        };
+        /** @description One endpoint's or handler's traffic over a window. */
+        readonly TrafficRowResponse: {
+            readonly kind: components["schemas"]["TrafficKind"];
+            /** @description A route template for HTTP, a request type's name otherwise. Never a raw path. */
+            readonly name: string;
+            /** Format: int64 */
+            readonly total: number | string;
+            /** Format: int64 */
+            readonly failed: number | string;
+            /** Format: int64 */
+            readonly faulted: number | string;
+            /** Format: double */
+            readonly meanMs?: null | number | string;
+            /**
+             * Format: double
+             * @description Interpolated from summed histogram buckets, not derived from the mean — a mean cannot give
+             *     a percentile, and averaging per-pod means would be wrong even if it could. Null when the
+             *     window holds no measurements.
+             */
+            readonly p50Ms?: null | number | string;
+            /** Format: double */
+            readonly p95Ms?: null | number | string;
+            /** Format: double */
+            readonly p99Ms?: null | number | string;
+        };
+        readonly TrafficSeriesResponse: {
+            /** Format: date-time */
+            readonly since: string;
+            readonly points: readonly components["schemas"]["TrafficPointResponse"][];
+        };
+        readonly TrafficSummaryResponse: {
+            /** Format: date-time */
+            readonly since: string;
+            /** Format: double */
+            readonly requestsPerMinute: number | string;
+            /**
+             * Format: double
+             * @description Failed plus faulted, over total. Zero when nothing was measured.
+             */
+            readonly errorRate: number | string;
+            readonly overall: components["schemas"]["TrafficRowResponse"];
+            readonly rows: readonly components["schemas"]["TrafficRowResponse"][];
+        };
+        readonly TriggerJobRequest: {
+            readonly jobName: string;
         };
         /** @description The badge count, on its own so a client polling it transfers one number. */
         readonly UnreadCountResponse: {
@@ -1369,6 +2297,11 @@ export interface components {
             /** Format: double */
             readonly price: number | string;
         };
+        /**
+         * @description What a user may do beyond their own data.
+         * @enum {unknown}
+         */
+        readonly UserRole: "Member" | "Admin";
     };
     responses: never;
     parameters: never;

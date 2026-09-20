@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Claims;
@@ -5,22 +6,26 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using AiFramework.Api;
 using AiFramework.Api.Auth;
+using AiFramework.Api.Monitoring;
 using AiFramework.Api.Notifications;
 using AiFramework.Api.Observability;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Notifications;
 using AiFramework.Application.Users;
+using AiFramework.Domain.Users;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Persistence;
 using AiFramework.Infrastructure.Resilience;
+using AiFramework.Infrastructure.Security;
 using JasperFx;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
 
@@ -143,21 +148,45 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             // every request in the process.
             var validator = context.HttpContext.RequestServices.GetRequiredService<ISessionValidator>();
 
-            if (!await validator
-                    .IsStampCurrentAsync(id, stamp, context.HttpContext.RequestAborted)
-                    .ConfigureAwait(false))
+            var authority = await validator
+                .ValidateAsync(id, stamp, context.HttpContext.RequestAborted)
+                .ConfigureAwait(false);
+
+            if (authority is null)
             {
                 await RejectAsync(context).ConfigureAwait(false);
+                return;
             }
+
+            ApplyRole(context, principal, authority.Role);
+
+            await TouchLastSeenAsync(context, id).ConfigureAwait(false);
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+    options.AddPolicy(
+        AuthorizationPolicies.Monitoring,
+        policy => policy
+            .RequireAuthenticatedUser()
+            .RequireRole(nameof(UserRole.Admin))));
+
+// Bound here rather than inside AddAdministratorRoles, for the same reason CacheOptions is bound
+// here: a registration that binds configuration itself cannot be resolved from a bare
+// ServiceCollection in a unit test. See ADR 0020.
+builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection("Admin"));
+builder.Services.AddAdministratorRoles();
 
 // The caller, as an Application port. HttpContextAccessor is what makes the claims reachable
 // from a handler; scoped because "who is calling" is per-request.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+
+// Where the caller came from, for the sign-in audit. Registered HERE and not in
+// AddInfrastructure, exactly as ICurrentUser is: the last registration wins, so one made inside a
+// shared registration method would silently replace this. The worker registers none — it never
+// authenticates anyone. See ADR 0021.
+builder.Services.AddScoped<IClientContext, ClientContext>();
 
 // Volume defence on the credential endpoints, alongside the per-account lockout in
 // SignInHandler. Partitioned by remote address, not by username: the limiter runs before model
@@ -355,6 +384,12 @@ if (realtimeWarning is not null)
 // flag off, ForwardedHeadersOptions keeps its defaults, which forward nothing.
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+// Wraps authentication, authorization and the endpoints, so a request REFUSED by any of them is
+// still counted — a spike of 401s or 403s is exactly the sort of thing this page exists to show.
+// The middleware reads the matched route template after the inner pipeline has run, so it does
+// not depend on where routing sits relative to this line. See ADR 0021.
+app.UseMiddleware<TrafficMiddleware>();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
@@ -415,6 +450,85 @@ static async Task<int> RunTheWebApplicationAsync(WebApplication webApplication)
 {
     await webApplication.RunAsync();
     return 0;
+}
+
+// Stamps "this user was seen just now", at most once per user per minute.
+//
+// This runs on the hottest path in the application - every authenticated request, beside ADR
+// 0011's uncached stamp read - so the throttle is not a nicety. It lives in the UPDATE's own
+// WHERE clause rather than in a read-then-write here: there is no read to race with, and the
+// cost is one write per user per minute regardless of how many requests they make.
+//
+// A failure NEVER fails the request. Somebody's last-seen timestamp being stale is not a reason
+// to refuse them the page they asked for, so a database fault here is swallowed deliberately -
+// the one place in this file where that is the right answer. DbException and the execution
+// strategy's own exhaustion are the two shapes it arrives in, the same pair AdminReconciler
+// catches and for the same reason. See ADR 0021.
+static async Task TouchLastSeenAsync(CookieValidatePrincipalContext context, Guid userId)
+{
+    // How stale a LastSeenAt may be before the next authenticated request refreshes it. One
+    // minute: long enough that the write is rare, short enough that "online now" means it.
+    // Inline rather than a captured local, because a static local function cannot close over one
+    // and this function must stay static to avoid capturing the enclosing scope per request.
+    var throttle = TimeSpan.FromMinutes(1);
+
+    var users = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+    var clock = context.HttpContext.RequestServices.GetRequiredService<IClock>();
+    var now = clock.UtcNow;
+
+    try
+    {
+        await users
+            .TouchLastSeenAsync(userId, now, now - throttle, context.HttpContext.RequestAborted)
+            .ConfigureAwait(false);
+    }
+    catch (DbException)
+    {
+        // Deliberately ignored: see above. Observability must not be able to fail a request.
+    }
+    catch (RetryLimitExceededException)
+    {
+        // The same fault, wrapped by EnableRetryOnFailure's execution strategy once it gives up.
+    }
+}
+
+// Replaces the request's principal with one carrying the role just read from the database.
+//
+// The role is NEVER minted into the cookie at sign-in (ADR 0020): it is read on every
+// authenticated request, alongside the stamp, so a demotion takes effect on the demoted user's
+// very next request with no forced sign-out and no TTL.
+//
+// Every existing role claim is STRIPPED before the current one is added, and that is
+// load-bearing rather than tidy. SlidingExpiration is on, so the cookie handler re-issues the
+// ticket periodically from whatever principal is current - which means a role claim can end up
+// persisted in a cookie despite never being put there deliberately. Adding without stripping
+// would then let a stale Admin claim from an old cookie outlive the demotion that removed it.
+// Rebuilding from scratch each request makes what the cookie happens to carry irrelevant.
+//
+// A Member carries no role claim at all: absence is the default, and RequireRole(Admin) is the
+// only thing that reads it.
+static void ApplyRole(CookieValidatePrincipalContext context, ClaimsPrincipal principal, UserRole role)
+{
+    var claims = principal.Claims
+        .Where(claim => !string.Equals(claim.Type, ClaimTypes.Role, StringComparison.Ordinal))
+        .ToList();
+
+    if (role is not UserRole.Member)
+    {
+        claims.Add(new Claim(ClaimTypes.Role, role.ToString()));
+    }
+
+    // The scheme as authenticationType is what keeps IsAuthenticated true; the last two arguments
+    // are what make RequireRole and User.IsInRole look at ClaimTypes.Role rather than nothing.
+    var identity = new ClaimsIdentity(
+        claims,
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        ClaimTypes.Name,
+        ClaimTypes.Role);
+
+    // ReplacePrincipal alone, without ShouldRenew: this swaps the principal for THIS request and
+    // asks for no new cookie to be written.
+    context.ReplacePrincipal(new ClaimsPrincipal(identity));
 }
 
 // Both rejection paths do the same two things, and doing only the first leaves the dead cookie

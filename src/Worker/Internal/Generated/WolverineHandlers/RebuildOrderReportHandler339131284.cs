@@ -21,7 +21,6 @@ namespace Internal.Generated.WolverineHandlers
         {
             await using var serviceScope = _serviceScopeFactory.CreateAsyncScope();
             Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Wolverine.Runtime.ScopedMessageContextHolder>(serviceScope.ServiceProvider).Context = context;
-            var jobCurrentUser = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Infrastructure.Jobs.JobCurrentUser>(serviceScope.ServiceProvider);
             var orderReportWriter = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Orders.IOrderReportWriter>(serviceScope.ServiceProvider);
             
             /*
@@ -29,16 +28,33 @@ namespace Internal.Generated.WolverineHandlers
             * Your code is directly using IServiceProvider
             */
             var queryDispatcher = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IQueryDispatcher>(serviceScope.ServiceProvider);
+            var jobCurrentUser = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Infrastructure.Jobs.JobCurrentUser>(serviceScope.ServiceProvider);
+            
+            /*
+            * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
+            */
+            var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
             // The actual message body
             var rebuildOrderReport = (AiFramework.Application.Orders.RebuildOrderReport)context.Envelope.Message;
 
-            AiFramework.Infrastructure.Jobs.JobUserMiddleware.Before(context.Envelope, jobCurrentUser);
-            System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Orders.RebuildOrderReportHandler");
-            System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Orders.RebuildOrderReportHandler");
-            var rebuildOrderReportHandler = new AiFramework.Application.Orders.RebuildOrderReportHandler(queryDispatcher, orderReportWriter);
-            
-            // The actual message execution
-            await rebuildOrderReportHandler.Handle(rebuildOrderReport, cancellation).ConfigureAwait(false);
+            try
+            {
+                AiFramework.Infrastructure.Jobs.JobUserMiddleware.Before(context.Envelope, jobCurrentUser);
+                await AiFramework.Infrastructure.Jobs.JobRunMiddleware.BeforeAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
+                System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Orders.RebuildOrderReportHandler");
+                System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Orders.RebuildOrderReportHandler");
+                var rebuildOrderReportHandler = new AiFramework.Application.Orders.RebuildOrderReportHandler(queryDispatcher, orderReportWriter);
+                
+                // The actual message execution
+                await rebuildOrderReportHandler.Handle(rebuildOrderReport, cancellation).ConfigureAwait(false);
+
+                await AiFramework.Infrastructure.Jobs.JobRunMiddleware.AfterAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
+            }
+
+            catch (System.Exception exception)
+            {
+                await AiFramework.Infrastructure.Jobs.JobRunMiddleware.OnExceptionAsync(exception, context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
+            }
 
         }
 

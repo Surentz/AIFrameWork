@@ -212,6 +212,36 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     }
 
     /// <summary>
+    /// Sets a user's role directly, standing in for the administrator reconciler. Lets a test
+    /// prove what a role change does to a LIVE session without going through configuration and a
+    /// host restart, which is the only way production changes one.
+    /// </summary>
+    public async Task SetRoleAsync(string username, UserRole role)
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+        var normalized = User.Normalize(username);
+
+        var user = await context.Users.SingleAsync(u => u.UsernameNormalized == normalized);
+        user.ChangeRole(role);
+
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// A signed-in client whose user holds <c>Admin</c>, for the monitoring endpoints. The role is
+    /// read from the database on every request (ADR 0020), so promoting after sign-in needs no
+    /// re-authentication — which is itself asserted by MonitoringAccessTests.
+    /// </summary>
+    public async Task<HttpClient> CreateAdminClientAsync()
+    {
+        var (client, username) = await CreateAuthenticatedClientWithUsernameAsync();
+        await SetRoleAsync(username, UserRole.Admin);
+
+        return client;
+    }
+
+    /// <summary>
     /// Drains every outbox row currently due — not just one batch. ClaimAsync's query is
     /// <c>LIMIT BatchSize</c> (see OutboxOptions), so a single claim only ever picks up the
     /// first BatchSize due rows; now that every Api.IntegrationTests class shares one database

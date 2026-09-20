@@ -4,7 +4,9 @@ using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Jobs.Scheduling;
+using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Persistence;
+using AiFramework.Infrastructure.Security;
 using AiFramework.Infrastructure.Resilience;
 using AiFramework.Worker.Observability;
 using JasperFx;
@@ -37,7 +39,20 @@ builder.Services.AddJobScheduling(connectionString);
 // no caller. Who the caller is, is a host-level decision. See JobRegistration.AddJobs.
 builder.Services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<JobCurrentUser>());
 
+// The worker has no HTTP request, so no caller address to record. Registered anyway, and here
+// rather than in AddInfrastructure for the same host-level reason as ICurrentUser above: the
+// generic host validates every registered descriptor when it builds its container, so a missing
+// implementation fails `codegen write` at container-build time rather than on a sign-in path this
+// host does not have. See NoClientContext.
+builder.Services.AddScoped<IClientContext, NoClientContext>();
+
 builder.Services.Configure<JobOptions>(builder.Configuration.GetSection("Jobs"));
+
+// How long job_runs keeps its rows. Bound here rather than inside AddJobs, for the reason
+// CacheOptions and JobOptions are: a registration that binds configuration cannot be resolved
+// from a bare ServiceCollection in a unit test. Only this host needs it - the API reads the table
+// but never sweeps it. See ADR 0021.
+builder.Services.Configure<MonitoringOptions>(builder.Configuration.GetSection("Monitoring"));
 
 // Bound here rather than in AddCaching/AddResilience, the same shape the Api uses: each host
 // reads its own configuration and hands the values to Infrastructure.

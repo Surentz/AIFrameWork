@@ -29,6 +29,14 @@ public sealed class HealthTests : IClassFixture<WebApplicationFactory<Program>>
             // turns off envelope storage and with it that startup connection, which keeps this
             // test container-free — the property it was written to have.
             builder.UseSetting("Wolverine:Durable", "false");
+
+            // The same lesson again, one feature later. AdminReconciler dials Postgres at
+            // startup to apply the configured administrator list (ADR 0020). It survives an
+            // absent database by design - it catches and logs rather than failing the host - but
+            // surviving it still means sitting through EnableRetryOnFailure's whole retry budget
+            // on every host this fixture builds, for a test whose entire point is that /health
+            // needs no database. Off here, exactly as Wolverine's envelope storage is above.
+            builder.UseSetting("Admin:ReconcileOnStart", "false");
         });
     }
 

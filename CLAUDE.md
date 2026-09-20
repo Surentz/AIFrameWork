@@ -385,7 +385,7 @@ See ADR 0005.
 ```bash
 dotnet restore src/Api
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
-  Wolverine__Durable=false \
+  Wolverine__Durable=false Admin__ReconcileOnStart=false \
   dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 npm run generate:api --prefix frontend
 ```
@@ -399,9 +399,13 @@ does not restore implicitly, so a fresh clone fails with NETSDK1004. It cannot b
 NuGet's props, and the OpenAPI XML-comment source generator then fails with CS9137 about
 interceptors.
 **An explicit target, not part of `dotnet build`.** Generation runs the whole application, so it
-needs both environment variables: without a connection string it fails on the startup guard in
-`Program.cs`, and with one but still durable, Wolverine's startup migration dials Postgres
-(ADR 0005). The connection string is never actually opened — it only has to be non-empty.
+needs all three environment variables: without a connection string it fails on the startup guard
+in `Program.cs`; with one but still durable, Wolverine's startup migration dials Postgres
+(ADR 0005); and with `Admin__ReconcileOnStart` left on, `AdminReconciler` dials it as well and the
+generator dies with an `ObjectDisposedException` that names nothing useful (ADR 0020). The
+connection string is never actually opened — it only has to be non-empty, and **any new startup
+path that would open it needs its own switch here**. `codegen write` needs only the first two: a
+JasperFx command does not start hosted services.
 
 Generating on every build was tried and reverted: it made a plain `dotnet build` of `src/Api`
 fail without those variables *even with the database running*, which would have broken every
@@ -433,6 +437,130 @@ Nothing on the auth path is cached, which is what stops a stale stamp being serv
 query cache. Do not make `GetUser` `ICacheable`.
 
 See ADR 0011.
+
+## The administrator role
+
+`User.Role` is `Member` or `Admin`. Only the monitoring page (`/api/monitoring/*`,
+`[Authorize(Policy = AuthorizationPolicies.Monitoring)]`) requires `Admin`; everything else is
+still "any authenticated user", because ADR 0007 puts ownership in the query and every other
+endpoint returns only the caller's own data.
+
+**The role is read from the database on every authenticated request, never carried in the
+cookie.** `SessionValidator` already pays for one projected, uncached, primary-key read per
+request for ADR 0011's security stamp, so `Role` rides along on the same row and the same index
+seek. `Program.cs`'s `OnValidatePrincipal` attaches it to the principal with `ReplacePrincipal`
+and does not renew the cookie.
+
+Four things that will cost you time:
+
+- **A role change does NOT rotate the security stamp**, and must not. Nothing issued carries the
+  role, so there is nothing stale to invalidate — and rotating would sign every administrator out
+  on every API restart, courtesy of the startup reconciler. ADR 0011's own summary anticipated the
+  opposite; ADR 0020 supersedes it, and the rotation list stays at three.
+- **Configuration is the authority, so a promotion made by hand-written SQL is reverted at the
+  next API start.** `Admin__Usernames` is reconciled at startup — promote everyone listed, demote
+  every administrator who is not — which is what makes revocation work by removing a name. The
+  failure mode is "my change silently reverted on the next deploy". **`RegisterUser` reads the
+  same list too**, so a configured operator who registers after the API started holds the role
+  immediately instead of waiting for a restart; both paths ask one `IAdministratorDirectory`, so
+  they cannot disagree.
+- **`Admin__ReconcileOnStart=false` is required by anything that boots the app without a
+  database**, exactly like `Wolverine__Durable=false`. That is the OpenAPI contract command above
+  and CI's `contract` job; `HealthTests` sets it too. `codegen write` does not need it — a JasperFx
+  command never starts hosted services. Any NEW startup path that dials Postgres needs the same
+  treatment, and `HealthTests` is the canary that catches it.
+- **The reconciler lives in `src/Infrastructure/Security`, not beside the policy.** Surviving an
+  absent database means catching both `DbException` and EF's `RetryLimitExceededException` (the
+  execution strategy reports its own exhaustion rather than the inner fault), and `src/Api` carries
+  no EF reference at all. Api composes it through `AddAdministratorRoles()`.
+
+A blank or over-long entry in `Admin__Usernames` fails startup with an
+`OptionsValidationException`; an empty list is legal and means nobody.
+
+See ADR 0020.
+
+## The sign-in audit
+
+Every attempt to authenticate writes a `sign_in_events` row: the outcome, the username as typed,
+the caller's address and user-agent, and a `TraceId`. `User.LastSeenAt` is stamped alongside it,
+which is what "online now" on the monitoring page means.
+
+**The audit records the difference the endpoint itself refuses to reveal.** `SignInHandler`
+answers every failure with one uniform error — unknown username, wrong password and locked-out
+are indistinguishable to the caller, deliberately (ADR 0006), and both the unknown-user and
+locked-out branches hash a password they then discard so the timings match too. The audit
+separates them because an operator investigating an attack needs that; the response does not,
+because an attacker must not have it. `SignInAuditTests` asserts the two responses are identical
+field for field, excluding only the per-request `traceId`.
+
+Four things that will cost you time:
+
+- **`sign_in_events` is personal data.** It holds an IP address and a user-agent against a
+  username. `PruneSignInEvents` runs daily and keeps thirty days
+  (`Monitoring__SignInEventRetentionDays`); that sweep is a requirement of the feature, not
+  housekeeping, and lengthening the window is a decision rather than a default.
+- **`LastSeenAt` is written on the hottest path in the application**, beside ADR 0011's uncached
+  stamp read. The throttle is the UPDATE's own `WHERE` clause — one write per user per minute
+  regardless of request volume, with no read to race against. Never make it read-modify-write, and
+  never let it fail a request: `Program.cs` swallows `DbException` and EF's
+  `RetryLimitExceededException` there on purpose.
+- **`X-Forwarded-For` only means anything behind the ingress.** `ForwardedHeaders__Enabled` is set
+  in the Kubernetes overlay; without it every address recorded in the cluster is the ingress pod's
+  rather than the caller's — audit data that looks right until someone tries to use it.
+  `ClientContext` reads the resolved `RemoteIpAddress`, so whatever that middleware decided is
+  what gets stored.
+- **`IClientContext` is registered per host, like `ICurrentUser`.** The API binds it to
+  `HttpContext`; the worker registers `NoClientContext`. It cannot simply be absent there — the
+  generic host validates every registered descriptor when it builds its container, so a missing
+  implementation fails `codegen write` at container-build time, nowhere near a sign-in path that
+  host does not have.
+
+See ADR 0021.
+
+## Traffic
+
+RED metrics — rate, errors, duration — for both the HTTP surface and every command and query,
+recorded per pod in memory and flushed to `traffic_buckets` on a minute boundary. One row per
+`(BucketStart, Kind, Name, InstanceId)`, never one row per request. `/monitoring/traffic` sums
+across instances, which is what makes two API replicas one number rather than whichever pod
+answered.
+
+`TrafficMiddleware` keys HTTP on `"{method} {route template}"`, taken off the matched endpoint
+**after** `next()` has run — a raw path would give one row per order id, and routing has not
+matched an endpoint yet on the way in. Commands and queries need no new instrumentation at all:
+`Behaviors.LoggedAsync` already computes the name, the outcome and the elapsed milliseconds, so
+the recorder is fed from there.
+
+Five things that will cost you time:
+
+- **Percentiles come from a fixed histogram, and a mean is not a substitute.**
+  `TrafficHistogram.Bounds` is `5/10/25/50/100/250/500/1000/2500/5000`ms plus an overflow bucket,
+  and p50/p95/p99 are interpolated from the summed counts. That summing is the whole point: counts
+  from two pods add, so the answer is the same as if one pod had done all the work. **Per-pod
+  means cannot be combined into a percentile, or into anything.** The bounds are a stored
+  contract — rows already written were counted against them, so changing one silently rewrites
+  history rather than improving it.
+- **`ITrafficRecorder` is resolved with `GetService`, not `GetRequiredService`**, exactly as
+  `LoggedAsync` already resolves `ICurrentUser`. The outbox pumps dispatch with no recorder in
+  scope and that is normal, not a wiring error.
+- **The flush is an upsert and must stay one.** `ON CONFLICT ... DO UPDATE SET col =
+  EXCLUDED.col` *assigns* rather than adds, so a retried flush of the same closed bucket is
+  idempotent. `TakeClosedBuckets` hands over only minutes that have ended; a pod that dies
+  mid-bucket loses at most its own last minute, which is the accepted price of not writing a row
+  per request.
+- **The worker records too, under its own `InstanceId`.** Without it every command a job runs is
+  invisible. Same recorder, same hosted service, different instance — and that is also why clock
+  skew between hosts is accepted rather than corrected: the bucket boundary is `IClock` truncated
+  to the minute, and nothing here may depend on sub-minute precision.
+- **Traffic is pruned at seven days**, not thirty like `sign_in_events`
+  (`Monitoring__TrafficRetentionDays`). It is the highest-volume table in the application and
+  carries no personal data, so the trade runs the other way.
+
+The charts are hand-rolled inline SVG — no chart library is installed, and the `dataviz` skill
+governs the palette and the chart forms. **Never a dual-axis chart:** requests and errors share a
+unit and one axis, latency is milliseconds and gets its own chart.
+
+See ADR 0021.
 
 ## Caching
 

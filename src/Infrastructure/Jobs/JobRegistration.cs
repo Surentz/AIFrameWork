@@ -1,6 +1,8 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Maintenance;
+using AiFramework.Application.Monitoring;
 using AiFramework.Application.Orders;
+using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Outbox;
 using JasperFx.CodeGeneration.Model;
 using Microsoft.Extensions.DependencyInjection;
@@ -86,7 +88,36 @@ public static class JobRegistration
         // Hourly at :05. Retention is seven days, so hourly is already generous; the old
         // five-minute cadence existed only because the sweep piggy-backed on the poll loop.
         JobDescriptor.Scheduled<PruneProcessedOutbox>("0 5 * * * ?"),
+
+        // Daily at 03:20. Retention is thirty days (ADR 0021), so a daily sweep is ample, and
+        // running it off-peak keeps one DELETE over a large table away from busy hours.
+        JobDescriptor.Scheduled<PruneJobRuns>("0 20 3 * * ?"),
+
+        // Daily at 03:25, just after the job-run sweep. This one is not optional housekeeping:
+        // sign_in_events holds IP addresses and user-agents, so this is what bounds how long this
+        // application keeps personal data. ADR 0021.
+        JobDescriptor.Scheduled<PruneSignInEvents>("0 25 3 * * ?"),
+
+        // Daily at 03:30. Seven days rather than thirty (ADR 0021): traffic buckets grow with
+        // request volume rather than with events, and a week answers "what changed" without the
+        // table becoming an archive.
+        JobDescriptor.Scheduled<PruneTrafficBuckets>("0 30 3 * * ?"),
     ];
+
+    /// <summary>
+    /// <see cref="Jobs"/> keyed by type, for the lookup <c>JobRunMiddleware</c> makes per message
+    /// rather than per startup. A dictionary rather than a scan, the same posture
+    /// <c>CommandRegistry</c> holds.
+    /// </summary>
+    /// <remarks>
+    /// Declared AFTER <see cref="Jobs"/> on purpose: static field and auto-property initialisers
+    /// run in declaration order, so above the list this would initialise from a null one.
+    /// </remarks>
+    private static readonly Dictionary<Type, JobDescriptor> ByType =
+        Jobs.ToDictionary(static job => job.JobType);
+
+    /// <summary>The registration for a job type, or null if it is not registered.</summary>
+    public static JobDescriptor? DescriptorFor(Type jobType) => ByType.GetValueOrDefault(jobType);
 
     /// <summary>
     /// The one place a lane becomes a queue name. Both the publish side (<see cref="MapJobs"/>)
@@ -135,10 +166,17 @@ public static class JobRegistration
     {
         ArgumentNullException.ThrowIfNull(opts);
 
+        // Explicit, like the Jobs list above and for the same reason: greppable beats scanned.
+        // A job registered in Jobs but missing here ROUTES and is never handled - it lands on its
+        // queue and sits there. JobRegistrationTests.EveryRegisteredJob_HasADiscoveredHandler
+        // fails the build on that, because nothing else would.
         opts.Discovery
             .IncludeType<SendOrderConfirmationHandler>()
             .IncludeType<RebuildOrderReportHandler>()
-            .IncludeType<PruneProcessedOutboxHandler>();
+            .IncludeType<PruneProcessedOutboxHandler>()
+            .IncludeType<PruneJobRunsHandler>()
+            .IncludeType<PruneSignInEventsHandler>()
+            .IncludeType<PruneTrafficBucketsHandler>();
 
         // Set on the WORKER only — the API keeps Wolverine 6's NotAllowed default, so this
         // relaxation reaches exactly the host that needs it.
@@ -172,6 +210,12 @@ public static class JobRegistration
         opts.Policies.AddMiddleware(
             typeof(JobUserMiddleware),
             chain => chain.MessageType.IsAssignableTo(typeof(IUserScopedJob)));
+
+        // Every job chain, not just the user-scoped ones: a run is worth recording whoever it
+        // belongs to. Same predicate overload and same reasons as above.
+        opts.Policies.AddMiddleware(
+            typeof(JobRunMiddleware),
+            chain => chain.MessageType.IsAssignableTo(typeof(IJob)));
     }
 
     /// <summary>
@@ -265,6 +309,11 @@ public static class JobRegistration
         services.AddScoped<IOrderNotifier, LoggingOrderNotifier>();
         services.AddScoped<IOrderReportWriter, LoggingOrderReportWriter>();
         services.AddScoped<IOutboxRetention, OutboxRetention>();
+
+        // What JobRunMiddleware writes through. Scoped, because it holds the scoped DbContext -
+        // the same one the handler is using, which is what lets a failure row be written while
+        // that handler's own transaction is rolling back. See ADR 0021.
+        services.AddScoped<IJobRunRecorder, JobRunRecorder>();
 
         return services;
     }

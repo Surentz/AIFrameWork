@@ -4,6 +4,11 @@ import { ChangePasswordPage } from './features/auth/ChangePasswordPage';
 import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { RequireAuth } from './features/auth/RequireAuth';
+import { RequireRole } from './features/auth/RequireRole';
+import { JobsPage } from './features/monitoring/JobsPage';
+import { LoginsPage } from './features/monitoring/LoginsPage';
+import { MonitoringPage } from './features/monitoring/MonitoringPage';
+import { TrafficPage } from './features/monitoring/TrafficPage';
 import { NotificationList } from './features/notifications/NotificationList';
 import { OrderDetail } from './features/orders/OrderDetail';
 import { OrderList } from './features/orders/OrderList';
@@ -37,6 +42,16 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/products/:id/edit" element={<EditProductForm />} />
           <Route path="/notifications" element={<NotificationList />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
+
+          {/* A second layout route inside RequireAuth: signed in AND an administrator. Nested
+              rather than checked in the page, so the drill-down routes phases 2 to 4 add are
+              gated by being declared here rather than by each one remembering. */}
+          <Route element={<RequireRole allow="Admin" />}>
+            <Route path="/monitoring" element={<MonitoringPage />} />
+            <Route path="/monitoring/jobs" element={<JobsPage />} />
+            <Route path="/monitoring/logins" element={<LoginsPage />} />
+            <Route path="/monitoring/traffic" element={<TrafficPage />} />
+          </Route>
         </Route>
       </Route>
     </Routes>

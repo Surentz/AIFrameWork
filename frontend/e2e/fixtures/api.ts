@@ -52,6 +52,51 @@ export async function registerUser(): Promise<TestUser> {
   }
 }
 
+/**
+ * Registers a FIXED username, or signs in as it when it already exists.
+ *
+ * Only the administrator needs this, and only because its name has to be known before the run
+ * starts — `playwright.config.ts` names it in the API's `Admin__Usernames`, which is the sole
+ * grant of the role (ADR 0020). A fixed name collides two ways that a generated one cannot, and
+ * both land here rather than in a spec: `--ui` keeps the database between runs, so the account
+ * already exists on the second iteration; and two Playwright workers arranging in parallel both
+ * pass the API's check-then-insert, so one of them gets the unique index's 409.
+ *
+ * Every other user in this suite is generated and registered exactly once — see `registerUser`.
+ */
+export async function registerOrSignIn(username: string): Promise<TestUser> {
+  const context = await request.newContext(connectionOptions);
+
+  try {
+    const registration = await context.post('/api/auth/register', {
+      data: { username, password: PASSWORD, displayName: 'E2E Operator' },
+    });
+
+    if (!registration.ok()) {
+      if (registration.status() !== 409) {
+        throw new Error(
+          `Registering '${username}' failed with ${String(registration.status())}: ${await registration.text()}`,
+        );
+      }
+
+      // rememberMe is `required` on LoginRequest, so omitting it is a 400 and not a default.
+      const signIn = await context.post('/api/auth/login', {
+        data: { username, password: PASSWORD, rememberMe: false },
+      });
+
+      if (!signIn.ok()) {
+        throw new Error(
+          `'${username}' exists but signing in failed with ${String(signIn.status())}: ${await signIn.text()}`,
+        );
+      }
+    }
+
+    return { username, password: PASSWORD, state: await context.storageState() };
+  } finally {
+    await context.dispose();
+  }
+}
+
 export interface NewProduct {
   readonly sku: string;
   readonly name: string;

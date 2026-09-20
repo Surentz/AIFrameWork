@@ -10,7 +10,7 @@ namespace AiFramework.Application.Users;
 /// </summary>
 public sealed record SignOutEverywhere(Guid UserId) : ICommand<bool>;
 
-public sealed class SignOutEverywhereHandler(IUserRepository users)
+public sealed class SignOutEverywhereHandler(IUserRepository users, ISignInAudit audit)
     : ICommandHandler<SignOutEverywhere, bool>
 {
     public async Task<Result<bool>> HandleAsync(
@@ -29,6 +29,14 @@ public sealed class SignOutEverywhereHandler(IUserRepository users)
         }
 
         user.RotateSecurityStamp();
+
+        // Audited alongside the sign-ins rather than separately: "every session for this account
+        // was revoked" is part of the same story as the attempts that preceded it, and reading
+        // the two in one timeline is the point.
+        await audit
+            .RecordAsync(
+                SignInOutcome.SignedOutEverywhere, user.Username, user.Id, cancellationToken)
+            .ConfigureAwait(false);
 
         return Result.Success(true);
     }
