@@ -51,6 +51,6 @@ public sealed class ChangePasswordHandler(IUserRepository users, IPasswordHasher
 
         // Carries the ROTATED stamp - ChangePassword rotated it a line ago.
         return Result.Success(
-            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp));
+            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp, user.Role));
     }
 }

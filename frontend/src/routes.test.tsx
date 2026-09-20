@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
+import { anAdminSession, server } from './test/handlers';
 import { withQueryClient } from './test/withQueryClient';
 import { AppRoutes } from './routes';
 
@@ -45,6 +47,24 @@ describe('AppRoutes', () => {
     renderAt('/products/new');
 
     expect(await screen.findByRole('heading', { name: 'Add a product' })).toBeInTheDocument();
+  });
+
+  it('renders the monitoring page, and its nav entry, for an administrator', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)));
+
+    renderAt('/monitoring');
+
+    expect(await screen.findByRole('heading', { name: 'Monitoring' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Monitoring' })).toBeInTheDocument();
+  });
+
+  it('keeps the monitoring nav entry out of an ordinary member\'s shell', async () => {
+    // The default handler answers with a Member session. Hiding the entry is cosmetics - the API
+    // refuses the endpoint regardless - but a link to a page you cannot open is still a bug.
+    renderAt('/orders');
+
+    expect(await screen.findByRole('link', { name: 'All orders' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Monitoring' })).not.toBeInTheDocument();
   });
 
   // The reason /login sits outside the layout route: it is a full-bleed page, and rendering it

@@ -312,4 +312,56 @@ public sealed class UserTests
         // username could evict that user from their session at will, without the password.
         ada.SecurityStamp.Should().Be(before);
     }
+
+    [Fact]
+    public void Register_StartsAsAMember()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+
+        ada.Role.Should().Be(UserRole.Member);
+    }
+
+    [Fact]
+    public void ChangeRole_ToADifferentRole_MovesItAndReportsTheChange()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+
+        var changed = ada.ChangeRole(UserRole.Admin);
+
+        changed.Should().BeTrue();
+        ada.Role.Should().Be(UserRole.Admin);
+    }
+
+    [Fact]
+    public void ChangeRole_ToTheSameRole_ReportsNoChange()
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+        ada.ChangeRole(UserRole.Admin);
+
+        var changed = ada.ChangeRole(UserRole.Admin);
+
+        // What lets the reconciler write nothing at all when the configured list has not moved,
+        // rather than issuing an UPDATE on every API start.
+        changed.Should().BeFalse();
+        ada.Role.Should().Be(UserRole.Admin);
+    }
+
+    [Theory]
+    [InlineData(UserRole.Admin)]
+    [InlineData(UserRole.Member)]
+    public void ChangeRole_LeavesTheSecurityStampAlone(UserRole role)
+    {
+        var ada = User.Register(Guid.NewGuid(), "ada", "hash", "Ada Lovelace", RegisteredAt);
+        ada.ChangeRole(UserRole.Admin);
+        var before = ada.SecurityStamp;
+
+        ada.ChangeRole(role);
+
+        // The departure from what ADR 0011 anticipated, pinned here because it is the kind of
+        // thing a later reader would "fix". The role is read from the database on every request
+        // rather than carried in the cookie, so there is no issued credential holding stale
+        // authority to invalidate - and rotating would sign an administrator out on every API
+        // restart, courtesy of the startup reconciler. See ADR 0020.
+        ada.SecurityStamp.Should().Be(before);
+    }
 }

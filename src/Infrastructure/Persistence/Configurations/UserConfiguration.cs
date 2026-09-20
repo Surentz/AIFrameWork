@@ -28,6 +28,18 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         // until a time in the past" and avoids a sentinel date.
         builder.Property(u => u.LockedOutUntil);
 
+        // Stored as its NAME, not its underlying integer. As an int, adding a member or
+        // reordering the ones that exist silently changes what every existing row means, with
+        // nothing to catch it - the same reasoning that makes NotificationKind and OrderStatus
+        // cross the wire as names. HasDefaultValue is what backfills the rows that already exist
+        // when the column is added; CLR default and database default are both Member, so there is
+        // no sentinel mismatch for EF to trip over.
+        builder.Property(u => u.Role)
+            .IsRequired()
+            .HasMaxLength(32)
+            .HasDefaultValue(UserRole.Member)
+            .HasConversion<string>();
+
         builder.Property(u => u.SecurityStamp).IsRequired().HasMaxLength(User.MaxSecurityStampLength);
 
         // DomainEvents is transient state the interceptor drains before save; it is not

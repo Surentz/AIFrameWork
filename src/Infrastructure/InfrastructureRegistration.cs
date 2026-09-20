@@ -74,17 +74,10 @@ public static class InfrastructureRegistration
         services.AddCommand<ChangePassword, SessionView, ChangePasswordHandler>();
         services.AddCommand<SignOutEverywhere, bool, SignOutEverywhereHandler>();
         services.AddQuery<GetUser, SessionView, GetUserHandler>();
+        services.AddCommand<ReconcileAdministrators, AdministratorReconciliation,
+            ReconcileAdministratorsHandler>();
 
-        services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
-        services.AddScoped<IValidator<ShipOrder>, ShipOrderValidator>();
-        services.AddScoped<IValidator<CancelOrder>, CancelOrderValidator>();
-        services.AddScoped<IValidator<MarkNotificationRead>, MarkNotificationReadValidator>();
-        services.AddScoped<IValidator<CreateProduct>, CreateProductValidator>();
-        services.AddScoped<IValidator<UpdateProduct>, UpdateProductValidator>();
-        services.AddScoped<IValidator<RegisterUser>, RegisterUserValidator>();
-        services.AddScoped<IValidator<SignIn>, SignInValidator>();
-        services.AddScoped<IValidator<ChangePassword>, ChangePasswordValidator>();
-
+        RegisterValidators(services);
         RegisterDomainEvents(services);
 
         // A second handler for the same event: OutboxWorkItemProcessor fans out to every
@@ -95,6 +88,25 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedConfirmationHandler>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Split out of <see cref="AddMessaging"/> for the same MA0051 reason as
+    /// <c>RegisterDomainEvents</c> below — the rule is satisfied rather than suppressed. Purely
+    /// mechanical: explicit registration, never assembly scanning, so a validator stays as
+    /// greppable as the command it guards.
+    /// </summary>
+    private static void RegisterValidators(IServiceCollection services)
+    {
+        services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
+        services.AddScoped<IValidator<ShipOrder>, ShipOrderValidator>();
+        services.AddScoped<IValidator<CancelOrder>, CancelOrderValidator>();
+        services.AddScoped<IValidator<MarkNotificationRead>, MarkNotificationReadValidator>();
+        services.AddScoped<IValidator<CreateProduct>, CreateProductValidator>();
+        services.AddScoped<IValidator<UpdateProduct>, UpdateProductValidator>();
+        services.AddScoped<IValidator<RegisterUser>, RegisterUserValidator>();
+        services.AddScoped<IValidator<SignIn>, SignInValidator>();
+        services.AddScoped<IValidator<ChangePassword>, ChangePasswordValidator>();
     }
 
     /// <summary>

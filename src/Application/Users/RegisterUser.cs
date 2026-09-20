@@ -59,6 +59,6 @@ public sealed class RegisterUserHandler(IUserRepository users, IPasswordHasher h
         await users.AddAsync(user, cancellationToken).ConfigureAwait(false);
 
         return Result.Success(
-            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp));
+            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp, user.Role));
     }
 }

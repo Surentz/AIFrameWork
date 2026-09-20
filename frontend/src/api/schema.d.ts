@@ -778,6 +778,66 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/monitoring/access": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Confirms monitoring access and identifies the operator. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["MonitoringAccessResponse"];
+                        readonly "application/json": components["schemas"]["MonitoringAccessResponse"];
+                        readonly "text/json": components["schemas"]["MonitoringAccessResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/auth/register": {
         readonly parameters: {
             readonly query?: never;
@@ -1171,6 +1231,21 @@ export interface components {
             readonly rememberMe: boolean;
         };
         /**
+         * @description Who is looking at the monitoring page. Carries no operational data yet — phases 2 to 4 add
+         *     endpoints for that beside this one.
+         */
+        readonly MonitoringAccessResponse: {
+            /** Format: uuid */
+            readonly userId: string;
+            readonly username: string;
+            /**
+             * @description Always UserRole.Admin on a successful response — the policy admits nobody
+             *     else. Returned anyway so the page can render who it is showing, and so a future read-only
+             *     operator role has somewhere to appear without a contract change.
+             */
+            readonly role: components["schemas"]["UserRole"];
+        };
+        /**
          * @description What a notification is about. Persisted by name rather than by number (see the EF
          *     configuration), so the numeric values here are free to be reordered — but the NAMES are a
          *     stored contract: renaming one orphans every row already written under the old name.
@@ -1353,6 +1428,14 @@ export interface components {
             readonly userId: string;
             readonly username: string;
             readonly displayName: string;
+            /**
+             * @description What the caller may do beyond their own data. Published so the SPA can decide whether to
+             *     render the monitoring nav entry — cosmetics, not the control. Authorization is the policy
+             *     on the server, which reads the role from the database on every request and never from
+             *     anything the client was told. Crosses the wire as a NAME ("Admin"), via the
+             *     JsonStringEnumConverter registered on both JsonOptions types in Program.cs. See ADR 0020.
+             */
+            readonly role: components["schemas"]["UserRole"];
         };
         /** @description The badge count, on its own so a client polling it transfers one number. */
         readonly UnreadCountResponse: {
@@ -1369,6 +1452,11 @@ export interface components {
             /** Format: double */
             readonly price: number | string;
         };
+        /**
+         * @description What a user may do beyond their own data.
+         * @enum {unknown}
+         */
+        readonly UserRole: "Member" | "Admin";
     };
     responses: never;
     parameters: never;

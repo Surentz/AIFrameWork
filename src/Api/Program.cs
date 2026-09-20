@@ -10,11 +10,13 @@ using AiFramework.Api.Observability;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Notifications;
 using AiFramework.Application.Users;
+using AiFramework.Domain.Users;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Persistence;
 using AiFramework.Infrastructure.Resilience;
+using AiFramework.Infrastructure.Security;
 using JasperFx;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -143,16 +145,32 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             // every request in the process.
             var validator = context.HttpContext.RequestServices.GetRequiredService<ISessionValidator>();
 
-            if (!await validator
-                    .IsStampCurrentAsync(id, stamp, context.HttpContext.RequestAborted)
-                    .ConfigureAwait(false))
+            var authority = await validator
+                .ValidateAsync(id, stamp, context.HttpContext.RequestAborted)
+                .ConfigureAwait(false);
+
+            if (authority is null)
             {
                 await RejectAsync(context).ConfigureAwait(false);
+                return;
             }
+
+            ApplyRole(context, principal, authority.Role);
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+    options.AddPolicy(
+        AuthorizationPolicies.Monitoring,
+        policy => policy
+            .RequireAuthenticatedUser()
+            .RequireRole(nameof(UserRole.Admin))));
+
+// Bound here rather than inside AddAdministratorRoles, for the same reason CacheOptions is bound
+// here: a registration that binds configuration itself cannot be resolved from a bare
+// ServiceCollection in a unit test. See ADR 0020.
+builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection("Admin"));
+builder.Services.AddAdministratorRoles();
 
 // The caller, as an Application port. HttpContextAccessor is what makes the claims reachable
 // from a handler; scoped because "who is calling" is per-request.
@@ -415,6 +433,45 @@ static async Task<int> RunTheWebApplicationAsync(WebApplication webApplication)
 {
     await webApplication.RunAsync();
     return 0;
+}
+
+// Replaces the request's principal with one carrying the role just read from the database.
+//
+// The role is NEVER minted into the cookie at sign-in (ADR 0020): it is read on every
+// authenticated request, alongside the stamp, so a demotion takes effect on the demoted user's
+// very next request with no forced sign-out and no TTL.
+//
+// Every existing role claim is STRIPPED before the current one is added, and that is
+// load-bearing rather than tidy. SlidingExpiration is on, so the cookie handler re-issues the
+// ticket periodically from whatever principal is current - which means a role claim can end up
+// persisted in a cookie despite never being put there deliberately. Adding without stripping
+// would then let a stale Admin claim from an old cookie outlive the demotion that removed it.
+// Rebuilding from scratch each request makes what the cookie happens to carry irrelevant.
+//
+// A Member carries no role claim at all: absence is the default, and RequireRole(Admin) is the
+// only thing that reads it.
+static void ApplyRole(CookieValidatePrincipalContext context, ClaimsPrincipal principal, UserRole role)
+{
+    var claims = principal.Claims
+        .Where(claim => !string.Equals(claim.Type, ClaimTypes.Role, StringComparison.Ordinal))
+        .ToList();
+
+    if (role is not UserRole.Member)
+    {
+        claims.Add(new Claim(ClaimTypes.Role, role.ToString()));
+    }
+
+    // The scheme as authenticationType is what keeps IsAuthenticated true; the last two arguments
+    // are what make RequireRole and User.IsInRole look at ClaimTypes.Role rather than nothing.
+    var identity = new ClaimsIdentity(
+        claims,
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        ClaimTypes.Name,
+        ClaimTypes.Role);
+
+    // ReplacePrincipal alone, without ShouldRenew: this swaps the principal for THIS request and
+    // asks for no new cookie to be written.
+    context.ReplacePrincipal(new ClaimsPrincipal(identity));
 }
 
 // Both rejection paths do the same two things, and doing only the first leaves the dead cookie

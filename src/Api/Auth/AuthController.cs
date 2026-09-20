@@ -179,6 +179,7 @@ public sealed class AuthController(
         UserId = session.UserId,
         Username = session.Username,
         DisplayName = session.DisplayName,
+        Role = session.Role,
     };
 
     /// <summary>

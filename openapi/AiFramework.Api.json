@@ -1016,6 +1016,76 @@
         }
       }
     },
+    "/api/monitoring/access": {
+      "get": {
+        "tags": [
+          "Monitoring"
+        ],
+        "summary": "Confirms monitoring access and identifies the operator.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringAccessResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringAccessResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringAccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/register": {
       "post": {
         "tags": [
@@ -1516,6 +1586,28 @@
           }
         }
       },
+      "MonitoringAccessResponse": {
+        "required": [
+          "userId",
+          "username",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "role": {
+            "description": "Always UserRole.Admin on a successful response — the policy admits nobody\nelse. Returned anyway so the page can render who it is showing, and so a future read-only\noperator role has somewhere to appear without a contract change.",
+            "$ref": "#/components/schemas/UserRole"
+          }
+        },
+        "description": "Who is looking at the monitoring page. Carries no operational data yet — phases 2 to 4 add\nendpoints for that beside this one."
+      },
       "NotificationKind": {
         "enum": [
           "OrderPlaced",
@@ -1988,7 +2080,8 @@
         "required": [
           "userId",
           "username",
-          "displayName"
+          "displayName",
+          "role"
         ],
         "type": "object",
         "properties": {
@@ -2001,6 +2094,10 @@
           },
           "displayName": {
             "type": "string"
+          },
+          "role": {
+            "description": "What the caller may do beyond their own data. Published so the SPA can decide whether to\nrender the monitoring nav entry — cosmetics, not the control. Authorization is the policy\non the server, which reads the role from the database on every request and never from\nanything the client was told. Crosses the wire as a NAME (\"Admin\"), via the\nJsonStringEnumConverter registered on both JsonOptions types in Program.cs. See ADR 0020.",
+            "$ref": "#/components/schemas/UserRole"
           }
         },
         "description": "Who the caller is. Carries no password material, by construction."
@@ -2048,6 +2145,13 @@
           }
         },
         "description": "No Sku: it is the catalogue's business key and the domain refuses to change it. No Id\neither — that comes from the route, so a body that disagreed with the URL could not arise."
+      },
+      "UserRole": {
+        "enum": [
+          "Member",
+          "Admin"
+        ],
+        "description": "What a user may do beyond their own data."
       }
     }
   },
@@ -2066,6 +2170,9 @@
     },
     {
       "name": "Notifications"
+    },
+    {
+      "name": "Monitoring"
     },
     {
       "name": "Auth"

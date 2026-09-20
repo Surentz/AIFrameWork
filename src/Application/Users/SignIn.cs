@@ -79,7 +79,7 @@ public sealed class SignInHandler(IUserRepository users, IPasswordHasher hasher,
         }
 
         return Result.Success(
-            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp));
+            new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp, user.Role));
     }
 
     /// <summary>

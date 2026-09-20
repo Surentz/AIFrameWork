@@ -59,7 +59,8 @@ public sealed class SignInHandlerTests
         var result = await handler.HandleAsync(new SignIn("Ada", "correct horse"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().Be(new SessionView(ada.Id, "Ada", "Ada Lovelace", ada.SecurityStamp));
+        result.Value.Should().Be(
+            new SessionView(ada.Id, "Ada", "Ada Lovelace", ada.SecurityStamp, UserRole.Member));
     }
 
     [Fact]

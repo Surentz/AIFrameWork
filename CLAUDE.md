@@ -385,7 +385,7 @@ See ADR 0005.
 ```bash
 dotnet restore src/Api
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
-  Wolverine__Durable=false \
+  Wolverine__Durable=false Admin__ReconcileOnStart=false \
   dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 npm run generate:api --prefix frontend
 ```
@@ -399,9 +399,13 @@ does not restore implicitly, so a fresh clone fails with NETSDK1004. It cannot b
 NuGet's props, and the OpenAPI XML-comment source generator then fails with CS9137 about
 interceptors.
 **An explicit target, not part of `dotnet build`.** Generation runs the whole application, so it
-needs both environment variables: without a connection string it fails on the startup guard in
-`Program.cs`, and with one but still durable, Wolverine's startup migration dials Postgres
-(ADR 0005). The connection string is never actually opened — it only has to be non-empty.
+needs all three environment variables: without a connection string it fails on the startup guard
+in `Program.cs`; with one but still durable, Wolverine's startup migration dials Postgres
+(ADR 0005); and with `Admin__ReconcileOnStart` left on, `AdminReconciler` dials it as well and the
+generator dies with an `ObjectDisposedException` that names nothing useful (ADR 0020). The
+connection string is never actually opened — it only has to be non-empty, and **any new startup
+path that would open it needs its own switch here**. `codegen write` needs only the first two: a
+JasperFx command does not start hosted services.
 
 Generating on every build was tried and reverted: it made a plain `dotnet build` of `src/Api`
 fail without those variables *even with the database running*, which would have broken every

@@ -484,7 +484,7 @@ and `frontend/src/api/schema.d.ts` from that. After changing a controller, a DTO
 ```bash
 dotnet restore src/Api
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
-  Wolverine__Durable=false \
+  Wolverine__Durable=false Admin__ReconcileOnStart=false \
   dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 npm run generate:api --prefix frontend
 ```

@@ -106,7 +106,7 @@ authenticated user is equal: `[Authorize(Policy` appears nowhere in the solution
 
 ### Tasks
 
-- [ ] **1.1** Add `UserRole` and `User.Role` to `src/Domain/Users/User.cs`, with a
+- [x] **1.1** Add `UserRole` and `User.Role` to `src/Domain/Users/User.cs`, with a
       `ChangeRole(UserRole)` method that **does NOT rotate `SecurityStamp`** — see ADR 0020. The
       role is read from the database on every request rather than carried in the cookie, so there
       is no issued credential holding stale authority to invalidate, and rotating would sign a user
@@ -114,19 +114,19 @@ authenticated user is equal: `[Authorize(Policy` appears nowhere in the solution
       the same commit**: its "(from plan 2) a permission change" parenthetical is superseded, and
       the list of rotation triggers stays at three. Unit tests in `tests/Domain.Tests`, including
       one asserting a role change leaves the stamp untouched.
-- [ ] **1.2** EF configuration + migration `AddUserRole`. Store the enum as a **string**, not an
+- [x] **1.2** EF configuration + migration `AddUserRole`. Store the enum as a **string**, not an
       int: `NotificationKind` and `OrderStatus` already cross the wire as names for exactly the
       reason that reordering members silently changes what stored values mean.
-- [ ] **1.3** `AdminOptions` bound from `Admin:Usernames`, with validation. Empty is legal and
+- [x] **1.3** `AdminOptions` bound from `Admin:Usernames`, with validation. Empty is legal and
       means "no administrators", which must not fail startup.
-- [ ] **1.4** `AdminReconciler` — an idempotent single-statement `UPDATE` promoting listed
+- [x] **1.4** `AdminReconciler` — an idempotent single-statement `UPDATE` promoting listed
       usernames and demoting anyone holding `Admin` who is no longer listed, run by a hosted
       service at API startup. Idempotent because **both API replicas run it**; concurrent identical
       updates are harmless, and the `UPDATE` is conditional on the role actually differing, so an
       unchanged list writes nothing at all. Demotion needs no stamp rotation: the role is read per
       request, so it takes effect on the demoted user's next one. Match on `UsernameNormalized`,
       never `Username` — `User.Normalize` is the only lookup key.
-- [ ] **1.5** Authorization policy, fed by a **per-request read**. Widen `ISessionValidator` from
+- [x] **1.5** Authorization policy, fed by a **per-request read**. Widen `ISessionValidator` from
       `IsStampCurrentAsync` returning `bool` to a validation returning the verdict **and** the
       role: `SessionValidator` already issues one projected, uncached, primary-key read per
       authenticated request, so adding `Role` to that `Select` is the same row on the same index
@@ -135,16 +135,44 @@ authenticated user is equal: `[Authorize(Policy` appears nowhere in the solution
       requiring `UserRole.Admin`. **The role is never written into the cookie** — that is the whole
       point, and it is what makes a demotion take effect immediately. Every call site and test
       double of `ISessionValidator` moves with the signature.
-- [ ] **1.6** Extend `GET /api/auth/me`'s `SessionView` with the role, so the SPA can decide
+- [x] **1.6** Extend `GET /api/auth/me`'s `SessionView` with the role, so the SPA can decide
       whether to render the nav entry. Regenerate the contract.
-- [ ] **1.7** Frontend: a `RequireRole` route element mirroring `RequireAuth`, the `/monitoring`
+- [x] **1.7** Frontend: a `RequireRole` route element mirroring `RequireAuth`, the `/monitoring`
       route behind it, and a nav entry rendered only for admins. The page itself is a stub this
       phase.
-- [ ] **1.8** Integration tests: a `Member` gets **403** (not 404, not 401) on a monitoring
+- [x] **1.8** Integration tests: a `Member` gets **403** (not 404, not 401) on a monitoring
       endpoint; an `Admin` gets 200; an anonymous caller gets 401; and **a demotion takes effect on
       the next request of an already-signed-in admin, with no re-authentication** — the test that
       proves the role is not cookie-borne. Vitest coverage for `RequireRole` and for the nav entry
       being absent for a member.
+
+### What changed during implementation
+
+Three departures from the tasks above, each forced by something that only showed up once the code
+ran. Recorded here so this plan still reads correctly against the code.
+
+- **`AdminOptions`, its validator and `AdminReconciler` live in `src/Infrastructure/Security`,
+  not in `src/Api/Auth`.** Surviving an absent database means catching what an absent database
+  throws, and that turned out to be **two** types: `DbException` for a refusal the provider
+  reports directly, and EF's `RetryLimitExceededException` once `EnableRetryOnFailure` has
+  exhausted its attempts on a transient one. The second is an EF type and `src/Api` contains no
+  EF reference at all — so the reconciler moved to the layer where EF is already at home, and Api
+  composes it through `AddAdministratorRoles()` with both types staying `internal`.
+- **A new configuration switch, `Admin__ReconcileOnStart`.** OpenAPI document generation runs the
+  whole application against a connection string that is never opened; the reconcile opened it and
+  failed the `contract` build with an `ObjectDisposedException` naming nothing useful. It is now
+  off in CI's contract job and in the documented regeneration command, exactly parallel to
+  `Wolverine__Durable=false` and for the identical reason. `codegen write` does NOT need it — a
+  JasperFx command never starts hosted services, confirmed by running it both ways.
+- **`HealthTests` sets that switch too.** It stands up a host with a placeholder connection string
+  precisely to prove `/health` needs no database, and its own comment records the Wolverine spike
+  breaking it the same way once before. It is the canary for this class of change, and it caught
+  this one.
+
+The reconcile itself is entity-based — load the bounded candidate set, call `User.ChangeRole`,
+let the unit of work commit — rather than the single set-based `UPDATE` task 1.4 first described.
+`ChangeRole` reporting whether it actually moved is what keeps an unchanged list from dirtying
+anything, so the "writes nothing at all" property survives the change.
 
 ### Traps
 

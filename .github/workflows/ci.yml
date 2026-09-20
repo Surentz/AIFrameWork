@@ -169,15 +169,19 @@ jobs:
       # its own invocation.
       - run: dotnet restore src/Api
 
-      # BOTH variables are required, and Task 1 proved why. The generator runs the application:
-      # without a connection string it dies on Program.cs's startup guard ("ConnectionStrings:
-      # Default is not configured"), and with one but still durable, Wolverine's startup
-      # migration dials Postgres (ADR 0005). There is no database in this job. The connection
-      # string is never opened - it only has to be non-empty.
+      # ALL THREE variables are required, and each was proved by a red build rather than
+      # reasoned out. The generator runs the application: without a connection string it dies on
+      # Program.cs's startup guard ("ConnectionStrings:Default is not configured"); with one but
+      # still durable, Wolverine's startup migration dials Postgres (ADR 0005); and with the
+      # administrator reconcile on, AdminReconciler dials it too, failing the generator with an
+      # ObjectDisposedException rather than anything that names the cause (ADR 0020). There is no
+      # database in this job. The connection string is never opened - it only has to be non-empty,
+      # and every startup path that would open it has to be switched off here.
       - name: Regenerate the OpenAPI document
         env:
           ConnectionStrings__Default: 'Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y'
           Wolverine__Durable: 'false'
+          Admin__ReconcileOnStart: 'false'
         run: dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 
       - name: Regenerate the TypeScript schema

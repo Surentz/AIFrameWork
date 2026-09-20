@@ -1,3 +1,5 @@
+using AiFramework.Domain.Users;
+
 namespace AiFramework.Api.Auth;
 
 /// <summary>
@@ -41,4 +43,13 @@ public sealed record SessionResponse
     public required string Username { get; init; }
 
     public required string DisplayName { get; init; }
+
+    /// <summary>
+    /// What the caller may do beyond their own data. Published so the SPA can decide whether to
+    /// render the monitoring nav entry — cosmetics, not the control. Authorization is the policy
+    /// on the server, which reads the role from the database on every request and never from
+    /// anything the client was told. Crosses the wire as a NAME ("Admin"), via the
+    /// JsonStringEnumConverter registered on both JsonOptions types in Program.cs. See ADR 0020.
+    /// </summary>
+    public required UserRole Role { get; init; }
 }

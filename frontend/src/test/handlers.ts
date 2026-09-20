@@ -44,10 +44,21 @@ export const aSession: Session = {
   userId: '33333333-3333-3333-3333-333333333333',
   username: 'ada',
   displayName: 'Ada Lovelace',
+  role: 'Member',
 };
+
+/** The same person, promoted. For the screens that render differently for an administrator. */
+export const anAdminSession: Session = { ...aSession, role: 'Admin' };
 
 export const handlers = [
   http.post('/api/auth/login', () => HttpResponse.json(aSession)),
+  http.get('/api/monitoring/access', () =>
+    HttpResponse.json({
+      userId: anAdminSession.userId,
+      username: anAdminSession.username,
+      role: 'Admin',
+    }),
+  ),
   http.post('/api/auth/register', () => HttpResponse.json(aSession)),
   // Signed in by default: most screens under test live behind RequireAuth, and a suite that
   // had to sign in first would be testing the guard over and over instead of the screen.
