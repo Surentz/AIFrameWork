@@ -438,6 +438,44 @@ query cache. Do not make `GetUser` `ICacheable`.
 
 See ADR 0011.
 
+## The administrator role
+
+`User.Role` is `Member` or `Admin`. Only the monitoring page (`/api/monitoring/*`,
+`[Authorize(Policy = AuthorizationPolicies.Monitoring)]`) requires `Admin`; everything else is
+still "any authenticated user", because ADR 0007 puts ownership in the query and every other
+endpoint returns only the caller's own data.
+
+**The role is read from the database on every authenticated request, never carried in the
+cookie.** `SessionValidator` already pays for one projected, uncached, primary-key read per
+request for ADR 0011's security stamp, so `Role` rides along on the same row and the same index
+seek. `Program.cs`'s `OnValidatePrincipal` attaches it to the principal with `ReplacePrincipal`
+and does not renew the cookie.
+
+Four things that will cost you time:
+
+- **A role change does NOT rotate the security stamp**, and must not. Nothing issued carries the
+  role, so there is nothing stale to invalidate — and rotating would sign every administrator out
+  on every API restart, courtesy of the startup reconciler. ADR 0011's own summary anticipated the
+  opposite; ADR 0020 supersedes it, and the rotation list stays at three.
+- **Configuration is the authority, so a promotion made by hand-written SQL is reverted at the
+  next API start.** `Admin__Usernames` is reconciled at startup — promote everyone listed, demote
+  every administrator who is not — which is what makes revocation work by removing a name. The
+  failure mode is "my change silently reverted on the next deploy".
+- **`Admin__ReconcileOnStart=false` is required by anything that boots the app without a
+  database**, exactly like `Wolverine__Durable=false`. That is the OpenAPI contract command above
+  and CI's `contract` job; `HealthTests` sets it too. `codegen write` does not need it — a JasperFx
+  command never starts hosted services. Any NEW startup path that dials Postgres needs the same
+  treatment, and `HealthTests` is the canary that catches it.
+- **The reconciler lives in `src/Infrastructure/Security`, not beside the policy.** Surviving an
+  absent database means catching both `DbException` and EF's `RetryLimitExceededException` (the
+  execution strategy reports its own exhaustion rather than the inner fault), and `src/Api` carries
+  no EF reference at all. Api composes it through `AddAdministratorRoles()`.
+
+A blank or over-long entry in `Admin__Usernames` fails startup with an
+`OptionsValidationException`; an empty list is legal and means nobody.
+
+See ADR 0020.
+
 ## Caching
 
 Queries opt in by implementing `ICacheable` (`src/Application/Abstractions/Caching.cs`); commands
