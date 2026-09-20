@@ -229,8 +229,10 @@ Indexed on `(StartedAt DESC)` and `(Status, StartedAt DESC)` — the two orders 
 
       - `After` runs inside the try, immediately after the handler, so it fires on success only.
       - `OnException` binds the exception **as its first parameter** and can take DI services
-        alongside it. `OnException(Envelope, Exception)` and `OnExceptionAsync(...)` are silently
-        dropped — no warning, green build, method simply absent from the adapter.
+        alongside it. `OnException(Envelope, Exception)` is silently dropped — no warning, green
+        build, method simply absent from the adapter. The async spelling is fine:
+        `OnExceptionAsync(Exception, …)` binds and is awaited, as do `BeforeAsync`/`AfterAsync`,
+        so the recorder needs no sync-over-async to reach the database.
       - **The generated catch block emits no rethrow.** An `OnException` method therefore swallows
         the failure and silently disables this host's whole retry and dead-letter policy. The
         middleware must rethrow with `ExceptionDispatchInfo.Capture(exception).Throw()` —

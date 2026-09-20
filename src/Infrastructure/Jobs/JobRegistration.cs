@@ -89,6 +89,21 @@ public static class JobRegistration
     ];
 
     /// <summary>
+    /// <see cref="Jobs"/> keyed by type, for the lookup <c>JobRunMiddleware</c> makes per message
+    /// rather than per startup. A dictionary rather than a scan, the same posture
+    /// <c>CommandRegistry</c> holds.
+    /// </summary>
+    /// <remarks>
+    /// Declared AFTER <see cref="Jobs"/> on purpose: static field and auto-property initialisers
+    /// run in declaration order, so above the list this would initialise from a null one.
+    /// </remarks>
+    private static readonly Dictionary<Type, JobDescriptor> ByType =
+        Jobs.ToDictionary(static job => job.JobType);
+
+    /// <summary>The registration for a job type, or null if it is not registered.</summary>
+    public static JobDescriptor? DescriptorFor(Type jobType) => ByType.GetValueOrDefault(jobType);
+
+    /// <summary>
     /// The one place a lane becomes a queue name. Both the publish side (<see cref="MapJobs"/>)
     /// and the listen side (<see cref="ListenForJobs"/>) go through it, so the API cannot publish
     /// to a name the worker is not listening on — the same single-source rule
@@ -172,6 +187,12 @@ public static class JobRegistration
         opts.Policies.AddMiddleware(
             typeof(JobUserMiddleware),
             chain => chain.MessageType.IsAssignableTo(typeof(IUserScopedJob)));
+
+        // Every job chain, not just the user-scoped ones: a run is worth recording whoever it
+        // belongs to. Same predicate overload and same reasons as above.
+        opts.Policies.AddMiddleware(
+            typeof(JobRunMiddleware),
+            chain => chain.MessageType.IsAssignableTo(typeof(IJob)));
     }
 
     /// <summary>
@@ -265,6 +286,11 @@ public static class JobRegistration
         services.AddScoped<IOrderNotifier, LoggingOrderNotifier>();
         services.AddScoped<IOrderReportWriter, LoggingOrderReportWriter>();
         services.AddScoped<IOutboxRetention, OutboxRetention>();
+
+        // What JobRunMiddleware writes through. Scoped, because it holds the scoped DbContext -
+        // the same one the handler is using, which is what lets a failure row be written while
+        // that handler's own transaction is rolling back. See ADR 0021.
+        services.AddScoped<IJobRunRecorder, JobRunRecorder>();
 
         return services;
     }

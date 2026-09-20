@@ -31,15 +31,31 @@ namespace Internal.Generated.WolverineHandlers
             * The service registration for Microsoft.EntityFrameworkCore.DbContextOptions<AiFramework.Infrastructure.Persistence.AiFrameworkDbContext> is an 'opaque' lambda factory with the Scoped lifetime and requires service location
             */
             var outboxRetention = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Maintenance.IOutboxRetention>(serviceScope.ServiceProvider);
+            
+            /*
+            * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
+            */
+            var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
             // The actual message body
             var pruneProcessedOutbox = (AiFramework.Application.Maintenance.PruneProcessedOutbox)context.Envelope.Message;
 
-            System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Maintenance.PruneProcessedOutboxHandler");
-            System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Maintenance.PruneProcessedOutboxHandler");
-            var pruneProcessedOutboxHandler = new AiFramework.Application.Maintenance.PruneProcessedOutboxHandler(outboxRetention);
-            
-            // The actual message execution
-            await pruneProcessedOutboxHandler.Handle(pruneProcessedOutbox, cancellation).ConfigureAwait(false);
+            try
+            {
+                await AiFramework.Infrastructure.Jobs.JobRunMiddleware.BeforeAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
+                System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Maintenance.PruneProcessedOutboxHandler");
+                System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Maintenance.PruneProcessedOutboxHandler");
+                var pruneProcessedOutboxHandler = new AiFramework.Application.Maintenance.PruneProcessedOutboxHandler(outboxRetention);
+                
+                // The actual message execution
+                await pruneProcessedOutboxHandler.Handle(pruneProcessedOutbox, cancellation).ConfigureAwait(false);
+
+                await AiFramework.Infrastructure.Jobs.JobRunMiddleware.AfterAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
+            }
+
+            catch (System.Exception exception)
+            {
+                await AiFramework.Infrastructure.Jobs.JobRunMiddleware.OnExceptionAsync(exception, context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
+            }
 
         }
 
