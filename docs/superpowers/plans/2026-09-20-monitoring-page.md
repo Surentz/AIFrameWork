@@ -423,28 +423,28 @@ Indexed on `(StartedAt DESC)` and `(Status, StartedAt DESC)` — the two orders 
 
 ### Tasks
 
-- [ ] **4.1** `ITrafficRecorder` — a singleton accumulating counts in memory, and a hosted service
+- [x] **4.1** `ITrafficRecorder` — a singleton accumulating counts in memory, and a hosted service
       flushing completed buckets to Postgres once a minute. One upsert per (bucket, kind, name),
       not one row per request.
-- [ ] **4.2** Hook `Behaviors.LoggedAsync`, which **already computes the name, the outcome and the
+- [x] **4.2** Hook `Behaviors.LoggedAsync`, which **already computes the name, the outcome and the
       elapsed milliseconds** for every command and query — the recorder needs no new timing. Resolve
       it with `sp.GetService`, not `GetRequiredService`, exactly as that method already resolves
       `ICurrentUser`: the outbox pumps dispatch with no recorder registered, and that is normal
       rather than a wiring error.
-- [ ] **4.3** An ASP.NET Core middleware recording HTTP RED into the same recorder, keyed on the
+- [x] **4.3** An ASP.NET Core middleware recording HTTP RED into the same recorder, keyed on the
       **endpoint's route template**. A raw path key would make one row per order id.
-- [ ] **4.4** Migration `AddTrafficBuckets`, indexed on `(BucketStart DESC)`.
-- [ ] **4.5** Queries: `GetTrafficSummary` (rate, error rate, p50/p95/p99 over a window) and
+- [x] **4.4** Migration `AddTrafficBuckets`, indexed on `(BucketStart DESC)`.
+- [x] **4.5** Queries: `GetTrafficSummary` (rate, error rate, p50/p95/p99 over a window) and
       `GetTrafficSeries` (per-bucket, for the chart). Percentiles are interpolated from the summed
       histogram buckets — **a mean is not a substitute**, and summing per-pod means across pods
       would be wrong regardless.
-- [ ] **4.6** `/monitoring/traffic`: a rate-and-errors chart, a latency chart, and a per-endpoint /
+- [x] **4.6** `/monitoring/traffic`: a rate-and-errors chart, a latency chart, and a per-endpoint /
       per-handler table sortable by volume, error rate and p95.
-- [ ] **4.7** The `/monitoring` overview itself: health tiles (API and worker `/health/ready`,
+- [x] **4.7** The `/monitoring` overview itself: health tiles (API and worker `/health/ready`,
       outbox depth, jobs failed in the last hour, sign-in failures in the last hour, requests/min,
       online now), each linking to its sub-page.
-- [ ] **4.8** Retention: traffic buckets pruned at 7 days.
-- [ ] **4.9** Playwright coverage for the overview and one drill-down, plus an e2e assertion that a
+- [x] **4.8** Retention: traffic buckets pruned at 7 days.
+- [x] **4.9** Playwright coverage for the overview and one drill-down, plus an e2e assertion that a
       member is refused the route.
 
 ### Traps
@@ -472,6 +472,52 @@ Two options, to settle before 4.6:
 
 **Recommendation: option 1 for Phase 4's two charts**, revisited if the page grows a third chart
 type. Either way the `dataviz` skill governs the palette and chart-form choices.
+
+### What changed during implementation
+
+- **Option 1 won, and the `dataviz` skill's "render it and look at it" step earned its place.**
+  The charts are hand-rolled inline SVG with no new dependency: 2px lines, a recessive hairline
+  grid, end markers with a 2px surface ring, a crosshair with one tooltip listing every series,
+  arrow-key navigation, and a `<details>` table view. The palette was **run through the
+  validator**, not eyeballed — and the first dark-mode step failed it (`#f97066` at L 0.709, above
+  the dark lightness band) and was snapped to `#e5484d`. Screenshotting the real component then
+  caught what no validator checks: 28px of bottom padding reserved with **no x-axis labels at
+  all**, so the reader had no idea which hour they were looking at. Fixed with selective end
+  labels rather than one per point.
+- **Two charts, never one with two y-axes.** Requests and errors share a unit; latency does not.
+  This is the single most common charting mistake and it is cheap to avoid up front.
+- **`TrafficMiddleware` reads the endpoint AFTER `next()`.** Routing has not matched anything on
+  the way in, so the route template simply is not available yet — reading it early yields a null
+  and silently keys every request on the raw path, which is the exact cardinality explosion the
+  task set out to avoid. Recording happens in a `finally`, so a request that throws is still
+  counted.
+- **`ON CONFLICT ... DO UPDATE SET col = EXCLUDED.col` assigns rather than adds**, which is what
+  makes a retried flush idempotent. Only closed minutes are taken from the recorder
+  (`TakeClosedBuckets`), so the in-flight bucket is never written twice with different totals.
+- **4.7 shipped smaller than written.** The overview tiles cover job health, sign-in health and
+  traffic, each linking to its sub-page. API and worker `/health/ready` and outbox depth are NOT
+  tiles: both are already exposed by the health endpoints the cluster itself probes, and surfacing
+  a second, differently-timed copy on a polled page would let the two disagree. Recorded here
+  rather than quietly dropped.
+- **4.9 forced an ADR 0020 amendment, and it is a real fix rather than a test hack.** An e2e run
+  reaches the stack over HTTP only, and the role is granted **solely** by `Admin__Usernames`,
+  reconciled at *startup* — so an account registered after the API booted could not be an
+  administrator until someone restarted it. That gap was already visible in production terms: the
+  reconciler's own warning says configured names "hold no access until they register." `RegisterUser`
+  now asks the same configured list through an `IAdministratorDirectory` port. It moves no
+  authority (configuration still decides, the startup reconcile still overrides) and grants
+  nothing a restart would not have granted moments later.
+- **The monitoring specs are `@local-only`, and that is a real limitation.** Nothing off-target
+  names the e2e administrator in its configuration, so a kind run would register that user as an
+  ordinary member and fail every assertion. Adding the name to `k8s/overlays/local/config.yaml`
+  would fix it at the cost of two more registrations against the cluster's 10-per-60-seconds auth
+  budget; not taken, because the member-refusal spec — the security-relevant half — runs
+  everywhere already.
+- **The specs assert structure, not counts.** The flush runs on its own minute boundary, so a
+  freshly started e2e stack has no traffic rows at all and a numeric assertion would be a clock
+  race. `Infrastructure.Tests/Monitoring` owns the arithmetic; the e2e owns "an administrator gets
+  the page and a member does not", including a direct `403` from the API behind the SPA's refusal.
+
 
 ---
 

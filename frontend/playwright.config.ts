@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { API_PORT, E2E_CONNECTION_STRING, PREVIEW_PORT } from './e2e/support/env.ts';
+import { ADMIN_USERNAME } from './e2e/support/identity.ts';
 import { resolveTarget } from './e2e/support/target.ts';
 
 const target = resolveTarget();
@@ -85,6 +86,11 @@ export default defineConfig({
               // feed would be racing a WebSocket it does not need. The REST path is what these
               // specs exercise.
               Realtime__Enabled: 'false',
+              // The ONLY grant of the administrator role (ADR 0020), which is why the monitoring
+              // specs are @local-only: no off-target stack names this account. Double
+              // underscores and the __0 index, like every other key here - a single underscore
+              // binds nothing and warns nothing, and the list is bound as a collection.
+              Admin__Usernames__0: ADMIN_USERNAME,
             },
           },
           {

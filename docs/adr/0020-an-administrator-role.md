@@ -116,6 +116,25 @@ Both replicas run the reconciler. That is safe because the `UPDATE` is idempoten
 on the role actually differing, so concurrent identical statements are harmless and a restart with
 an unchanged list writes nothing at all.
 
+**Amended 2026-09-20: registration reads the same list.** Reconciling at startup alone left one
+gap, and the reconciler's own warning named it — *"`Admin:Usernames` names accounts that do not
+exist. They hold no access until they register."* On a genuinely fresh deployment that is the
+normal path, not an edge case: the operator is configured before they have an account, registers,
+sees an ordinary member's shell, and stays one until somebody restarts the API. `RegisterUser`
+therefore asks the same configured list, through an `IAdministratorDirectory` port over the same
+`AdminOptions`, and registers the account with `Admin` when it is named.
+
+This moves no authority. Configuration is still the only thing that grants the role, the match is
+still `User.Normalize`, and the startup reconcile still overrides everything at the next boot — so
+the two paths cannot disagree about a given list. It grants nothing a restart would not have
+granted moments later, which is also why it opens no new squatting risk: a name in the list is
+claimable by whoever registers it first, and that was already true.
+
+The port is registered in `AddInfrastructure`, not in `AddAdministratorRoles`. Only the API calls
+the latter, while `AddMessaging` registers `RegisterUserHandler` in *every* host and the generic
+host validates every descriptor it can construct — putting it beside the reconciler fails the
+worker's container build, the same way an unregistered `IClientContext` already did once.
+
 ### Refused with 403, and that does not contradict ADR 0006 or 0007
 
 Monitoring endpoints answer a non-administrator with **403**, not 404.

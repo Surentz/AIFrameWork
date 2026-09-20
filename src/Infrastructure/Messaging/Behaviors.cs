@@ -51,6 +51,16 @@ internal static class Behaviors
         // ICurrentUser registration to find, and a null caller id is the normal case there, not
         // a wiring error.
         var userId = sp.GetService<ICurrentUser>()?.Id;
+
+        // Resolved the same way and for the same class of reason: a bare ServiceCollection in a
+        // unit test registers no recorder, and dispatching without one is normal rather than a
+        // wiring error. The recorder reuses THIS method's existing timing and outcome rather than
+        // measuring anything a second time — the whole reason the hook is here. See ADR 0021.
+        var traffic = sp.GetService<ITrafficRecorder>();
+        var trafficKind = string.Equals(kind, "Command", StringComparison.Ordinal)
+            ? TrafficKind.Command
+            : TrafficKind.Query;
+
         var startedAt = Stopwatch.GetTimestamp();
         var faulted = true;
 
@@ -74,19 +84,8 @@ internal static class Behaviors
 
             var elapsedMs = (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
 
-            if (result.IsSuccess)
-            {
-                MessagingLog.Succeeded(logger, kind, name, elapsedMs);
-            }
-            else
-            {
-                // CA1873: LevelFor(...) is a method call, and passing it inline would be
-                // evaluated even when the resulting level turns out to be disabled. Assigning it
-                // first costs nothing extra — the switch itself is trivial — but keeps every
-                // argument to the generated delegate a plain value.
-                var level = LevelFor(result.Error.Kind);
-                MessagingLog.Failed(logger, level, kind, name, result.Error.Code, elapsedMs);
-            }
+            Report(logger, traffic, trafficKind, kind, name,
+                result.IsSuccess ? null : result.Error, elapsedMs);
 
             return result;
         }
@@ -96,8 +95,41 @@ internal static class Behaviors
             {
                 var elapsedMs = (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
                 MessagingLog.Faulted(logger, kind, name, elapsedMs);
+                traffic?.Record(trafficKind, name, TrafficOutcome.Faulted, elapsedMs);
             }
         }
+    }
+
+    /// <summary>
+    /// Records one dispatch's outcome to the log and to the traffic recorder, which are the same
+    /// event reported to two places. Extracted from <see cref="LoggedAsync"/> to keep it under
+    /// MA0051's line limit — the rule is satisfied rather than suppressed.
+    /// </summary>
+    /// <remarks><paramref name="error"/> is null on success.</remarks>
+    private static void Report(
+        ILogger logger,
+        ITrafficRecorder? traffic,
+        TrafficKind trafficKind,
+        string kind,
+        string name,
+        Error? error,
+        long elapsedMs)
+    {
+        if (error is null)
+        {
+            MessagingLog.Succeeded(logger, kind, name, elapsedMs);
+            traffic?.Record(trafficKind, name, TrafficOutcome.Succeeded, elapsedMs);
+
+            return;
+        }
+
+        // CA1873: LevelFor(...) is a method call, and passing it inline would be evaluated even
+        // when the resulting level turns out to be disabled. Assigning it first costs nothing
+        // extra — the switch itself is trivial — but keeps every argument to the generated
+        // delegate a plain value.
+        var level = LevelFor(error.Kind);
+        MessagingLog.Failed(logger, level, kind, name, error.Code, elapsedMs);
+        traffic?.Record(trafficKind, name, TrafficOutcome.Failed, elapsedMs);
     }
 
     /// <summary>

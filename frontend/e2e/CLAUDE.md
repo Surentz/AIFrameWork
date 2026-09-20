@@ -15,6 +15,7 @@ fixture below.
 | `signedInPage` | test | The default for anything needing a session |
 | `page` | test | Anonymous visitors, and sign-in tests |
 | `isolatedPage` / `freshUser` | test | See the rule below — not optional |
+| `adminPage` / `adminUser` | test / worker | The monitoring pages — `@local-only`, see below |
 | `api` | test | Arranging data over HTTP |
 | `workerUser` | worker | The user `signedInPage` is signed in as |
 
@@ -33,6 +34,12 @@ cluster run at about ten tests a minute, surfacing as navigation timeouts that l
 2. **Assert "contains", never "equals" or "is empty", on a list.** `workerUser` accumulates data
    within a run, and the kind cluster's Postgres is a StatefulSet with a PVC, so it accumulates
    across runs too. A test that genuinely needs an empty list takes `freshUser`.
+3. **`adminUser` is the one fixed username in the suite, and it must stay fixed.** The
+   administrator role is granted solely by the API's `Admin__Usernames` (ADR 0020), which
+   `playwright.config.ts` sets on the stack it starts — a generated name could never appear in a
+   config written before the run. Being fixed, it collides two ways a generated one cannot:
+   `--ui` keeps the database between runs, and two workers arrange in parallel. `registerOrSignIn`
+   absorbs both by signing in on a 409. Anything needing this fixture carries `@local-only`.
 
 ## Screens
 
@@ -73,15 +80,21 @@ says otherwise. Add the tag when a test needs any of these:
 - a database with nothing in it;
 - a single API replica — the cluster runs two.
 
-**Two specs carry it today, and the arithmetic is worth spelling out.** `registration.spec.ts`
-registers three times across its two tests (a UI register, an `api.register`, and the duplicate
-attempt); `change-password.spec.ts` spends four across its two — the first test only registers, the
-second registers and then signs in twice, once with the old password and once with the new.
-Seven of the suite's twelve tests' worth of auth calls sit in those two files alone.
-Run untagged against the cluster's shared 10-per-60-seconds partition, they would eat most of the
-budget before the rest of the suite got a permit. **A `kind` run therefore executes 8 of the 12
-tests, not all 12** — `npm run e2e` still runs all twelve locally, where the test host's limit is
-raised out of the way (ADR 0008).
+**Three specs carry it today, for two different reasons, and the arithmetic is worth spelling
+out.** `registration.spec.ts` registers three times across its two tests (a UI register, an
+`api.register`, and the duplicate attempt); `change-password.spec.ts` spends four across its two —
+the first test only registers, the second registers and then signs in twice, once with the old
+password and once with the new. Run untagged against the cluster's shared 10-per-60-seconds
+partition, those two alone would eat most of the budget before the rest of the suite got a permit.
+
+`monitoring.spec.ts` is tagged for a different reason: its three administrator tests need
+`Admin__Usernames` to name the e2e operator, and nothing off-target does. Against the cluster that
+account registers as an ordinary member and every assertion fails on the refusal. Its two
+*access* tests are untagged deliberately — refusing a member is the security-relevant half and
+needs no administrator, so it runs everywhere.
+
+**A `kind` run therefore executes 13 of the 20 tests, not all 20** — `npm run e2e` still runs all
+twenty locally, where the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
 

@@ -21,3 +21,9 @@ export type SignInEvent = components['schemas']['SignInEventResponse'];
 export type SignInEventPage = components['schemas']['SignInEventPageResponse'];
 
 export type SignInOutcome = components['schemas']['SignInOutcome'];
+
+export type TrafficSummary = components['schemas']['TrafficSummaryResponse'];
+
+export type TrafficRow = components['schemas']['TrafficRowResponse'];
+
+export type TrafficSeries = components['schemas']['TrafficSeriesResponse'];

@@ -3,7 +3,13 @@
    still write `{}`. Replacing it with a named parameter changes what Playwright injects. */
 import { test as base } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
-import { connectionOptions, createApiClient, registerUser } from './api.ts';
+import {
+  connectionOptions,
+  createApiClient,
+  registerOrSignIn,
+  registerUser,
+} from './api.ts';
+import { ADMIN_USERNAME } from '../support/identity.ts';
 import type { ApiClient, TestUser } from './api.ts';
 
 export type { TestUser } from './api.ts';
@@ -22,6 +28,7 @@ export async function newSignedInPage(browser: Browser, user: TestUser): Promise
 
 interface WorkerFixtures {
   workerUser: TestUser;
+  adminUser: TestUser;
 }
 
 interface TestFixtures {
@@ -29,6 +36,7 @@ interface TestFixtures {
   freshUser: TestUser;
   signedInPage: Page;
   isolatedPage: Page;
+  adminPage: Page;
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
@@ -56,6 +64,21 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(await registerUser());
   },
 
+  /**
+   * The operator. Worker-scoped like `workerUser`, and for the same rate-limit reason.
+   *
+   * It holds Admin only because `playwright.config.ts` names `ADMIN_USERNAME` in the API's
+   * `Admin__Usernames` — configuration is the sole grant (ADR 0020), so this fixture cannot
+   * promote anybody, and a spec that needs it must carry `@local-only`: no off-target stack
+   * names this account.
+   */
+  adminUser: [
+    async ({}, use) => {
+      await use(await registerOrSignIn(ADMIN_USERNAME));
+    },
+    { scope: 'worker' },
+  ],
+
   api: async ({}, use) => {
     const client = createApiClient();
     await use(client);
@@ -72,6 +95,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   /** For the session-invalidating tests described on `freshUser`. */
   isolatedPage: async ({ browser, freshUser }, use) => {
     const page = await newSignedInPage(browser, freshUser);
+    await use(page);
+    await page.context().close();
+  },
+
+  /** The default for a monitoring test. `@local-only` — see `adminUser`. */
+  adminPage: async ({ browser, adminUser }, use) => {
+    const page = await newSignedInPage(browser, adminUser);
     await use(page);
     await page.context().close();
   },

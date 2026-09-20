@@ -7,6 +7,8 @@ import type {
   SignInEventPage,
   SignInHealth,
   SignInOutcome,
+  TrafficSeries,
+  TrafficSummary,
 } from '../features/monitoring/types';
 import { request, requestVoid } from './client';
 
@@ -71,4 +73,14 @@ export function listSignInEvents(params: {
   }
 
   return request<SignInEventPage>(`/api/monitoring/sign-ins?${search.toString()}`);
+}
+
+export function getTrafficSummary(windowMinutes: number): Promise<TrafficSummary> {
+  return request<TrafficSummary>(`/api/monitoring/traffic?windowMinutes=${String(windowMinutes)}`);
+}
+
+export function getTrafficSeries(windowMinutes: number): Promise<TrafficSeries> {
+  return request<TrafficSeries>(
+    `/api/monitoring/traffic/series?windowMinutes=${String(windowMinutes)}`,
+  );
 }

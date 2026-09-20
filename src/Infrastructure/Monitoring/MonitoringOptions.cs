@@ -24,4 +24,11 @@ public sealed class MonitoringOptions
     /// keeps personal data, and lengthening it is a decision rather than a default.
     /// </summary>
     public int SignInEventRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Seven days, per ADR 0021 — shorter than the other two on purpose. This table grows with
+    /// request volume rather than with business events, so a week answers "what changed" without
+    /// it becoming an archive.
+    /// </summary>
+    public int TrafficRetentionDays { get; set; } = 7;
 }

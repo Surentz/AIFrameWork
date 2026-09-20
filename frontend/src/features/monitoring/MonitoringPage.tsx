@@ -1,14 +1,20 @@
 import { Link } from 'react-router-dom';
-import { useJobHealth, useMonitoringAccess } from './queries';
+import { useJobHealth, useMonitoringAccess, useSignInHealth, useTrafficSummary } from './queries';
 import './monitoring.css';
 
 /**
- * The overview. Phase 2 of docs/superpowers/plans/2026-09-20-monitoring-page.md fills the jobs
- * tiles; traffic and sign-in history arrive in phases 3 and 4 as their own tiles and sub-pages.
+ * The overview: one screen answering "is anything wrong", with every tile group linking to the
+ * sub-page that can answer "what, exactly".
+ *
+ * There is deliberately no tile for API/worker readiness or outbox depth. Both are already served
+ * by the health endpoints the cluster itself probes, on their own schedule; a second, polled copy
+ * here would eventually disagree with the one the platform acts on. See ADR 0021.
  */
 export function MonitoringPage(): React.JSX.Element {
   const access = useMonitoringAccess();
   const health = useJobHealth();
+  const signIns = useSignInHealth();
+  const traffic = useTrafficSummary(60);
 
   if (access.isPending) {
     return <p role="status">Loading monitoring…</p>;
@@ -38,7 +44,7 @@ export function MonitoringPage(): React.JSX.Element {
       )}
 
       {health.isSuccess ? (
-        <ul className="tiles">
+        <ul className="tiles" aria-label="Job health">
           <Tile label="Running" value={health.data.running} />
           <Tile label="Succeeded" value={health.data.succeeded} />
           <Tile label="Failed" value={health.data.failed} />
@@ -53,13 +59,58 @@ export function MonitoringPage(): React.JSX.Element {
       </p>
 
       <h2>Sign-ins</h2>
+
+      {signIns.error && (
+        <p className="alert" role="alert">
+          {signIns.error.message}
+        </p>
+      )}
+
+      {signIns.isSuccess && (
+        <ul className="tiles" aria-label="Sign-in health">
+          <Tile label="Succeeded" value={signIns.data.succeeded} />
+          <Tile label="Bad credentials" value={signIns.data.badCredentials} />
+          <Tile label="Unknown user" value={signIns.data.unknownUser} />
+          <Tile label="Online now" value={signIns.data.activeUsers} />
+        </ul>
+      )}
+
       <p>
         <Link to="/monitoring/logins">Sign-in history, locked accounts and who is online</Link>
       </p>
 
+      <h2>Traffic</h2>
+
+      {traffic.error && (
+        <p className="alert" role="alert">
+          {traffic.error.message}
+        </p>
+      )}
+
+      {traffic.isSuccess && (
+        <ul className="tiles" aria-label="Traffic">
+          <li className="tile">
+            <span className="tile__value">
+              {Number(traffic.data.requestsPerMinute).toFixed(1)}
+            </span>
+            <span className="tile__label">Requests per minute</span>
+          </li>
+          <li className={Number(traffic.data.errorRate) > 0 ? 'tile tile--attention' : 'tile'}>
+            <span className="tile__value">
+              {(Number(traffic.data.errorRate) * 100).toFixed(1)}%
+            </span>
+            <span className="tile__label">Error rate</span>
+          </li>
+        </ul>
+      )}
+
+      <p>
+        <Link to="/monitoring/traffic">Request rates, latency and the per-endpoint breakdown</Link>
+      </p>
+
       <p className="muted">
-        Counts cover the last 24 hours, except dead letters — those are the whole queue, because a
-        message stuck for a week is exactly the one worth seeing.
+        Job and sign-in counts cover the last 24 hours and traffic the last hour. Dead letters are
+        the whole queue, because a message stuck for a week is exactly the one worth seeing.
       </p>
     </section>
   );
@@ -81,7 +132,9 @@ function Tile({ label, value }: TileProps): React.JSX.Element {
 
   // A count that is not zero when zero is the healthy value. Colour is not the only signal: the
   // label beside it says what it counts, so this reads the same without relying on hue.
-  const attention = (label === 'Failed' || label === 'Dead-lettered') && count > 0;
+  const attention =
+    (label === 'Failed' || label === 'Dead-lettered' || label === 'Bad credentials' ||
+      label === 'Unknown user') && count > 0;
 
   return (
     <li className={attention ? 'tile tile--attention' : 'tile'}>

@@ -286,6 +286,77 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                     b.ToTable("job_runs", (string)null);
                 });
 
+            modelBuilder.Entity("AiFramework.Infrastructure.Monitoring.TrafficBucket", b =>
+                {
+                    b.Property<DateTimeOffset>("BucketStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("InstanceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("Bucket0")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket1")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket10")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket2")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket3")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket4")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket5")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket6")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket7")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket8")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Bucket9")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("DurationMsTotal")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Faulted")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Succeeded")
+                        .HasColumnType("integer");
+
+                    b.HasKey("BucketStart", "Kind", "Name", "InstanceId");
+
+                    b.HasIndex("BucketStart")
+                        .IsDescending()
+                        .HasDatabaseName("IX_TrafficBuckets_BucketStart_Desc");
+
+                    b.ToTable("traffic_buckets", (string)null);
+                });
+
             modelBuilder.Entity("AiFramework.Infrastructure.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")

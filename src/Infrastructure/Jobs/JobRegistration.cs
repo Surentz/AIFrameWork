@@ -97,6 +97,11 @@ public static class JobRegistration
         // sign_in_events holds IP addresses and user-agents, so this is what bounds how long this
         // application keeps personal data. ADR 0021.
         JobDescriptor.Scheduled<PruneSignInEvents>("0 25 3 * * ?"),
+
+        // Daily at 03:30. Seven days rather than thirty (ADR 0021): traffic buckets grow with
+        // request volume rather than with events, and a week answers "what changed" without the
+        // table becoming an archive.
+        JobDescriptor.Scheduled<PruneTrafficBuckets>("0 30 3 * * ?"),
     ];
 
     /// <summary>
@@ -170,7 +175,8 @@ public static class JobRegistration
             .IncludeType<RebuildOrderReportHandler>()
             .IncludeType<PruneProcessedOutboxHandler>()
             .IncludeType<PruneJobRunsHandler>()
-            .IncludeType<PruneSignInEventsHandler>();
+            .IncludeType<PruneSignInEventsHandler>()
+            .IncludeType<PruneTrafficBucketsHandler>();
 
         // Set on the WORKER only — the API keeps Wolverine 6's NotAllowed default, so this
         // relaxation reaches exactly the host that needs it.
@@ -308,16 +314,6 @@ public static class JobRegistration
         // the same one the handler is using, which is what lets a failure row be written while
         // that handler's own transaction is rolling back. See ADR 0021.
         services.AddScoped<IJobRunRecorder, JobRunRecorder>();
-
-        // The monitoring page's read side and its two actions. Registered here rather than in
-        // AddMessaging because all three are about jobs, and a host without AddJobs has no
-        // IJobScheduler for TriggerableJobs to enqueue through.
-        services.AddScoped<IJobRunReader, JobRunReader>();
-        services.AddScoped<IDeadLetterStore, DeadLetterStore>();
-        services.AddScoped<ITriggerableJobs, TriggerableJobs>();
-        services.AddScoped<IJobRunRetention, JobRunRetention>();
-        services.AddScoped<ISignInEventReader, SignInEventReader>();
-        services.AddScoped<ISignInEventRetention, SignInEventRetention>();
 
         return services;
     }

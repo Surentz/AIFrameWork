@@ -99,6 +99,21 @@ public static class InfrastructureRegistration
     }
 
     /// <summary>
+    /// The persistence ports, split out of <see cref="AddInfrastructure"/> for the same MA0051
+    /// reason as the other helpers here. Purely mechanical: one scoped adapter per port.
+    /// </summary>
+    private static void RegisterRepositories(IServiceCollection services)
+    {
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
+        services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ISessionValidator, SessionValidator>();
+    }
+
+    /// <summary>
     /// The monitoring page's queries and its two actions. Split out of
     /// <see cref="AddMessaging"/> for the same MA0051 reason as the validators below, and
     /// grouped because they arrive and change together.
@@ -113,6 +128,8 @@ public static class InfrastructureRegistration
         services.AddCommand<TriggerJob, bool, TriggerJobHandler>();
         services.AddQuery<GetSignInEvents, SignInEventPage, GetSignInEventsHandler>();
         services.AddQuery<GetSignInHealth, SignInHealthView, GetSignInHealthHandler>();
+        services.AddQuery<GetTrafficSummary, TrafficSummaryView, GetTrafficSummaryHandler>();
+        services.AddQuery<GetTrafficSeries, TrafficSeriesView, GetTrafficSeriesHandler>();
     }
 
     /// <summary>
@@ -188,17 +205,9 @@ public static class InfrastructureRegistration
                 maxRetryDelay: TimeSpan.FromSeconds(1),
                 errorCodesToAdd: null))
             .AddInterceptors(sp.GetRequiredService<DomainEventsInterceptor>()));
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddScoped<IOrderRepository, OrderRepository>();
-        services.AddScoped<INotificationRepository, NotificationRepository>();
-        services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
-        services.AddScoped<IProductRepository, ProductRepository>();
-        services.AddScoped<IUserRepository, UserRepository>();
-        services.AddScoped<ISessionValidator, SessionValidator>();
+        RegisterRepositories(services);
         services.AddSingleton<IClock, SystemClock>();
-        // Singleton: PasswordHasher<T> is stateless and thread-safe, and the object it wraps
-        // holds only the work-factor settings.
-        services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        RegisterSecurity(services);
 
         services.AddCaching();
 
@@ -215,11 +224,31 @@ public static class InfrastructureRegistration
         // ADR 0016.
         services.AddJobs();
 
+        // The monitoring page's read side, its retention sweeps, and traffic recording. After
+        // AddJobs because TriggerableJobs enqueues through the IJobScheduler it registers.
+        services.AddMonitoring();
+
         // ADR 0005 spike: registers only what the Wolverine handler needs. The Wolverine host
         // itself is wired in Program.cs, because UseWolverine hooks IHostBuilder, not IServiceCollection.
         services.AddWolverineEventPathServices();
 
         return services.AddMessaging();
+    }
+
+    /// <summary>
+    /// The two security primitives every host needs, split out of AddInfrastructure for the same
+    /// reason RegisterRepositories is: that method is at MA0051's length limit.
+    /// </summary>
+    private static void RegisterSecurity(IServiceCollection services)
+    {
+        // Singleton: PasswordHasher<T> is stateless and thread-safe, and the object it wraps
+        // holds only the work-factor settings.
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
+
+        // Singleton for the same reason, and registered HERE rather than in AddAdministratorRoles
+        // (which only the API calls): RegisterUserHandler depends on it, AddMessaging registers
+        // that handler in every host, and the generic host validates every descriptor.
+        services.AddSingleton<IAdministratorDirectory, AdministratorDirectory>();
     }
 
     /// <summary>The outbox pipeline. Called from AddInfrastructure; the hosted services start with the app.</summary>

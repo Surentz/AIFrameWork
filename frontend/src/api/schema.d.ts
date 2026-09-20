@@ -1355,6 +1355,130 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/monitoring/traffic": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Traffic over a trailing window, whole and per endpoint or handler. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly windowMinutes?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["TrafficSummaryResponse"];
+                        readonly "application/json": components["schemas"]["TrafficSummaryResponse"];
+                        readonly "text/json": components["schemas"]["TrafficSummaryResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/traffic/series": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The per-minute series behind the traffic chart. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly windowMinutes?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["TrafficSeriesResponse"];
+                        readonly "application/json": components["schemas"]["TrafficSeriesResponse"];
+                        readonly "text/json": components["schemas"]["TrafficSeriesResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/auth/register": {
         readonly parameters: {
             readonly query?: never;
@@ -2094,6 +2218,67 @@ export interface components {
          * @enum {unknown}
          */
         readonly SignInOutcome: "Succeeded" | "BadCredentials" | "LockedOut" | "UnknownUser" | "SignedOutEverywhere";
+        /**
+         * @description What kind of work a traffic measurement counted.
+         * @enum {unknown}
+         */
+        readonly TrafficKind: "Http" | "Command" | "Query";
+        /** @description One minute of the whole application's traffic. */
+        readonly TrafficPointResponse: {
+            /** Format: date-time */
+            readonly bucketStart: string;
+            /** Format: int64 */
+            readonly total: number | string;
+            /** Format: int64 */
+            readonly failed: number | string;
+            /** Format: int64 */
+            readonly faulted: number | string;
+            /** Format: double */
+            readonly p95Ms?: null | number | string;
+        };
+        /** @description One endpoint's or handler's traffic over a window. */
+        readonly TrafficRowResponse: {
+            readonly kind: components["schemas"]["TrafficKind"];
+            /** @description A route template for HTTP, a request type's name otherwise. Never a raw path. */
+            readonly name: string;
+            /** Format: int64 */
+            readonly total: number | string;
+            /** Format: int64 */
+            readonly failed: number | string;
+            /** Format: int64 */
+            readonly faulted: number | string;
+            /** Format: double */
+            readonly meanMs?: null | number | string;
+            /**
+             * Format: double
+             * @description Interpolated from summed histogram buckets, not derived from the mean — a mean cannot give
+             *     a percentile, and averaging per-pod means would be wrong even if it could. Null when the
+             *     window holds no measurements.
+             */
+            readonly p50Ms?: null | number | string;
+            /** Format: double */
+            readonly p95Ms?: null | number | string;
+            /** Format: double */
+            readonly p99Ms?: null | number | string;
+        };
+        readonly TrafficSeriesResponse: {
+            /** Format: date-time */
+            readonly since: string;
+            readonly points: readonly components["schemas"]["TrafficPointResponse"][];
+        };
+        readonly TrafficSummaryResponse: {
+            /** Format: date-time */
+            readonly since: string;
+            /** Format: double */
+            readonly requestsPerMinute: number | string;
+            /**
+             * Format: double
+             * @description Failed plus faulted, over total. Zero when nothing was measured.
+             */
+            readonly errorRate: number | string;
+            readonly overall: components["schemas"]["TrafficRowResponse"];
+            readonly rows: readonly components["schemas"]["TrafficRowResponse"][];
+        };
         readonly TriggerJobRequest: {
             readonly jobName: string;
         };

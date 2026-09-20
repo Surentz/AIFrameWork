@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
 import { server } from '../../test/handlers';
@@ -18,9 +18,27 @@ describe('MonitoringPage', () => {
   it('shows the job health tiles', async () => {
     renderPage();
 
-    expect(await screen.findByText('Succeeded')).toBeInTheDocument();
-    expect(screen.getByText('Dead-lettered')).toBeInTheDocument();
-    expect(screen.getByText('12')).toBeInTheDocument();
+    // Scoped: the overview now carries three tile groups, and "Succeeded" means something
+    // different in the jobs group and the sign-ins one.
+    const jobs = within(await screen.findByRole('list', { name: 'Job health' }));
+
+    expect(jobs.getByText('Succeeded')).toBeInTheDocument();
+    expect(jobs.getByText('Dead-lettered')).toBeInTheDocument();
+    expect(jobs.getByText('12')).toBeInTheDocument();
+  });
+
+  it('shows the sign-in and traffic tiles, each linking onward', async () => {
+    renderPage();
+
+    const signIns = within(await screen.findByRole('list', { name: 'Sign-in health' }));
+    expect(signIns.getByText('Online now')).toBeInTheDocument();
+
+    const traffic = within(screen.getByRole('list', { name: 'Traffic' }));
+    expect(traffic.getByText('Requests per minute')).toBeInTheDocument();
+
+    expect(
+      screen.getByRole('link', { name: /Request rates, latency/ }),
+    ).toBeInTheDocument();
   });
 
   it('links to the jobs drill-down', async () => {

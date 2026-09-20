@@ -101,6 +101,46 @@ export const handlers = [
       page: 1,
     }),
   ),
+  http.get('/api/monitoring/traffic', () =>
+    HttpResponse.json({
+      since: '2026-09-20T11:00:00+00:00',
+      requestsPerMinute: 12.5,
+      errorRate: 0.04,
+      overall: {
+        kind: 'Http',
+        name: '',
+        total: 750,
+        failed: 30,
+        faulted: 0,
+        meanMs: 18,
+        p50Ms: 9,
+        p95Ms: 240,
+        p99Ms: 900,
+      },
+      rows: [
+        {
+          kind: 'Http',
+          name: 'GET /api/orders',
+          total: 500,
+          failed: 20,
+          faulted: 0,
+          meanMs: 15,
+          p50Ms: 8,
+          p95Ms: 180,
+          p99Ms: 600,
+        },
+      ],
+    }),
+  ),
+  http.get('/api/monitoring/traffic/series', () =>
+    HttpResponse.json({
+      since: '2026-09-20T11:00:00+00:00',
+      points: [
+        { bucketStart: '2026-09-20T11:58:00+00:00', total: 10, failed: 0, faulted: 0, p95Ms: 12 },
+        { bucketStart: '2026-09-20T11:59:00+00:00', total: 14, failed: 2, faulted: 1, p95Ms: 240 },
+      ],
+    }),
+  ),
   http.get('/api/monitoring/sign-ins/health', () =>
     HttpResponse.json({
       succeeded: 9,

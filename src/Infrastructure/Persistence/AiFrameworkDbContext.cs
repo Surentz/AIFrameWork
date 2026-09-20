@@ -3,6 +3,7 @@ using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using AiFramework.Domain.Users;
 using AiFramework.Infrastructure.Jobs;
+using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Security;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -28,6 +29,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     public DbSet<JobRun> JobRuns => Set<JobRun>();
 
     public DbSet<SignInEvent> SignInEvents => Set<SignInEvent>();
+
+    public DbSet<TrafficBucket> TrafficBuckets => Set<TrafficBucket>();
 
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 

@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using AiFramework.Api;
 using AiFramework.Api.Auth;
+using AiFramework.Api.Monitoring;
 using AiFramework.Api.Notifications;
 using AiFramework.Api.Observability;
 using AiFramework.Application.Abstractions;
@@ -383,6 +384,12 @@ if (realtimeWarning is not null)
 // flag off, ForwardedHeadersOptions keeps its defaults, which forward nothing.
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+// Wraps authentication, authorization and the endpoints, so a request REFUSED by any of them is
+// still counted — a spike of 401s or 403s is exactly the sort of thing this page exists to show.
+// The middleware reads the matched route template after the inner pipeline has run, so it does
+// not depend on where routing sits relative to this line. See ADR 0021.
+app.UseMiddleware<TrafficMiddleware>();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

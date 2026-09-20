@@ -28,3 +28,13 @@ export function uniqueProductSku(): string {
 
 /** PasswordPolicy.MinimumLength is 12; this is comfortably above it. */
 export const PASSWORD = 'a long enough e2e password';
+
+/**
+ * The one username in this suite that is NOT unique, and must not be: it is the name
+ * `playwright.config.ts` puts in the API's `Admin__Usernames`, and configuration is the only
+ * thing that grants the administrator role (ADR 0020). A generated name could never appear in a
+ * config file written before the run.
+ *
+ * `registerOrSignIn` is what makes a fixed name safe across runs — see its own comment.
+ */
+export const ADMIN_USERNAME = 'e2e-admin';

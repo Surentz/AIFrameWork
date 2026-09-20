@@ -69,3 +69,37 @@ public sealed record LockedOutUserView(Guid UserId, string Username, DateTimeOff
 /// event to key off — the user who closed their browser looks identical to the one reading.
 /// </summary>
 public sealed record ActiveUsersView(int Count, TimeSpan Window);
+
+/// <summary>
+/// One name's traffic over a window: how much, how much of it failed, and how slow.
+/// </summary>
+/// <remarks>
+/// The percentiles are interpolated from summed histogram buckets, not derived from
+/// <see cref="MeanMs"/> — a mean cannot give a percentile, and averaging per-pod means would be
+/// wrong even if it could. Null when the window holds no measurements. See ADR 0021.
+/// </remarks>
+public sealed record TrafficRowView(
+    Abstractions.TrafficKind Kind,
+    string Name,
+    long Total,
+    long Failed,
+    long Faulted,
+    double? MeanMs,
+    double? P50Ms,
+    double? P95Ms,
+    double? P99Ms);
+
+/// <summary>Traffic over a window, whole and per name.</summary>
+public sealed record TrafficSummaryView(
+    DateTimeOffset Since,
+    double RequestsPerMinute,
+    double ErrorRate,
+    TrafficRowView Overall,
+    IReadOnlyList<TrafficRowView> Rows);
+
+/// <summary>One minute of the whole application's traffic, for the chart.</summary>
+public sealed record TrafficPointView(
+    DateTimeOffset BucketStart, long Total, long Failed, long Faulted, double? P95Ms);
+
+public sealed record TrafficSeriesView(
+    DateTimeOffset Since, IReadOnlyList<TrafficPointView> Points);

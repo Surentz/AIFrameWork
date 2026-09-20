@@ -460,7 +460,10 @@ Four things that will cost you time:
 - **Configuration is the authority, so a promotion made by hand-written SQL is reverted at the
   next API start.** `Admin__Usernames` is reconciled at startup — promote everyone listed, demote
   every administrator who is not — which is what makes revocation work by removing a name. The
-  failure mode is "my change silently reverted on the next deploy".
+  failure mode is "my change silently reverted on the next deploy". **`RegisterUser` reads the
+  same list too**, so a configured operator who registers after the API started holds the role
+  immediately instead of waiting for a restart; both paths ask one `IAdministratorDirectory`, so
+  they cannot disagree.
 - **`Admin__ReconcileOnStart=false` is required by anything that boots the app without a
   database**, exactly like `Wolverine__Durable=false`. That is the OpenAPI contract command above
   and CI's `contract` job; `HealthTests` sets it too. `codegen write` does not need it — a JasperFx
@@ -511,6 +514,51 @@ Four things that will cost you time:
   generic host validates every registered descriptor when it builds its container, so a missing
   implementation fails `codegen write` at container-build time, nowhere near a sign-in path that
   host does not have.
+
+See ADR 0021.
+
+## Traffic
+
+RED metrics — rate, errors, duration — for both the HTTP surface and every command and query,
+recorded per pod in memory and flushed to `traffic_buckets` on a minute boundary. One row per
+`(BucketStart, Kind, Name, InstanceId)`, never one row per request. `/monitoring/traffic` sums
+across instances, which is what makes two API replicas one number rather than whichever pod
+answered.
+
+`TrafficMiddleware` keys HTTP on `"{method} {route template}"`, taken off the matched endpoint
+**after** `next()` has run — a raw path would give one row per order id, and routing has not
+matched an endpoint yet on the way in. Commands and queries need no new instrumentation at all:
+`Behaviors.LoggedAsync` already computes the name, the outcome and the elapsed milliseconds, so
+the recorder is fed from there.
+
+Five things that will cost you time:
+
+- **Percentiles come from a fixed histogram, and a mean is not a substitute.**
+  `TrafficHistogram.Bounds` is `5/10/25/50/100/250/500/1000/2500/5000`ms plus an overflow bucket,
+  and p50/p95/p99 are interpolated from the summed counts. That summing is the whole point: counts
+  from two pods add, so the answer is the same as if one pod had done all the work. **Per-pod
+  means cannot be combined into a percentile, or into anything.** The bounds are a stored
+  contract — rows already written were counted against them, so changing one silently rewrites
+  history rather than improving it.
+- **`ITrafficRecorder` is resolved with `GetService`, not `GetRequiredService`**, exactly as
+  `LoggedAsync` already resolves `ICurrentUser`. The outbox pumps dispatch with no recorder in
+  scope and that is normal, not a wiring error.
+- **The flush is an upsert and must stay one.** `ON CONFLICT ... DO UPDATE SET col =
+  EXCLUDED.col` *assigns* rather than adds, so a retried flush of the same closed bucket is
+  idempotent. `TakeClosedBuckets` hands over only minutes that have ended; a pod that dies
+  mid-bucket loses at most its own last minute, which is the accepted price of not writing a row
+  per request.
+- **The worker records too, under its own `InstanceId`.** Without it every command a job runs is
+  invisible. Same recorder, same hosted service, different instance — and that is also why clock
+  skew between hosts is accepted rather than corrected: the bucket boundary is `IClock` truncated
+  to the minute, and nothing here may depend on sub-minute precision.
+- **Traffic is pruned at seven days**, not thirty like `sign_in_events`
+  (`Monitoring__TrafficRetentionDays`). It is the highest-volume table in the application and
+  carries no personal data, so the trade runs the other way.
+
+The charts are hand-rolled inline SVG — no chart library is installed, and the `dataviz` skill
+governs the palette and the chart forms. **Never a dual-axis chart:** requests and errors share a
+unit and one axis, latency is milliseconds and gets its own chart.
 
 See ADR 0021.
 

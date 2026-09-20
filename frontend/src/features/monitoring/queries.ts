@@ -5,6 +5,8 @@ import {
   getJobHealth,
   getMonitoringAccess,
   getSignInHealth,
+  getTrafficSeries,
+  getTrafficSummary,
   listDeadLetters,
   listJobRuns,
   listSignInEvents,
@@ -20,6 +22,8 @@ import type {
   SignInEventPage,
   SignInHealth,
   SignInOutcome,
+  TrafficSeries,
+  TrafficSummary,
 } from './types';
 
 export const monitoringKeys = {
@@ -34,6 +38,11 @@ export const monitoringKeys = {
   signInHealth: () => [...monitoringKeys.signIns(), 'health'] as const,
   signInEvents: (outcome: SignInOutcome | undefined, username: string, page: number) =>
     [...monitoringKeys.signIns(), 'events', outcome ?? 'all', username, page] as const,
+  traffic: () => [...monitoringKeys.all, 'traffic'] as const,
+  trafficSummary: (windowMinutes: number) =>
+    [...monitoringKeys.traffic(), 'summary', windowMinutes] as const,
+  trafficSeries: (windowMinutes: number) =>
+    [...monitoringKeys.traffic(), 'series', windowMinutes] as const,
 };
 
 /**
@@ -134,6 +143,32 @@ export function useSignInEvents(
     queryKey: monitoringKeys.signInEvents(outcome, username, page),
     queryFn: () => listSignInEvents({ outcome, username, page }),
     refetchInterval: SignInRefreshMs,
+    retry: false,
+  });
+}
+
+/**
+ * Traffic buckets are written once a minute, so asking more often than that returns the same
+ * numbers. Thirty seconds keeps a dashboard left open honest without polling for nothing.
+ */
+const TrafficRefreshMs = 30_000;
+
+export function useTrafficSummary(
+  windowMinutes: number,
+): UseQueryResult<TrafficSummary, ApiError> {
+  return useQuery({
+    queryKey: monitoringKeys.trafficSummary(windowMinutes),
+    queryFn: () => getTrafficSummary(windowMinutes),
+    refetchInterval: TrafficRefreshMs,
+    retry: false,
+  });
+}
+
+export function useTrafficSeries(windowMinutes: number): UseQueryResult<TrafficSeries, ApiError> {
+  return useQuery({
+    queryKey: monitoringKeys.trafficSeries(windowMinutes),
+    queryFn: () => getTrafficSeries(windowMinutes),
+    refetchInterval: TrafficRefreshMs,
     retry: false,
   });
 }

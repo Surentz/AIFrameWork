@@ -62,9 +62,10 @@ public sealed class User : Entity
     public DateTimeOffset RegisteredAt { get; private set; }
 
     /// <summary>
-    /// What this user may do beyond their own data. Every user registers as
-    /// <see cref="UserRole.Member"/>; only <see cref="ChangeRole"/> moves it, and only the
-    /// administrator reconciler calls that, driven from configuration. See ADR 0020.
+    /// What this user may do beyond their own data. Every user is constructed as
+    /// <see cref="UserRole.Member"/>; only <see cref="ChangeRole"/> moves it, and its two callers
+    /// — the startup reconciler and registration itself — both read the same configured list
+    /// rather than deciding anything here. See ADR 0020.
     /// </summary>
     public UserRole Role { get; private set; }
 

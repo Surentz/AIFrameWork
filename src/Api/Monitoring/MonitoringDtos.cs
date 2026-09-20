@@ -184,3 +184,66 @@ public sealed record SignInHealthResponse
 
     public required IReadOnlyList<LockedOutUserResponse> LockedOutUsers { get; init; }
 }
+
+/// <summary>One endpoint's or handler's traffic over a window.</summary>
+public sealed record TrafficRowResponse
+{
+    public required TrafficKind Kind { get; init; }
+
+    /// <summary>A route template for HTTP, a request type's name otherwise. Never a raw path.</summary>
+    public required string Name { get; init; }
+
+    public required long Total { get; init; }
+
+    public required long Failed { get; init; }
+
+    public required long Faulted { get; init; }
+
+    public double? MeanMs { get; init; }
+
+    /// <summary>
+    /// Interpolated from summed histogram buckets, not derived from the mean — a mean cannot give
+    /// a percentile, and averaging per-pod means would be wrong even if it could. Null when the
+    /// window holds no measurements.
+    /// </summary>
+    public double? P50Ms { get; init; }
+
+    public double? P95Ms { get; init; }
+
+    public double? P99Ms { get; init; }
+}
+
+public sealed record TrafficSummaryResponse
+{
+    public required DateTimeOffset Since { get; init; }
+
+    public required double RequestsPerMinute { get; init; }
+
+    /// <summary>Failed plus faulted, over total. Zero when nothing was measured.</summary>
+    public required double ErrorRate { get; init; }
+
+    public required TrafficRowResponse Overall { get; init; }
+
+    public required IReadOnlyList<TrafficRowResponse> Rows { get; init; }
+}
+
+/// <summary>One minute of the whole application's traffic.</summary>
+public sealed record TrafficPointResponse
+{
+    public required DateTimeOffset BucketStart { get; init; }
+
+    public required long Total { get; init; }
+
+    public required long Failed { get; init; }
+
+    public required long Faulted { get; init; }
+
+    public double? P95Ms { get; init; }
+}
+
+public sealed record TrafficSeriesResponse
+{
+    public required DateTimeOffset Since { get; init; }
+
+    public required IReadOnlyList<TrafficPointResponse> Points { get; init; }
+}
