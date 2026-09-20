@@ -614,7 +614,7 @@ Realtime push is opt-in (`Realtime__Enabled`, default `false`) and **best-effort
 the feed is the truth. Above one replica it needs the Redis backplane, because the pod that writes
 a notification is whichever one's outbox pump claimed the row and is unrelated to the pod holding
 that user's connection; the ingress cookie affinity of ADR 0010 does not help, since the pump is
-not serving that user's request. See ADR 0016.
+not serving that user's request. See ADR 0019.
 
 **It is ON in two places, for two different reasons.** In Development
 (`src/Api/appsettings.Development.json`) with **no** backplane: a developer's `dotnet run` is a

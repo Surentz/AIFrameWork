@@ -81,7 +81,7 @@ export default defineConfig({
               // Off for the same reason the cache is, and it has to be said explicitly here:
               // this run sets ASPNETCORE_ENVIRONMENT=Development, so it would otherwise inherit
               // appsettings.Development.json's Realtime:Enabled=true. Push is best-effort by
-              // contract (ADR 0016) and the feed is the truth, so a spec that asserted on the
+              // contract (ADR 0019) and the feed is the truth, so a spec that asserted on the
               // feed would be racing a WebSocket it does not need. The REST path is what these
               // specs exercise.
               Realtime__Enabled: 'false',

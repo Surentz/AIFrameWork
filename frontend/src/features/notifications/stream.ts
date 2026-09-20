@@ -12,7 +12,7 @@ export interface NotificationStreamState {
    * Why the push connection is not open, or null while it is (or is still opening).
    *
    * Exposed rather than discarded, but deliberately NOT rendered as an alert anywhere. Push is
-   * best-effort by contract (ADR 0016): the feed is the truth and `useUnreadCount`'s interval
+   * best-effort by contract (ADR 0019): the feed is the truth and `useUnreadCount`'s interval
    * still runs, so a closed connection costs latency, not correctness. An alert for a degraded
    * optimization would be noise the reader can do nothing about — and this is the ordinary state
    * in any environment with `Realtime__Enabled` off — the default, and what both test hosts
