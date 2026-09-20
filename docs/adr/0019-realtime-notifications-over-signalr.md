@@ -1,7 +1,16 @@
-# 0016. Realtime notifications over SignalR, with a Redis backplane
+# 0019. Realtime notifications over SignalR, with a Redis backplane
 
 **Date:** 2026-09-19
 **Status:** Accepted
+
+> **Renumbered from 0016 on 2026-09-20.** This ADR was written and merged as 0016 while
+> `0016-jobs-in-a-worker-host.md` already held that number — two branches picked the next free
+> number from the same starting point and merged four days apart. For a while "ADR 0016" resolved
+> to either document depending on which file the reader opened, and the reference in
+> `k8s/base/redis.yaml` in particular pointed at a job-framework decision. The jobs ADR keeps
+> 0016, being the earlier of the two; this one moved. 0017 and 0018 were already taken, hence
+> 0019. Anything citing "ADR 0016" about SignalR, the Redis backplane or `Realtime__Enabled`
+> means this document.
 
 ## Context
 

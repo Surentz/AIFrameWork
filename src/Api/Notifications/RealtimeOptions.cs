@@ -29,7 +29,7 @@ public sealed class RealtimeOptions
     /// Leaving this empty while <see cref="Enabled"/> is true is legitimate ONLY at a single
     /// replica — a developer's <c>dotnet run</c>, or the compose stack. Above one replica it is
     /// the silent-failure configuration this whole option exists to avoid, which is why
-    /// <c>Program.cs</c> logs a warning rather than letting it pass unremarked. See ADR 0016.
+    /// <c>Program.cs</c> logs a warning rather than letting it pass unremarked. See ADR 0019.
     /// </remarks>
     public string RedisConnectionString { get; set; } = string.Empty;
 }

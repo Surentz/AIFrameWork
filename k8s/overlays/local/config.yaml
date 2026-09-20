@@ -18,6 +18,6 @@ data:
   ForwardedHeaders__Enabled: 'true'
   # Realtime notification push, and the backplane that makes it correct above one replica.
   # DOUBLE underscores, like every key here. The Redis host is the in-cluster Service name from
-  # k8s/base/redis.yaml. See ADR 0016.
+  # k8s/base/redis.yaml. See ADR 0019.
   Realtime__Enabled: 'true'
   Realtime__RedisConnectionString: 'redis:6379'

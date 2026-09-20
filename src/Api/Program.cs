@@ -270,7 +270,7 @@ builder.Services.Configure<CacheOptions>(builder.Configuration.GetSection("Cache
 
 // Realtime notification push. OFF by default (see RealtimeOptions), so nothing below runs for a
 // developer who has started no Redis, or in CI - the REST feed is the source of truth either way
-// and a client that receives no push simply polls. ADR 0016.
+// and a client that receives no push simply polls. ADR 0019.
 var realtimeSection = builder.Configuration.GetSection("Realtime");
 builder.Services.Configure<RealtimeOptions>(realtimeSection);
 var realtime = realtimeSection.Get<RealtimeOptions>() ?? new RealtimeOptions();
@@ -306,7 +306,7 @@ if (realtime.Enabled)
             "Realtime push is enabled with no Redis backplane. That is correct for a single "
             + "instance only: with more than one replica, a push reaches a user only when the "
             + "pod that wrote the notification is also the one holding their connection. "
-            + "Set Realtime__RedisConnectionString. See ADR 0016.";
+            + "Set Realtime__RedisConnectionString. See ADR 0019.";
     }
 
     // The port Application's notifiers depend on, as IEnumerable<INotificationPush> - registered

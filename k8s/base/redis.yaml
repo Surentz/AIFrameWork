@@ -4,7 +4,7 @@
 # FOR UPDATE SKIP LOCKED, so the pod that writes is unrelated to the pod holding that user's
 # connection. The ingress cookie affinity of ADR 0010 does not help: the pump is not serving that
 # user's request. Without this, a push lands only when the two coincide — roughly half the time at
-# two replicas — and fails silently the rest. See ADR 0016.
+# two replicas — and fails silently the rest. See ADR 0019.
 #
 # A Deployment, not a StatefulSet, and no PersistentVolumeClaim: a backplane holds messages in
 # flight, never state worth keeping. Everything it carries is already committed in Postgres, so a
