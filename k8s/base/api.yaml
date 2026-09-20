@@ -30,6 +30,23 @@ spec:
       # increments Attempts at claim time, so a kill mid-handler burns an attempt against
       # MaxAttempts.
       terminationGracePeriodSeconds: 60
+      # Put the replicas on different nodes, so two replicas is two failure domains rather than
+      # two processes sharing one kubelet, one page cache and one power cord. This is what makes
+      # the PodDisruptionBudget in autoscaling.yaml mean anything: a budget that keeps one pod
+      # alive is no protection if both pods are on the node being drained.
+      #
+      # DoNotSchedule rather than ScheduleAnyway: a soft preference would silently degrade to
+      # co-located pods under the smallest scheduling pressure, which is exactly the state this
+      # is meant to prevent and exactly the state nobody would notice. It stays satisfiable as
+      # the HPA scales - with maxSkew 1 across the cluster's nodes, 6 replicas spread evenly
+      # rather than pending.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: api
       containers:
         - name: api
           image: aiframework-api:local

@@ -74,6 +74,25 @@ if ($CreateCluster) {
             Start-Sleep -Seconds 2
         } while ((Get-Date) -lt $deadline)
     }
+    Invoke-Step 'Installing metrics-server' {
+        # What the HorizontalPodAutoscalers in k8s/base read. Without it every HPA reports
+        # "unknown" for its metric and never scales - and reports it quietly, as a condition on
+        # the HPA rather than as a failure of this script, which is why it is installed here
+        # rather than left as a manual prerequisite.
+        kubectl --context $context apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+        Assert-LastExitCode 'kubectl apply (metrics-server)'
+
+        # kind's kubelets serve their metrics endpoint with a self-signed certificate that
+        # metrics-server does not trust, so out of the box it never becomes ready and every HPA
+        # stays on "unknown" forever. --kubelet-insecure-tls is the documented answer for local
+        # clusters; it is not a pattern to copy into an overlay that targets a real environment.
+        kubectl --context $context -n kube-system patch deployment metrics-server --type=json `
+            -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+        Assert-LastExitCode 'kubectl patch (metrics-server)'
+
+        kubectl --context $context -n kube-system rollout status deployment/metrics-server --timeout=180s
+        Assert-LastExitCode 'kubectl rollout status (metrics-server)'
+    }
 }
 
 if (-not $SkipBuild) {

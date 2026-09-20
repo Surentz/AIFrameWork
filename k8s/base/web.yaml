@@ -23,6 +23,17 @@ spec:
       labels:
         app: web
     spec:
+      # Same reasoning as api.yaml's: two replicas on one node is one failure domain wearing a
+      # replica count. ScheduleAnyway here rather than DoNotSchedule, because the SPA is a
+      # static bundle behind nginx - if the scheduler can only fit it alongside its sibling,
+      # serving the bundle from a co-located pod beats not serving it at all.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: web
       containers:
         - name: web
           image: aiframework-web:local

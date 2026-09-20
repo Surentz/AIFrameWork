@@ -169,9 +169,40 @@ database they are talking to.
 
 ## Running on Kubernetes
 
-A local kind cluster that runs the whole stack at **two API replicas**, to rehearse the
-things that only break above one. `docker compose` remains the inner development loop;
-this is additive.
+A local kind cluster that runs the whole stack at **two API replicas across two worker nodes**,
+to rehearse the things that only break above one. `docker compose` remains the inner development
+loop; this is additive.
+
+**Two replicas means two failure domains, not two processes.** `deploy/kind-cluster.yaml`
+declares a control-plane node plus two workers; kind taints the control-plane once workers
+exist, so application pods run on the workers while ingress-nginx stays put via its
+`ingress-ready` nodeSelector. `api` spreads with `whenUnsatisfiable: DoNotSchedule` — the soft
+variant would degrade to co-located pods under the smallest scheduling pressure, which is the
+state this exists to prevent and the one nobody would notice. Price: two more kubelets and
+container runtimes on your machine, roughly a gigabyte before an application pod starts.
+
+**Autoscaling is real but bounded, and the bound is the point.** `k8s/base/autoscaling.yaml`
+carries HPAs for `api` (CPU and memory) and `web` (CPU only — nginx serving a static bundle has
+flat memory), with `minReplicas: 2` as a floor rather than a starting point, and
+PodDisruptionBudgets for all three workloads. The ingress pins each user to a pod for an hour, so
+**scaling out does not rebalance anyone already connected** — a new pod only receives sessions
+that start after it does. Autoscaling buys headroom for new traffic and survives node pressure;
+it does not even out load across existing sessions. See ADR 0018, and ADR 0010's 2026-09-20
+amendment for why the affinity cannot currently be removed.
+
+Three things that will bite:
+
+- **metrics-server is installed by `deploy.ps1 -CreateCluster`**, patched with
+  `--kubelet-insecure-tls` because kind's kubelets serve metrics with a certificate it does not
+  trust. Without it every HPA reports `unknown` and never scales — as a *condition on the HPA*,
+  not as a deploy failure, so the cluster looks healthy while the autoscalers do nothing.
+- **The worker has a disruption budget but no autoscaler**, and its budget is
+  `maxUnavailable: 1` rather than `minAvailable: 1`. On a one-replica Deployment `minAvailable: 1`
+  blocks a node drain *indefinitely* — the budget can never be satisfied while the only pod is
+  evicted. Its work arrives through queues, so queue depth is the signal an autoscaler would
+  need; CPU would scale it down exactly when it is blocked and falling behind.
+- **Postgres is pinned to whichever node it first scheduled on**, by kind's node-local storage
+  class. Draining that node will not reschedule it. Target a different node for a drain test.
 
 ```powershell
 ./deploy/deploy.ps1 -CreateCluster   # first run: creates the cluster and ingress-nginx

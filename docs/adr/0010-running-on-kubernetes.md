@@ -215,3 +215,59 @@ first.
 See also ADR 0009, which this ADR amends the single-process premise of, and ADR 0008, whose
 per-account lockout is what keeps the rate-limiter trade-off above a volume issue rather than
 a correctness one.
+
+## Amendment, 2026-09-20: the L2 question is now answered, and the answer is no
+
+The decision above rejected a Redis L2 tier on a stated unknown:
+
+> `HybridCache`'s tag-based eviction — the exact mechanism ADR 0009's invalidation relies on —
+> had incomplete support against an L2 tier in .NET 9, and its .NET 10 status has not been
+> verified.
+
+Two things had changed since, which is why it was re-opened rather than left alone. Redis is now
+**already running in the cluster** — the realtime-notifications ADR added it as the SignalR
+backplane, and `k8s/overlays/local/config.yaml` already points the API at `redis:6379` — so "do
+not add a stateful dependency" no longer applies to it. And .NET 10 is what the repository now
+targets, so the unverified half was finally checkable.
+
+It was checked, against a real Redis, with `Microsoft.Extensions.Caching.Hybrid` 10.9.0 — the
+exact version `src/Infrastructure` references — using two independent `ServiceProvider` instances
+as stand-ins for two pods: separate L1 caches, one shared Redis L2.
+
+| Question | Result |
+|---|---|
+| Is the L2 tier shared across pods? | **Yes.** Pod B served pod A's cached value without running its own factory. |
+| Does `RemoveByTagAsync` publish anything to L2? | **Yes.** It writes a `__MSFT_HCT__<tag>` marker to Redis. |
+| Does a pod with a **cold** L1 honour that marker? | **Yes.** A provider built after the eviction correctly re-ran its factory. |
+| Does a pod with a **warm** L1 honour it? | **No.** It kept serving the stale value. |
+| Does `HybridCacheEntryFlags.DisableLocalCacheRead\|Write` fix it? | **No.** Still stale. |
+| Is it eventually consistent? | **No.** Polled every 2s for 60s against a 5-minute entry TTL; the warm pod never noticed. |
+| Is there an option to tune it? | **No.** `HybridCacheOptions` exposes `DefaultEntryOptions`, `DisableCompression`, `MaximumPayloadBytes`, `MaximumKeyLength`, `ReportTagMetrics` and `DistributedCacheServiceKey` — nothing governing tag-state refresh. |
+
+**The root cause is more specific than this ADR originally guessed.** What a process holds
+locally is not merely the cached *value* — it is its own view of the **tag invalidation state**.
+That is why disabling the local value cache changes nothing: the tag state is held separately
+from the entry, and once a pod has observed a tag as not-invalidated it keeps that view for the
+life of the entry. The cold-pod result is the proof that the marker itself is published and
+honoured correctly; the warm-pod result is the proof that publication is not enough.
+
+One methodological note, because it nearly produced the opposite conclusion. `HybridCache` writes
+to L2 in the **background**, so a cross-pod read issued immediately after the first write races
+it: the first run showed the payload never reaching Redis at all, the control failed, and every
+step after it was measuring a broken harness rather than `HybridCache`. Letting the L2 write
+settle before reading from the second pod is what made the control pass and the eviction result
+meaningful. A spike here without an explicit control is worth nothing.
+
+**Consequence: the ingress cookie affinity stays, and is now load-bearing on a verified basis
+rather than a cautious one.** The exit named above is closed for as long as this remains the
+`HybridCache` behaviour. Re-test before re-opening it; the harness is small enough to rewrite
+from this table.
+
+What is *not* closed is the problem. A per-user cache generation counter held in Redis and
+composed into the cache key would sidestep tags entirely — eviction becomes "the old key is never
+requested again", which crosses pods correctly because the generation is read from Redis rather
+than inferred from per-process state. It costs one Redis round trip per cached read and is a real
+change to `CacheScope` and `Behaviors.cs`. It is recorded here as the remaining candidate, not as
+a decision: it has not been spiked, and it would need an ADR of its own.
+
+ADR 0018 records what load balancing is achievable with the affinity in place.
