@@ -1,5 +1,6 @@
 using AiFramework.Api.Auth;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Monitoring;
 using AiFramework.Application.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,9 +8,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace AiFramework.Api.Monitoring;
 
 /// <summary>
-/// The operator-facing surface. Phase 1 of
-/// docs/superpowers/plans/2026-09-20-monitoring-page.md establishes only the gate; job runs,
-/// traffic and sign-in history arrive in phases 2 to 4 as further endpoints on this controller.
+/// The monitoring area's own endpoint: who is looking at it. Each area of the page gets its own
+/// controller beneath <c>api/monitoring</c> — jobs here already, traffic and sign-in history in
+/// phases 3 and 4 — rather than one controller accumulating every operator concern.
 /// </summary>
 /// <remarks>
 /// The policy sits on the CONTROLLER, not on each action, so an endpoint added later is gated by

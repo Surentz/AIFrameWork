@@ -4,13 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Internal.Generated.WolverineHandlers
 {
-    // START: SendOrderConfirmationHandler160443526
+    // START: PruneJobRunsHandler232970551
     [global::System.CodeDom.Compiler.GeneratedCode("JasperFx", "1.0.0")]
-    public sealed class SendOrderConfirmationHandler160443526 : Wolverine.Runtime.Handlers.MessageHandler
+    public sealed class PruneJobRunsHandler232970551 : Wolverine.Runtime.Handlers.MessageHandler
     {
         private readonly Microsoft.Extensions.DependencyInjection.IServiceScopeFactory _serviceScopeFactory;
 
-        public SendOrderConfirmationHandler160443526(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
+        public PruneJobRunsHandler232970551(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
         {
             _serviceScopeFactory = serviceScopeFactory;
         }
@@ -23,22 +23,26 @@ namespace Internal.Generated.WolverineHandlers
             Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Wolverine.Runtime.ScopedMessageContextHolder>(serviceScope.ServiceProvider).Context = context;
             
             /*
+            * Concrete type AiFramework.Infrastructure.Monitoring.JobRunRetention is not public, so requires service location
+            */
+            var jobRunRetention = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Monitoring.IJobRunRetention>(serviceScope.ServiceProvider);
+            
+            /*
             * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
             */
             var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
-            var orderNotifier = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Orders.IOrderNotifier>(serviceScope.ServiceProvider);
             // The actual message body
-            var sendOrderConfirmation = (AiFramework.Application.Orders.SendOrderConfirmation)context.Envelope.Message;
+            var pruneJobRuns = (AiFramework.Application.Monitoring.PruneJobRuns)context.Envelope.Message;
 
             try
             {
                 await AiFramework.Infrastructure.Jobs.JobRunMiddleware.BeforeAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
-                System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Orders.SendOrderConfirmationHandler");
-                System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Orders.SendOrderConfirmationHandler");
-                var sendOrderConfirmationHandler = new AiFramework.Application.Orders.SendOrderConfirmationHandler(orderNotifier);
+                System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Monitoring.PruneJobRunsHandler");
+                System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Monitoring.PruneJobRunsHandler");
+                var pruneJobRunsHandler = new AiFramework.Application.Monitoring.PruneJobRunsHandler(jobRunRetention);
                 
                 // The actual message execution
-                await sendOrderConfirmationHandler.Handle(sendOrderConfirmation, cancellation).ConfigureAwait(false);
+                await pruneJobRunsHandler.Handle(pruneJobRuns, cancellation).ConfigureAwait(false);
 
                 await AiFramework.Infrastructure.Jobs.JobRunMiddleware.AfterAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
             }
@@ -52,7 +56,7 @@ namespace Internal.Generated.WolverineHandlers
 
     }
 
-    // END: SendOrderConfirmationHandler160443526
+    // END: PruneJobRunsHandler232970551
     
     
 }

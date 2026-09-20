@@ -1,6 +1,8 @@
+using System.Reflection;
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Jobs;
 using FluentAssertions;
+using Wolverine;
 using ApplicationMarker = AiFramework.Application.AssemblyMarker;
 
 namespace AiFramework.Infrastructure.Tests.Jobs;
@@ -57,6 +59,55 @@ public sealed class JobRegistrationTests
             "every IJob needs an entry in JobRegistration.Jobs. Without one, MapJobs creates no " +
             "route, PublishAsync then DISCARDS the message — no exception, no log, and the " +
             "job never runs");
+    }
+
+    [Fact]
+    public async Task EveryRegisteredJob_HasADiscoveredHandler()
+    {
+        // WolverineOptions is IAsyncDisposable, not IDisposable, which is what makes this test
+        // async rather than a plain void one.
+        await using var options = new WolverineOptions();
+        JobRegistration.IncludeJobHandlers(options);
+
+        // Handler discovery is an explicit IncludeType list, like the Jobs list itself. The two
+        // are separate, and a job in one but not the other is the failure this test exists for:
+        // it ROUTES, lands on its queue, and is never handled. No exception, no dead letter, no
+        // log - the message simply sits there. Found exactly that way while adding PruneJobRuns,
+        // whose adapter silently failed to generate because only the Jobs list had been updated.
+        var handledMessages = ExplicitlyDiscoveredTypes(options)
+            .SelectMany(handler => handler.GetMethods())
+            .Where(method => string.Equals(method.Name, "Handle", StringComparison.Ordinal))
+            .SelectMany(method => method.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .ToHashSet();
+
+        var unhandled = JobRegistration.Jobs
+            .Select(job => job.JobType)
+            .Where(jobType => !handledMessages.Contains(jobType))
+            .ToArray();
+
+        unhandled.Should().BeEmpty(
+            "every job in JobRegistration.Jobs needs its handler in IncludeJobHandlers' discovery " +
+            "list. Without one the job is routed and enqueued but never handled, and nothing " +
+            "anywhere reports it");
+    }
+
+    /// <summary>
+    /// <c>HandlerDiscovery.ExplicitTypes</c> is internal to Wolverine, so this reads it
+    /// reflectively rather than standing up a whole host to ask the same question. A test may
+    /// reach where production code should not; the alternative was a Wolverine host per run, for
+    /// one list.
+    /// </summary>
+    private static IEnumerable<Type> ExplicitlyDiscoveredTypes(WolverineOptions options)
+    {
+        var property = options.Discovery.GetType().GetProperty(
+            "ExplicitTypes", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        property.Should().NotBeNull(
+            "Wolverine's HandlerDiscovery.ExplicitTypes is what this test reads; if it is renamed " +
+            "this test must be updated rather than silently passing over an empty list");
+
+        return (IEnumerable<Type>)property.GetValue(options.Discovery)!;
     }
 
     [Fact]

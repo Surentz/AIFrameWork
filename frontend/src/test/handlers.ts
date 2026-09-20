@@ -52,6 +52,55 @@ export const anAdminSession: Session = { ...aSession, role: 'Admin' };
 
 export const handlers = [
   http.post('/api/auth/login', () => HttpResponse.json(aSession)),
+  http.get('/api/monitoring/jobs/health', () =>
+    HttpResponse.json({
+      running: 1,
+      succeeded: 12,
+      failed: 2,
+      deadLettered: 1,
+      since: '2026-09-20T00:00:00+00:00',
+      triggerableJobs: ['PruneProcessedOutbox', 'PruneJobRuns'],
+    }),
+  ),
+  http.get('/api/monitoring/jobs/runs', () =>
+    HttpResponse.json({
+      items: [
+        {
+          envelopeId: '77777777-7777-7777-7777-777777777777',
+          attempt: 2,
+          jobName: 'RebuildOrderReport',
+          lane: 'Heavy',
+          status: 'Failed',
+          startedAt: '2026-09-20T10:00:00+00:00',
+          completedAt: '2026-09-20T10:00:02+00:00',
+          durationMs: 2000,
+          ownerId: null,
+          error: 'InvalidOperationException: the handler gave up',
+          traceId: 'abc123',
+          instanceId: 'worker-0',
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+    }),
+  ),
+  http.get('/api/monitoring/jobs/dead-letters', () =>
+    HttpResponse.json({
+      items: [
+        {
+          id: '88888888-8888-8888-8888-888888888888',
+          messageType: 'RebuildOrderReport',
+          exceptionType: 'InvalidOperationException',
+          exceptionMessage: 'the handler gave up',
+          sentAt: '2026-09-20T10:00:00+00:00',
+          receivedAt: 'postgresql://jobs_heavy/',
+          replayable: false,
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+    }),
+  ),
   http.get('/api/monitoring/access', () =>
     HttpResponse.json({
       userId: anAdminSession.userId,

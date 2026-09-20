@@ -4,6 +4,7 @@ using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Jobs.Scheduling;
+using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Persistence;
 using AiFramework.Infrastructure.Resilience;
 using AiFramework.Worker.Observability;
@@ -38,6 +39,12 @@ builder.Services.AddJobScheduling(connectionString);
 builder.Services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<JobCurrentUser>());
 
 builder.Services.Configure<JobOptions>(builder.Configuration.GetSection("Jobs"));
+
+// How long job_runs keeps its rows. Bound here rather than inside AddJobs, for the reason
+// CacheOptions and JobOptions are: a registration that binds configuration cannot be resolved
+// from a bare ServiceCollection in a unit test. Only this host needs it - the API reads the table
+// but never sweeps it. See ADR 0021.
+builder.Services.Configure<MonitoringOptions>(builder.Configuration.GetSection("Monitoring"));
 
 // Bound here rather than in AddCaching/AddResilience, the same shape the Api uses: each host
 // reads its own configuration and hands the values to Infrastructure.

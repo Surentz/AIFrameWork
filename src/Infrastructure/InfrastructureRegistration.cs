@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Monitoring;
 using AiFramework.Application.Notifications;
 using AiFramework.Application.Orders;
 using AiFramework.Application.Products;
@@ -9,6 +10,7 @@ using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Messaging;
 using AiFramework.Infrastructure.Outbox;
@@ -76,6 +78,13 @@ public static class InfrastructureRegistration
         services.AddQuery<GetUser, SessionView, GetUserHandler>();
         services.AddCommand<ReconcileAdministrators, AdministratorReconciliation,
             ReconcileAdministratorsHandler>();
+
+        services.AddQuery<GetJobRuns, JobRunPage, GetJobRunsHandler>();
+        services.AddQuery<GetJobRun, JobRunView, GetJobRunHandler>();
+        services.AddQuery<GetDeadLetters, DeadLetterPage, GetDeadLettersHandler>();
+        services.AddQuery<GetJobHealth, JobHealthView, GetJobHealthHandler>();
+        services.AddCommand<RetryDeadLetter, bool, RetryDeadLetterHandler>();
+        services.AddCommand<TriggerJob, bool, TriggerJobHandler>();
 
         RegisterValidators(services);
         RegisterDomainEvents(services);

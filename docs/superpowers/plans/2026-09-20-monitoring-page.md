@@ -243,44 +243,73 @@ Indexed on `(StartedAt DESC)` and `(Status, StartedAt DESC)` — the two orders 
       **So the recorder is `Before` + `After` + `OnException`, not `Before` + `Finally`.** Task 2.2
       changes accordingly, and 2.11 gains a test that a failing job still reaches the dead-letter
       queue — the regression this shape invites.
-- [ ] **2.1** `IJobRunRecorder` port in `src/Application/Abstractions`, with the Infrastructure
+- [x] **2.1** `IJobRunRecorder` port in `src/Application/Abstractions`, with the Infrastructure
       adapter writing via **immediate SQL**, following `OrderAuditWriter`'s precedent — not a
       tracked entity. Two independent reasons: the run record must survive the handler's own
       transaction rolling back, and a middleware that calls `SaveChangesAsync` would commit the
       handler's half-finished work with it.
-- [ ] **2.2** `JobRunMiddleware`, registered beside `JobUserMiddleware` in
+- [x] **2.2** `JobRunMiddleware`, registered beside `JobUserMiddleware` in
       `src/Infrastructure/Jobs/JobRegistration.cs`, as `Before` + `After` + `OnException` per the
       spike. `Before` and `After` take **`Envelope`**, never `IJob` — CLAUDE.md's "JasperFx will
       not upcast a concrete message to an interface for a middleware parameter" is exactly this
       situation, and `JobUserMiddleware` already carries the workaround. `OnException` takes the
       **exception first**, then its DI services, and **must end with
       `ExceptionDispatchInfo.Capture(exception).Throw()`** or it swallows every job failure.
-- [ ] **2.3** Regenerate **both** codegen trees and commit. A middleware change is precisely the
+- [x] **2.3** Regenerate **both** codegen trees and commit. A middleware change is precisely the
       class of change that leaves Debug green and breaks Release at startup.
-- [ ] **2.4** Dead-letter read adapter. Wolverine's envelope tables live in the **`wolverine`
+- [x] **2.4** Dead-letter read adapter. Wolverine's envelope tables live in the **`wolverine`
       schema**, which Wolverine itself owns and migrates — read them with raw SQL through an
       Infrastructure adapter, and **never** map them as EF entities or touch them in a migration.
       `WolverineEventPath.EnvelopeSchema` is the constant.
-- [ ] **2.5** Queries: `GetJobRuns` (paged, filterable by status/name/date), `GetJobRun` (one run
+- [x] **2.5** Queries: `GetJobRuns` (paged, filterable by status/name/date), `GetJobRun` (one run
       with its full error), `GetDeadLetters`, `GetJobHealth` (counts by status over a window).
       None `ICacheable`.
-- [ ] **2.6** **Action: retry a dead-lettered job.** A command marking the stored envelope
+- [x] **2.6** **Action: retry a dead-lettered job.** A command marking the stored envelope
       replayable. The worker picks it up from the shared Postgres message store on its own — the
       API never talks to the worker.
-- [ ] **2.7** **Action: trigger a scheduled job now.** Enqueue through `IJobScheduler`, which the
+- [x] **2.7** **Action: trigger a scheduled job now.** Enqueue through `IJobScheduler`, which the
       API can already do: it registers *routing* for every lane and publishing is how a job starts.
       Only parameterless jobs are eligible, which `JobDescriptor.Scheduled<TJob>`'s `new()`
       constraint already guarantees; the endpoint must reject anything else by name lookup against
       `JobRegistration` rather than by reflection.
-- [ ] **2.8** `MonitoringController` with the read endpoints and the two actions. `[Authorize(Policy
+- [x] **2.8** `MonitoringController` with the read endpoints and the two actions. `[Authorize(Policy
       = "Monitoring")]` on the controller. Regenerate the contract.
-- [ ] **2.9** Frontend `/monitoring/jobs`: a filterable run table, a run detail panel, a dead-letter
+- [x] **2.9** Frontend `/monitoring/jobs`: a filterable run table, a run detail panel, a dead-letter
       list, and the two action buttons with confirmation. Polling at ~10s.
-- [ ] **2.10** Retention: extend `PruneProcessedOutbox`'s sibling — a scheduled job pruning
+- [x] **2.10** Retention: extend `PruneProcessedOutbox`'s sibling — a scheduled job pruning
       `job_runs` past 30 days, declared with `JobDescriptor.Scheduled<T>` exactly as that one is.
-- [ ] **2.11** Tests: middleware records a success, a failure and a retry as separate attempts with
+- [x] **2.11** Tests: middleware records a success, a failure and a retry as separate attempts with
       one shared `TraceId`; the recorder survives a rolled-back handler transaction; a retry action
       re-delivers; `JobRegistrationTests` still passes.
+
+### What changed during implementation
+
+- **Dead letters go through Wolverine's own `IDeadLetters` API, not raw SQL.** Task 2.4 assumed
+  there was no supported surface for them; 6.33 has one — `QueryAsync`, `ReplayAsync`,
+  `DeadLetterEnvelopeByIdAsync` — and it covers both the read and the retry. Using it means
+  nothing here is coupled to a schema Wolverine owns and migrates, which was the whole worry
+  behind the raw-SQL instruction. `DeadLetterStore` resolves `IMessageStore` per call rather than
+  injecting it, so a host running non-durable (the codegen and contract builds) reports an empty
+  queue instead of failing to start.
+- **One controller became three.** `S6960` refused a single `MonitoringController` carrying runs,
+  dead letters and both actions, and it was right: `api/monitoring/jobs`, `.../jobs/runs` and
+  `.../jobs/dead-letters` are three resources. Two of the three still carry a narrow, justified
+  suppression for holding one resource's read and its write together — the same call
+  `NotificationsController` already documents.
+- **`job_runs` is keyed on `(EnvelopeId, Attempt)`**, not on the envelope id alone as the data
+  model above says. Wolverine's message id is stable across retries, so the id alone could not
+  keep each attempt its own row — and each attempt being its own row is what lets the page show
+  three failures as one job retried twice.
+- **There is no `DeadLettered` run status.** Dead-lettering is Wolverine's decision, taken after
+  the handler returns and outside anything a middleware can observe, so nothing could ever write
+  it. The terminal view comes from the dead-letter queue instead, which is why the health tile
+  reads it separately.
+- **A gap in the job framework surfaced and is now closed.** Handler discovery is a second
+  explicit list (`IncludeJobHandlers`'s `IncludeType` calls) beside `JobRegistration.Jobs`, and a
+  job in one but not the other ROUTES and is never handled — it lands on its queue and sits there,
+  with no exception, no dead letter and no log. `PruneJobRuns` hit exactly that.
+  `JobRegistrationTests.EveryRegisteredJob_HasADiscoveredHandler` now fails the build on it,
+  verified by removing the entry and watching it go red.
 
 ### Traps
 

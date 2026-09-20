@@ -1,6 +1,8 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Maintenance;
+using AiFramework.Application.Monitoring;
 using AiFramework.Application.Orders;
+using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Outbox;
 using JasperFx.CodeGeneration.Model;
 using Microsoft.Extensions.DependencyInjection;
@@ -86,6 +88,10 @@ public static class JobRegistration
         // Hourly at :05. Retention is seven days, so hourly is already generous; the old
         // five-minute cadence existed only because the sweep piggy-backed on the poll loop.
         JobDescriptor.Scheduled<PruneProcessedOutbox>("0 5 * * * ?"),
+
+        // Daily at 03:20. Retention is thirty days (ADR 0021), so a daily sweep is ample, and
+        // running it off-peak keeps one DELETE over a large table away from busy hours.
+        JobDescriptor.Scheduled<PruneJobRuns>("0 20 3 * * ?"),
     ];
 
     /// <summary>
@@ -150,10 +156,15 @@ public static class JobRegistration
     {
         ArgumentNullException.ThrowIfNull(opts);
 
+        // Explicit, like the Jobs list above and for the same reason: greppable beats scanned.
+        // A job registered in Jobs but missing here ROUTES and is never handled - it lands on its
+        // queue and sits there. JobRegistrationTests.EveryRegisteredJob_HasADiscoveredHandler
+        // fails the build on that, because nothing else would.
         opts.Discovery
             .IncludeType<SendOrderConfirmationHandler>()
             .IncludeType<RebuildOrderReportHandler>()
-            .IncludeType<PruneProcessedOutboxHandler>();
+            .IncludeType<PruneProcessedOutboxHandler>()
+            .IncludeType<PruneJobRunsHandler>();
 
         // Set on the WORKER only — the API keeps Wolverine 6's NotAllowed default, so this
         // relaxation reaches exactly the host that needs it.
@@ -291,6 +302,14 @@ public static class JobRegistration
         // the same one the handler is using, which is what lets a failure row be written while
         // that handler's own transaction is rolling back. See ADR 0021.
         services.AddScoped<IJobRunRecorder, JobRunRecorder>();
+
+        // The monitoring page's read side and its two actions. Registered here rather than in
+        // AddMessaging because all three are about jobs, and a host without AddJobs has no
+        // IJobScheduler for TriggerableJobs to enqueue through.
+        services.AddScoped<IJobRunReader, JobRunReader>();
+        services.AddScoped<IDeadLetterStore, DeadLetterStore>();
+        services.AddScoped<ITriggerableJobs, TriggerableJobs>();
+        services.AddScoped<IJobRunRetention, JobRunRetention>();
 
         return services;
     }
