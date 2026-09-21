@@ -30,24 +30,27 @@ public sealed class ReconcileAdministratorsHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         ada.Role.Should().Be(UserRole.Admin);
-        result.Value.Promoted.Should().Be(1);
+        result.Value.Promoted.Should().ContainSingle().Which.Should().Be("ada");
     }
 
     [Fact]
-    public async Task HandleAsync_DemotesAnAdministratorNoLongerConfigured()
+    public async Task An_administrator_absent_from_configuration_is_left_alone()
     {
         var grace = AUser("grace");
         grace.ChangeRole(UserRole.Admin);
+
+        // The candidate query no longer returns her at all, which is half the mechanism; the
+        // other half is that the handler has no branch that could demote her if it did.
         Candidates(grace);
         var handler = new ReconcileAdministratorsHandler(_users);
 
-        var result = await handler.HandleAsync(
-            new ReconcileAdministrators([]), CancellationToken.None);
+        await handler.HandleAsync(new ReconcileAdministrators([]), CancellationToken.None);
 
-        // The declarative half: removing a name revokes the role, rather than leaving a former
-        // administrator privileged forever because nothing ever took it away.
-        grace.Role.Should().Be(UserRole.Member);
-        result.Value.Demoted.Should().Be(1);
+        // THE test for ADR 0022, and the exact inverse of what ADR 0020 required. Configuration
+        // is a floor rather than a mirror: a grant made in the application has to survive a
+        // restart, or a user-management screen cannot exist. The cost is that removing a name
+        // from Admin:Usernames revokes nothing - revocation is an in-app action now.
+        grace.Role.Should().Be(UserRole.Admin);
     }
 
     [Fact]
@@ -77,8 +80,7 @@ public sealed class ReconcileAdministratorsHandlerTests
 
         // What makes this safe to run at every API start, in both replicas: nothing is dirtied,
         // so the unit of work has nothing to write.
-        result.Value.Promoted.Should().Be(0);
-        result.Value.Demoted.Should().Be(0);
+        result.Value.Promoted.Should().BeEmpty();
     }
 
     [Fact]

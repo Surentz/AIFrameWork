@@ -247,3 +247,73 @@ public sealed record TrafficSeriesResponse
 
     public required IReadOnlyList<TrafficPointResponse> Points { get; init; }
 }
+
+/// <summary>One account on the user-management screen.</summary>
+public sealed record AdministeredUserResponse
+{
+    public required Guid Id { get; init; }
+
+    public required string Username { get; init; }
+
+    public required string DisplayName { get; init; }
+
+    public required UserRole Role { get; init; }
+
+    /// <summary>
+    /// Whether this username is named in <c>Admin__Usernames</c>. Configuration is a floor
+    /// (ADR 0022): demoting an account that is still listed there is undone at the next API
+    /// start, so the screen warns before the click rather than after the restart.
+    /// </summary>
+    public required bool RoleIsConfigured { get; init; }
+
+    public required DateTimeOffset RegisteredAt { get; init; }
+
+    /// <summary>Null for an account that has never made an authenticated request.</summary>
+    public DateTimeOffset? LastSeenAt { get; init; }
+}
+
+public sealed record AdministeredUserPageResponse
+{
+    public required IReadOnlyList<AdministeredUserResponse> Items { get; init; }
+
+    public required int TotalCount { get; init; }
+
+    public required int Page { get; init; }
+}
+
+/// <summary>What an administrator did to an account.</summary>
+public sealed record AdminActionResponse
+{
+    public required Guid Id { get; init; }
+
+    public required DateTimeOffset At { get; init; }
+
+    public required AdminActionKind Kind { get; init; }
+
+    public required Guid ActorUserId { get; init; }
+
+    public required string ActorUsername { get; init; }
+
+    public required Guid TargetUserId { get; init; }
+
+    public required string TargetUsername { get; init; }
+
+    public string? IpAddress { get; init; }
+
+    public string? TraceId { get; init; }
+}
+
+public sealed record AdminActionPageResponse
+{
+    public required IReadOnlyList<AdminActionResponse> Items { get; init; }
+
+    public required int TotalCount { get; init; }
+
+    public required int Page { get; init; }
+}
+
+/// <summary>The role to move an account to.</summary>
+public sealed record ChangeUserRoleRequest
+{
+    public required UserRole Role { get; init; }
+}

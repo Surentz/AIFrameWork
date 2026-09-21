@@ -1479,6 +1479,295 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/monitoring/users": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The accounts, most recently seen first. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly search?: string;
+                    readonly page?: number | string;
+                    readonly pageSize?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["AdministeredUserPageResponse"];
+                        readonly "application/json": components["schemas"]["AdministeredUserPageResponse"];
+                        readonly "text/json": components["schemas"]["AdministeredUserPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/users/{id}/role": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Promotes or demotes an account.
+         * @description Does NOT end the target's sessions, deliberately: the role is read from the database on
+         *     every request, so a demotion takes effect on their next one without signing them out of a
+         *     session they still hold legitimately. Use `sign-out` below for that.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["ChangeUserRoleRequest"];
+                    readonly "text/json": components["schemas"]["ChangeUserRoleRequest"];
+                    readonly "application/*+json": components["schemas"]["ChangeUserRoleRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/users/{id}/sign-out": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Revokes every session the account holds, by rotating its security stamp. */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/monitoring/users/{id}/actions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** What has been done to one account, newest first. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly page?: number | string;
+                    readonly pageSize?: number | string;
+                };
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["AdminActionPageResponse"];
+                        readonly "application/json": components["schemas"]["AdminActionPageResponse"];
+                        readonly "text/json": components["schemas"]["AdminActionPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/auth/register": {
         readonly parameters: {
             readonly query?: never;
@@ -1832,6 +2121,62 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * @description What one administrator did to one account.
+         * @enum {unknown}
+         */
+        readonly AdminActionKind: "Promoted" | "Demoted" | "SignedOutEverywhere";
+        readonly AdminActionPageResponse: {
+            readonly items: readonly components["schemas"]["AdminActionResponse"][];
+            /** Format: int32 */
+            readonly totalCount: number | string;
+            /** Format: int32 */
+            readonly page: number | string;
+        };
+        /** @description What an administrator did to an account. */
+        readonly AdminActionResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            /** Format: date-time */
+            readonly at: string;
+            readonly kind: components["schemas"]["AdminActionKind"];
+            /** Format: uuid */
+            readonly actorUserId: string;
+            readonly actorUsername: string;
+            /** Format: uuid */
+            readonly targetUserId: string;
+            readonly targetUsername: string;
+            readonly ipAddress?: null | string;
+            readonly traceId?: null | string;
+        };
+        readonly AdministeredUserPageResponse: {
+            readonly items: readonly components["schemas"]["AdministeredUserResponse"][];
+            /** Format: int32 */
+            readonly totalCount: number | string;
+            /** Format: int32 */
+            readonly page: number | string;
+        };
+        /** @description One account on the user-management screen. */
+        readonly AdministeredUserResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            readonly username: string;
+            readonly displayName: string;
+            readonly role: components["schemas"]["UserRole"];
+            /**
+             * @description Whether this username is named in `Admin__Usernames`. Configuration is a floor
+             *     (ADR 0022): demoting an account that is still listed there is undone at the next API
+             *     start, so the screen warns before the click rather than after the restart.
+             */
+            readonly roleIsConfigured: boolean;
+            /** Format: date-time */
+            readonly registeredAt: string;
+            /**
+             * Format: date-time
+             * @description Null for an account that has never made an authenticated request.
+             */
+            readonly lastSeenAt?: null | string;
+        };
+        /**
          * @description The reason is owned by `CancelOrderValidator`, not duplicated here as a DataAnnotation —
          *     see the note on PlaceOrderRequest.
          */
@@ -1841,6 +2186,10 @@ export interface components {
         readonly ChangePasswordRequest: {
             readonly currentPassword: string;
             readonly newPassword: string;
+        };
+        /** @description The role to move an account to. */
+        readonly ChangeUserRoleRequest: {
+            readonly role: components["schemas"]["UserRole"];
         };
         /**
          * @description Business-rule validation (non-empty, max length, price range and scale) is owned by

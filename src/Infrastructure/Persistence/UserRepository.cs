@@ -60,10 +60,121 @@ public sealed class UserRepository(AiFrameworkDbContext context) : IUserReposito
     public async Task<IReadOnlyList<User>> ListForRoleReconciliationAsync(
         string[] usernamesNormalized, CancellationToken cancellationToken) =>
         await context.Users
-            .Where(u => u.Role == UserRole.Admin
-                || usernamesNormalized.Contains(u.UsernameNormalized))
+            .Where(u => usernamesNormalized.Contains(u.UsernameNormalized))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    /// <summary>
+    /// An arbitrary but fixed key identifying the demotion lock. Any constant works; it only has
+    /// to be the same one for every caller.
+    /// </summary>
+    /// <remarks>
+    /// <c>internal</c> rather than private so <c>UserRepositoryDemotionTests</c> can take the very
+    /// same lock from another connection to prove this method waits on it. A test that hard-coded
+    /// the number could drift from the implementation and then prove nothing.
+    /// </remarks>
+    internal const long DemotionLockKey = 0x41_44_4D_4E; // "ADMN"
+
+    /// <summary>
+    /// The last-administrator rail: demote, unless this is the only administrator left.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The conditional UPDATE alone is NOT enough, and that was established by experiment
+    /// rather than reasoning.</b> A first version of this was one statement whose WHERE clause
+    /// carried an <c>EXISTS</c> over the other administrators. That closes the read-then-write
+    /// gap, but a subquery read takes no locks: two overlapping transactions demoting DIFFERENT
+    /// administrators each fail to see the other's uncommitted change, both pass the EXISTS, and
+    /// the table ends with nobody. <c>UserRepositoryDemotionTests</c> demonstrates exactly that,
+    /// and fails against the one-statement version.
+    /// </para>
+    /// <para>
+    /// A transaction-scoped advisory lock serializes every demotion against every other one, so
+    /// the EXISTS is evaluated while no competing demotion can be in flight. It is a global lock
+    /// on an operation a system performs a handful of times a year, so the contention it creates
+    /// is not a cost worth optimising away — and the alternatives (<c>FOR UPDATE</c> inside the
+    /// subquery, or SERIALIZABLE) trade it for deadlocks or serialization failures that the
+    /// caller would then have to handle.
+    /// </para>
+    /// <para>
+    /// The explicit transaction goes through the execution strategy, per ADR 0014 — a bare
+    /// <c>BeginTransactionAsync</c> throws once <c>EnableRetryOnFailure</c> is configured,
+    /// because the strategy cannot retry a block it does not own.
+    /// </para>
+    /// </remarks>
+    public Task<bool> TryDemoteAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var strategy = context.Database.CreateExecutionStrategy();
+
+        return strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await context.Database
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            // Released when the transaction ends, however it ends - which is what makes this
+            // safe against a connection returned to the pool mid-failure, unlike a session-scoped
+            // pg_advisory_lock that someone has to remember to release.
+            await context.Database
+                .ExecuteSqlAsync(
+                    $"SELECT pg_advisory_xact_lock({DemotionLockKey})", cancellationToken)
+                .ConfigureAwait(false);
+
+            var demoted = await context.Users
+                .Where(u => u.Id == userId
+                    && u.Role == UserRole.Admin
+                    && context.Users.Any(other => other.Role == UserRole.Admin && other.Id != userId))
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(u => u.Role, UserRole.Member),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            return demoted > 0;
+        });
+    }
+
+    /// <summary>
+    /// No-tracking and projected: this only ever displays, and materialising entities here would
+    /// put every listed account into the change tracker on a screen whose next action mutates one
+    /// of them.
+    /// </summary>
+    /// <remarks>
+    /// Ordered by LastSeenAt descending with nulls last, so the accounts an operator is most
+    /// likely looking for are on the first page, and an account that has never signed in does not
+    /// sort above everyone.
+    /// </remarks>
+    public async Task<(IReadOnlyList<AdministeredUserRow> Rows, int Total)> ListAsync(
+        string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var query = context.Users.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // ILIKE through EF.Functions rather than ToLower().Contains(): the latter builds a
+            // lower(...) call around the COLUMN, which no index can serve.
+            var pattern = $"%{search.Trim()}%";
+            query = query.Where(u =>
+                EF.Functions.ILike(u.Username, pattern)
+                || EF.Functions.ILike(u.DisplayName, pattern));
+        }
+
+        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+
+        var rows = await query
+            .OrderByDescending(u => u.LastSeenAt.HasValue)
+            .ThenByDescending(u => u.LastSeenAt)
+            .ThenBy(u => u.UsernameNormalized)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(u => new AdministeredUserRow(
+                u.Id, u.Username, u.DisplayName, u.Role, u.RegisteredAt, u.LastSeenAt))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return (rows, total);
+    }
 
     /// <summary>
     /// The throttle is the WHERE clause. No read, so nothing to race: a request whose row was

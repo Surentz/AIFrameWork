@@ -130,6 +130,10 @@ public static class InfrastructureRegistration
         services.AddQuery<GetSignInHealth, SignInHealthView, GetSignInHealthHandler>();
         services.AddQuery<GetTrafficSummary, TrafficSummaryView, GetTrafficSummaryHandler>();
         services.AddQuery<GetTrafficSeries, TrafficSeriesView, GetTrafficSeriesHandler>();
+        services.AddQuery<ListUsers, AdministeredUserPage, ListUsersHandler>();
+        services.AddQuery<GetUserActions, AdminActionPage, GetUserActionsHandler>();
+        services.AddCommand<ChangeUserRole, bool, ChangeUserRoleHandler>();
+        services.AddCommand<SignOutUser, bool, SignOutUserHandler>();
     }
 
     /// <summary>
@@ -249,6 +253,10 @@ public static class InfrastructureRegistration
         // (which only the API calls): RegisterUserHandler depends on it, AddMessaging registers
         // that handler in every host, and the generic host validates every descriptor.
         services.AddSingleton<IAdministratorDirectory, AdministratorDirectory>();
+
+        // Scoped, unlike the two above: it tracks entities on the request's DbContext so
+        // the audit row commits with the change it describes.
+        services.AddScoped<IAdminAudit, AdminAudit>();
     }
 
     /// <summary>The outbox pipeline. Called from AddInfrastructure; the hosted services start with the app.</summary>

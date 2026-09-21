@@ -23,6 +23,11 @@ namespace Internal.Generated.WolverineHandlers
             Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Wolverine.Runtime.ScopedMessageContextHolder>(serviceScope.ServiceProvider).Context = context;
             
             /*
+            * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
+            */
+            var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
+            
+            /*
             * Dependency: Descriptor: ServiceType: AiFramework.Infrastructure.Outbox.OutboxPoller Lifetime: Scoped ImplementationType: AiFramework.Infrastructure.Outbox.OutboxPoller
             * 
             * Dependency: Descriptor: ServiceType: AiFramework.Infrastructure.Persistence.AiFrameworkDbContext Lifetime: Scoped ImplementationType: AiFramework.Infrastructure.Persistence.AiFrameworkDbContext
@@ -31,11 +36,6 @@ namespace Internal.Generated.WolverineHandlers
             * The service registration for Microsoft.EntityFrameworkCore.DbContextOptions<AiFramework.Infrastructure.Persistence.AiFrameworkDbContext> is an 'opaque' lambda factory with the Scoped lifetime and requires service location
             */
             var outboxRetention = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Maintenance.IOutboxRetention>(serviceScope.ServiceProvider);
-            
-            /*
-            * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
-            */
-            var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
             // The actual message body
             var pruneProcessedOutbox = (AiFramework.Application.Maintenance.PruneProcessedOutbox)context.Envelope.Message;
 

@@ -30,6 +30,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
 
     public DbSet<SignInEvent> SignInEvents => Set<SignInEvent>();
 
+    public DbSet<AdminAction> AdminActions => Set<AdminAction>();
+
     public DbSet<TrafficBucket> TrafficBuckets => Set<TrafficBucket>();
 
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();

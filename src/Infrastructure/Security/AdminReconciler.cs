@@ -10,10 +10,22 @@ using Microsoft.Extensions.Options;
 namespace AiFramework.Infrastructure.Security;
 
 /// <summary>
-/// Makes the stored administrator roles match <see cref="AdminOptions"/> at startup, before the
-/// host begins serving. See ADR 0020.
+/// Promotes everyone named in <see cref="AdminOptions"/> at startup, before the host begins
+/// serving. See ADR 0020 for the role, and ADR 0022 for why this only ever promotes.
 /// </summary>
 /// <remarks>
+/// <para>
+/// <b>Configuration is a floor, not a mirror.</b> This demotes nobody. It seeds a system that
+/// has no administrator yet, and it is the break-glass path back in when someone has removed
+/// their own access in the application — which is the whole reason for keeping it once users can
+/// be administered in-app at all.
+/// </para>
+/// <para>
+/// <b>So removing a name here revokes nothing</b>, and an account demoted in the application
+/// while still named here is promoted straight back on the next start. Removing an administrator
+/// takes both steps. <c>Report</c> logs each promotion by name precisely so that this is
+/// diagnosable from the log rather than only from reading this file.
+/// </para>
 /// <para>
 /// <b>Both API replicas run this.</b> That is safe rather than merely tolerable: the reconcile is
 /// idempotent, and <c>User.ChangeRole</c> reports whether it actually moved, so a run against an
@@ -94,9 +106,19 @@ internal sealed partial class AdminReconciler(
     {
         // Information, not Debug: a role changing is rare and consequential, unlike the routine
         // dispatch outcomes Behaviors.LoggedAsync keeps at Debug. A no-op reconcile says nothing.
-        if (reconciliation.Promoted > 0 || reconciliation.Demoted > 0)
+        //
+        // The NAMES, not a count. Since ADR 0022 configuration is a floor rather than a mirror,
+        // so an account demoted in the application while still listed here is promoted straight
+        // back on the next start - and "why is this person an administrator again" is a question
+        // only a log line naming them can answer.
+        //
+        // One event per promotion rather than one joined line, so {Username} is a structured
+        // property the log store can filter on (ADR 0015) instead of a comma-separated blob
+        // nobody can query. The count is newly-promoted accounts at startup - almost always
+        // zero, and small when it is not.
+        foreach (var username in reconciliation.Promoted)
         {
-            AdminLog.Reconciled(logger, reconciliation.Promoted, reconciliation.Demoted);
+            AdminLog.Promoted(logger, username);
         }
 
         // The likeliest mistake in this whole feature: a typo in the configured list leaves
@@ -117,8 +139,9 @@ internal static partial class AdminLog
     [LoggerMessage(
         EventId = 2001,
         Level = LogLevel.Information,
-        Message = "Administrator roles reconciled: {Promoted} promoted, {Demoted} demoted.")]
-    public static partial void Reconciled(ILogger logger, int promoted, int demoted);
+        Message = "Promoted {Username} to administrator from Admin:Usernames. "
+            + "Removing a name there does not demote anyone - see ADR 0022.")]
+    public static partial void Promoted(ILogger logger, string username);
 
     [LoggerMessage(
         EventId = 2002,

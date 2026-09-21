@@ -108,6 +108,12 @@ export function MonitoringPage(): React.JSX.Element {
         <Link to="/monitoring/traffic">Request rates, latency and the per-endpoint breakdown</Link>
       </p>
 
+      <h2>Users</h2>
+
+      <p>
+        <Link to="/monitoring/users">Accounts, roles and sessions</Link>
+      </p>
+
       <p className="muted">
         Job and sign-in counts cover the last 24 hours and traffic the last hour. Dead letters are
         the whole queue, because a message stuck for a week is exactly the one worth seeing.

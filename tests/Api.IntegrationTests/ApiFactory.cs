@@ -228,6 +228,31 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await context.SaveChangesAsync();
     }
 
+    /// <summary>Reads an account's id by username, for tests that act on somebody else.</summary>
+    public async Task<Guid> GetUserIdAsync(string username)
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+        var normalized = User.Normalize(username);
+
+        return await context.Users
+            .Where(u => u.UsernameNormalized == normalized)
+            .Select(u => u.Id)
+            .SingleAsync();
+    }
+
+    /// <summary>
+    /// Reads a role straight from the database, so an assertion about a role change does not go
+    /// back through the endpoint that performed it.
+    /// </summary>
+    public async Task<UserRole> GetRoleAsync(Guid userId)
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+
+        return await context.Users.Where(u => u.Id == userId).Select(u => u.Role).SingleAsync();
+    }
+
     /// <summary>
     /// A signed-in client whose user holds <c>Admin</c>, for the monitoring endpoints. The role is
     /// read from the database on every request (ADR 0020), so promoting after sign-in needs no

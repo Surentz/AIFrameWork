@@ -5,9 +5,11 @@ using Microsoft.Extensions.Options;
 namespace AiFramework.Infrastructure.Tests.Security;
 
 /// <summary>
-/// The registration-time half of ADR 0020's "configuration is the authority". It must answer
-/// exactly what <c>ReconcileAdministrators</c> would answer at startup for the same list, or a
-/// user would be promoted by one path and demoted by the other on the next restart.
+/// The registration-time half of the configured administrator list. It must answer exactly what
+/// <c>ReconcileAdministrators</c> would answer at startup for the same list — both paths only
+/// ever promote (ADR 0022), so agreeing means agreeing about WHO, and a mismatch would leave an
+/// account that registers as a member and becomes an administrator at the next restart, or the
+/// reverse.
 /// </summary>
 public sealed class AdministratorDirectoryTests
 {

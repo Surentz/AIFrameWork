@@ -9,6 +9,7 @@ import { JobsPage } from './features/monitoring/JobsPage';
 import { LoginsPage } from './features/monitoring/LoginsPage';
 import { MonitoringPage } from './features/monitoring/MonitoringPage';
 import { TrafficPage } from './features/monitoring/TrafficPage';
+import { UsersPage } from './features/monitoring/UsersPage';
 import { NotificationList } from './features/notifications/NotificationList';
 import { OrderDetail } from './features/orders/OrderDetail';
 import { OrderList } from './features/orders/OrderList';
@@ -51,6 +52,7 @@ export function AppRoutes(): React.JSX.Element {
             <Route path="/monitoring/jobs" element={<JobsPage />} />
             <Route path="/monitoring/logins" element={<LoginsPage />} />
             <Route path="/monitoring/traffic" element={<TrafficPage />} />
+            <Route path="/monitoring/users" element={<UsersPage />} />
           </Route>
         </Route>
       </Route>

@@ -37,10 +37,12 @@ public static class MonitoringRegistration
         services.AddScoped<ITriggerableJobs, TriggerableJobs>();
         services.AddScoped<ISignInEventReader, SignInEventReader>();
         services.AddScoped<ITrafficReader, TrafficReader>();
+        services.AddScoped<IAdminActionReader, AdminActionReader>();
 
         services.AddScoped<IJobRunRetention, JobRunRetention>();
         services.AddScoped<ISignInEventRetention, SignInEventRetention>();
         services.AddScoped<ITrafficRetention, TrafficRetention>();
+        services.AddScoped<IAdminActionRetention, AdminActionRetention>();
 
         return services;
     }

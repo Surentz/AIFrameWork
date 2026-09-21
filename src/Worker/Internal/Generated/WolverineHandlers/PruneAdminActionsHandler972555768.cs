@@ -4,13 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Internal.Generated.WolverineHandlers
 {
-    // START: PruneSignInEventsHandler826168385
+    // START: PruneAdminActionsHandler972555768
     [global::System.CodeDom.Compiler.GeneratedCode("JasperFx", "1.0.0")]
-    public sealed class PruneSignInEventsHandler826168385 : Wolverine.Runtime.Handlers.MessageHandler
+    public sealed class PruneAdminActionsHandler972555768 : Wolverine.Runtime.Handlers.MessageHandler
     {
         private readonly Microsoft.Extensions.DependencyInjection.IServiceScopeFactory _serviceScopeFactory;
 
-        public PruneSignInEventsHandler826168385(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
+        public PruneAdminActionsHandler972555768(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
         {
             _serviceScopeFactory = serviceScopeFactory;
         }
@@ -28,21 +28,21 @@ namespace Internal.Generated.WolverineHandlers
             var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
             
             /*
-            * Concrete type AiFramework.Infrastructure.Monitoring.SignInEventRetention is not public, so requires service location
+            * Concrete type AiFramework.Infrastructure.Monitoring.AdminActionRetention is not public, so requires service location
             */
-            var signInEventRetention = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Monitoring.ISignInEventRetention>(serviceScope.ServiceProvider);
+            var adminActionRetention = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Monitoring.IAdminActionRetention>(serviceScope.ServiceProvider);
             // The actual message body
-            var pruneSignInEvents = (AiFramework.Application.Monitoring.PruneSignInEvents)context.Envelope.Message;
+            var pruneAdminActions = (AiFramework.Application.Monitoring.PruneAdminActions)context.Envelope.Message;
 
             try
             {
                 await AiFramework.Infrastructure.Jobs.JobRunMiddleware.BeforeAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
-                System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Monitoring.PruneSignInEventsHandler");
-                System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Monitoring.PruneSignInEventsHandler");
-                var pruneSignInEventsHandler = new AiFramework.Application.Monitoring.PruneSignInEventsHandler(signInEventRetention);
+                System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Monitoring.PruneAdminActionsHandler");
+                System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Monitoring.PruneAdminActionsHandler");
+                var pruneAdminActionsHandler = new AiFramework.Application.Monitoring.PruneAdminActionsHandler(adminActionRetention);
                 
                 // The actual message execution
-                await pruneSignInEventsHandler.Handle(pruneSignInEvents, cancellation).ConfigureAwait(false);
+                await pruneAdminActionsHandler.Handle(pruneAdminActions, cancellation).ConfigureAwait(false);
 
                 await AiFramework.Infrastructure.Jobs.JobRunMiddleware.AfterAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
             }
@@ -56,7 +56,7 @@ namespace Internal.Generated.WolverineHandlers
 
     }
 
-    // END: PruneSignInEventsHandler826168385
+    // END: PruneAdminActionsHandler972555768
     
     
 }
