@@ -1,4 +1,6 @@
 import type {
+  AdminActionPage,
+  AdministeredUserPage,
   DeadLetterPage,
   JobHealth,
   JobRunPage,
@@ -9,6 +11,7 @@ import type {
   SignInOutcome,
   TrafficSeries,
   TrafficSummary,
+  UserRole,
 } from '../features/monitoring/types';
 import { request, requestVoid } from './client';
 
@@ -83,4 +86,32 @@ export function getTrafficSeries(windowMinutes: number): Promise<TrafficSeries> 
   return request<TrafficSeries>(
     `/api/monitoring/traffic/series?windowMinutes=${String(windowMinutes)}`,
   );
+}
+
+export function listUsers(params: {
+  search?: string | undefined;
+  page?: number | undefined;
+}): Promise<AdministeredUserPage> {
+  const query = new URLSearchParams();
+  query.set('page', String(params.page ?? 1));
+  if (params.search !== undefined && params.search !== '') {
+    query.set('search', params.search);
+  }
+
+  return request<AdministeredUserPage>(`/api/monitoring/users?${query.toString()}`);
+}
+
+export function changeUserRole(userId: string, role: UserRole): Promise<void> {
+  return requestVoid(`/api/monitoring/users/${userId}/role`, {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function signOutUser(userId: string): Promise<void> {
+  return requestVoid(`/api/monitoring/users/${userId}/sign-out`, { method: 'POST' });
+}
+
+export function listUserActions(userId: string): Promise<AdminActionPage> {
+  return request<AdminActionPage>(`/api/monitoring/users/${userId}/actions`);
 }

@@ -27,3 +27,15 @@ export type TrafficSummary = components['schemas']['TrafficSummaryResponse'];
 export type TrafficRow = components['schemas']['TrafficRowResponse'];
 
 export type TrafficSeries = components['schemas']['TrafficSeriesResponse'];
+
+export type AdministeredUser = components['schemas']['AdministeredUserResponse'];
+
+export type AdministeredUserPage = components['schemas']['AdministeredUserPageResponse'];
+
+export type AdminAction = components['schemas']['AdminActionResponse'];
+
+export type AdminActionPage = components['schemas']['AdminActionPageResponse'];
+
+export type AdminActionKind = components['schemas']['AdminActionKind'];
+
+export type UserRole = components['schemas']['UserRole'];

@@ -31,3 +31,16 @@ export const chartTitle = (p: Page, title: string): Locator =>
   p.locator('figure.viz').filter({ hasText: title }).locator('figcaption');
 
 export const windowFilter = (p: Page): Locator => p.getByLabel('Window');
+
+/** The user-management table row for one account, located by its username cell. */
+export const userRow = (p: Page, username: string): Locator =>
+  p.locator('table.runs tbody tr').filter({ has: p.getByRole('cell', { name: username, exact: true }) });
+
+export const userSearch = (p: Page): Locator => p.getByLabel('Search');
+
+/** Finds an account by username, which is also how an operator would. */
+export async function findUser(p: Page, username: string): Promise<void> {
+  await userSearch(p).fill(username);
+  await p.getByRole('button', { name: 'Search' }).click();
+  await userRow(p, username).waitFor();
+}

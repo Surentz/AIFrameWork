@@ -282,20 +282,20 @@ does not recover rows already deleted.
 
 ### Tasks
 
-- [ ] **3.1** `/monitoring/users`: a paged, searchable table — username, display name, role,
+- [x] **3.1** `/monitoring/users`: a paged, searchable table — username, display name, role,
       last seen, and a marker on accounts whose role comes from configuration.
-- [ ] **3.2** Role change and force-sign-out as row actions, each behind a confirmation naming
+- [x] **3.2** Role change and force-sign-out as row actions, each behind a confirmation naming
       the user and the change in words ("Demote **ada** to Member?"). A misclick in a table row
       must not be able to demote anyone.
-- [ ] **3.3** The configuration marker carries its own explanation on hover and in the confirm
+- [x] **3.3** The configuration marker carries its own explanation on hover and in the confirm
       dialog: demoting this account will be undone at the next API restart unless the name is also
       removed from `Admin__Usernames`. This is the Phase 1 trap, surfaced at the one moment
       somebody is about to walk into it.
-- [ ] **3.4** Per-user action history, from `GET /api/monitoring/users/{id}/actions`.
-- [ ] **3.5** A link from the monitoring overview, beside jobs, sign-ins and traffic.
-- [ ] **3.6** Component tests with MSW, including both refusals rendering as messages rather than
+- [x] **3.4** Per-user action history, from `GET /api/monitoring/users/{id}/actions`.
+- [x] **3.5** A link from the monitoring overview, beside jobs, sign-ins and traffic.
+- [x] **3.6** Component tests with MSW, including both refusals rendering as messages rather than
       as an empty table.
-- [ ] **3.7** Playwright: an administrator promotes and demotes a second account; a member is
+- [x] **3.7** Playwright: an administrator promotes and demotes a second account; a member is
       refused the route. Both `@local-only` for the reason the existing monitoring specs are —
       only the stack `playwright.config.ts` starts names an administrator.
 
@@ -307,6 +307,30 @@ does not recover rows already deleted.
 - **A demotion does not sign the target out**, so nothing visible happens to them until their next
   request, at which point the nav entry disappears. That is correct and worth a line of copy, or
   it reads as a bug.
+
+### What changed during implementation
+
+- **The confirmation is inline and non-modal, not a `<dialog>`.** The question belongs beside the
+  row it concerns, there is no focus to trap, and jsdom's `<dialog>` support would have been a
+  risk the feature did not need to take. It still names the account and the change in words,
+  which is what the rail was for.
+- **The configuration warning appears inside the demote confirmation**, not only as a hover
+  title on the badge. The badge marks the account; the confirmation is the moment somebody is
+  actually about to walk into ADR 0022's trap, so that is where the sentence belongs.
+- **The user list does not poll**, unlike every other monitoring panel. Those report a system
+  changing on its own; this one changes only when an administrator acts, and a refetch landing
+  mid-confirmation would reorder rows under the pointer — `LastSeenAt` is the sort key, so an
+  unrelated person signing in is enough to move someone. The mutations invalidate it instead.
+- **Two lint rules shaped the markup rather than being suppressed.** `role="alert"` moved off the
+  `<td>` onto a `<p>` inside it, because overriding a cell's implicit role takes the row out of
+  the table's semantics; and the inner callback needed an explicit `: void`.
+- **A component test caught a real ordering subtlety.** The session query resolves independently
+  of the user list, so a row does not know it is yours until it lands. In the app this cannot be
+  seen — `RequireRole` already awaits the session before the route renders — but the test renders
+  the page directly, so it awaits the marker rather than asserting immediately. Left as a comment
+  in the test rather than papered over.
+- **Search is submitted, not typed-through.** Every list read is uncached by design (ADR 0021),
+  and this is not a list an operator scrubs through.
 
 ---
 

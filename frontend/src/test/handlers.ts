@@ -177,6 +177,54 @@ export const handlers = [
       page: 1,
     }),
   ),
+  http.get('/api/monitoring/users', () =>
+    HttpResponse.json({
+      items: [
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          username: 'ada',
+          displayName: 'Ada Lovelace',
+          role: 'Member',
+          roleIsConfigured: false,
+          registeredAt: '2026-09-01T09:00:00+00:00',
+          lastSeenAt: '2026-09-21T08:30:00+00:00',
+        },
+        {
+          id: '22222222-2222-2222-2222-222222222222',
+          username: 'grace',
+          displayName: 'Grace Hopper',
+          role: 'Admin',
+          // The configuration-backed case, so the warning path has something to render.
+          roleIsConfigured: true,
+          registeredAt: '2026-08-15T09:00:00+00:00',
+          lastSeenAt: null,
+        },
+      ],
+      totalCount: 2,
+      page: 1,
+    }),
+  ),
+  http.post('/api/monitoring/users/:id/role', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/monitoring/users/:id/sign-out', () => new HttpResponse(null, { status: 204 })),
+  http.get('/api/monitoring/users/:id/actions', () =>
+    HttpResponse.json({
+      items: [
+        {
+          id: '33333333-3333-3333-3333-333333333333',
+          at: '2026-09-21T09:00:00+00:00',
+          kind: 'Promoted',
+          actorUserId: anAdminSession.userId,
+          actorUsername: anAdminSession.username,
+          targetUserId: '11111111-1111-1111-1111-111111111111',
+          targetUsername: 'ada',
+          ipAddress: '203.0.113.7',
+          traceId: '00-abc-def-01',
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+    }),
+  ),
   http.get('/api/monitoring/access', () =>
     HttpResponse.json({
       userId: anAdminSession.userId,

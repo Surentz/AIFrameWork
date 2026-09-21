@@ -205,3 +205,15 @@
   color: var(--color-text-muted);
   cursor: pointer;
 }
+
+/* Marks an account whose role is granted by Admin__Usernames. Not a status colour: this is
+   information about where a role comes from, not a judgement about whether it is healthy, so it
+   uses the same recessive ink as .muted rather than the attention treatment. ADR 0022. */
+.badge {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  padding: 0.05rem 0.4rem;
+  white-space: nowrap;
+}

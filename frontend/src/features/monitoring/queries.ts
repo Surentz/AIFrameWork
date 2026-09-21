@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import type { ApiError } from '../../api/client';
 import {
+  changeUserRole,
   getJobHealth,
   getMonitoringAccess,
   getSignInHealth,
@@ -10,10 +11,15 @@ import {
   listDeadLetters,
   listJobRuns,
   listSignInEvents,
+  listUserActions,
+  listUsers,
   retryDeadLetter,
+  signOutUser,
   triggerJob,
 } from '../../api/monitoring';
 import type {
+  AdminActionPage,
+  AdministeredUserPage,
   DeadLetterPage,
   JobHealth,
   JobRunPage,
@@ -24,6 +30,7 @@ import type {
   SignInOutcome,
   TrafficSeries,
   TrafficSummary,
+  UserRole,
 } from './types';
 
 export const monitoringKeys = {
@@ -43,6 +50,10 @@ export const monitoringKeys = {
     [...monitoringKeys.traffic(), 'summary', windowMinutes] as const,
   trafficSeries: (windowMinutes: number) =>
     [...monitoringKeys.traffic(), 'series', windowMinutes] as const,
+  users: () => [...monitoringKeys.all, 'users'] as const,
+  userList: (search: string, page: number) =>
+    [...monitoringKeys.users(), 'list', search, page] as const,
+  userActions: (userId: string) => [...monitoringKeys.users(), 'actions', userId] as const,
 };
 
 /**
@@ -170,5 +181,60 @@ export function useTrafficSeries(windowMinutes: number): UseQueryResult<TrafficS
     queryFn: () => getTrafficSeries(windowMinutes),
     refetchInterval: TrafficRefreshMs,
     retry: false,
+  });
+}
+
+/**
+ * The account list.
+ *
+ * **No `refetchInterval`, unlike every panel above.** Those report a system that changes on its
+ * own; this one changes only when an administrator acts, and a poll landing mid-confirmation
+ * would reorder rows under the pointer — `LastSeenAt` is the sort key, so an unrelated user
+ * signing in is enough to move them. The mutations below invalidate it, which is the only
+ * refresh it needs.
+ */
+export function useUsers(
+  search: string,
+  page: number,
+): UseQueryResult<AdministeredUserPage, ApiError> {
+  return useQuery({
+    queryKey: monitoringKeys.userList(search, page),
+    queryFn: () => listUsers({ search, page }),
+    retry: false,
+  });
+}
+
+export function useUserActions(userId: string): UseQueryResult<AdminActionPage, ApiError> {
+  return useQuery({
+    queryKey: monitoringKeys.userActions(userId),
+    queryFn: () => listUserActions(userId),
+    retry: false,
+  });
+}
+
+/**
+ * Both mutations invalidate the whole users subtree rather than one key, for the reason the job
+ * mutations give: a role change moves the row AND adds to that account's history, and naming
+ * every consequence precisely is how one gets missed.
+ */
+export function useChangeUserRole(): UseMutationResult<
+  void,
+  ApiError,
+  { userId: string; role: UserRole }
+> {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, role }) => changeUserRole(userId, role),
+    onSuccess: () => client.invalidateQueries({ queryKey: monitoringKeys.users() }),
+  });
+}
+
+export function useSignOutUser(): UseMutationResult<void, ApiError, string> {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: signOutUser,
+    onSuccess: () => client.invalidateQueries({ queryKey: monitoringKeys.users() }),
   });
 }
