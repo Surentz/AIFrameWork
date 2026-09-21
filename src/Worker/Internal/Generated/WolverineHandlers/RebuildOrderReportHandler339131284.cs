@@ -28,12 +28,12 @@ namespace Internal.Generated.WolverineHandlers
             * Your code is directly using IServiceProvider
             */
             var queryDispatcher = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IQueryDispatcher>(serviceScope.ServiceProvider);
-            var jobCurrentUser = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Infrastructure.Jobs.JobCurrentUser>(serviceScope.ServiceProvider);
             
             /*
             * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
             */
             var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
+            var jobCurrentUser = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Infrastructure.Jobs.JobCurrentUser>(serviceScope.ServiceProvider);
             // The actual message body
             var rebuildOrderReport = (AiFramework.Application.Orders.RebuildOrderReport)context.Envelope.Message;
 

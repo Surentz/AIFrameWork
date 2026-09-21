@@ -179,47 +179,40 @@ seek rather than a scan.
 
 ### Tasks
 
-- [ ] **2.1** `ListUsers(search, page, size)` → `UserPage`, mirroring `SignInEventPage`. Username,
+- [x] **2.1** `ListUsers(search, page, size)` → `UserPage`, mirroring `SignInEventPage`. Username,
       display name, role, `LastSeenAt`, registered-at, and **`RoleIsConfigured`** — whether this
       account's name appears in `Admin__Usernames`, read from `IAdministratorDirectory`. That last
       field is what makes the Phase 1 trap visible in the UI instead of after a restart.
-- [ ] **2.2** `ChangeUserRole(TargetUserId, UserRole)` command, carrying both rails:
+- [x] **2.2** `ChangeUserRole(TargetUserId, UserRole)` command, carrying both rails:
       - **self-demotion** — compare against `ICurrentUser.Id` and refuse with a `Conflict`;
       - **last administrator** — see the trap below; this is not a read-then-write.
-- [ ] **2.3** `SignOutUser(TargetUserId)` — rotates the target's security stamp through the
+- [x] **2.3** `SignOutUser(TargetUserId)` — rotates the target's security stamp through the
       existing `User.RotateSecurityStamp`. A separate command from `SignOutEverywhere`, which is
       self-aimed; sharing one command would mean one authorization rule for two very different
       acts.
-- [ ] **2.4** `IAdminAudit` port + `AdminAudit` adapter + `AdminAction` entity and configuration,
+- [x] **2.4** `IAdminAudit` port + `AdminAudit` adapter + `AdminAction` entity and configuration,
       in the shape `ISignInAudit`/`SignInAudit` already established. Every one of the three
       actions writes exactly one row, **in the same `SaveChangesAsync` as the change itself** —
       an audit that can be committed without its effect, or vice versa, is not an audit.
-- [ ] **2.5** Migration `AddAdminActions`.
-- [ ] **2.6** `MonitoringUsersController` — `GET /api/monitoring/users`,
+- [x] **2.5** Migration `AddAdminActions`.
+- [x] **2.6** `MonitoringUsersController` — `GET /api/monitoring/users`,
       `POST /api/monitoring/users/{id}/role`, `POST /api/monitoring/users/{id}/sign-out`,
       `GET /api/monitoring/users/{id}/actions`. Same policy as every other monitoring route.
-- [ ] **2.7** `PruneAdminActions` job + `Monitoring__AdminActionRetentionDays`, registered in
+- [x] **2.7** `PruneAdminActions` job + `Monitoring__AdminActionRetentionDays`, registered in
       `JobRegistration` and scheduled daily beside `PruneSignInEvents`. **Regenerate the worker's
       codegen tree.**
-- [ ] **2.8** Tests: both rails including the race, the audit-and-change atomicity, the
+- [x] **2.8** Tests: both rails including the race, the audit-and-change atomicity, the
       self-demotion refusal, and that demotion does **not** rotate the target's stamp.
-- [ ] **2.9** Regenerate the API contract.
+- [x] **2.9** Regenerate the API contract.
 
 ### Traps
 
-- **The last-administrator check must not be read-then-write.** Two administrators demoting each
-  other concurrently both read "there are 2 admins", both pass, and the system is left with none.
-  Do not reach for a transaction and an isolation level — **put the condition in the UPDATE's own
-  `WHERE` clause**, the way `TouchLastSeenAsync` already puts its throttle there:
-
-  ```sql
-  UPDATE users SET "Role" = @member
-  WHERE "Id" = @id
-    AND EXISTS (SELECT 1 FROM users WHERE "Role" = @admin AND "Id" <> @id)
-  ```
-
-  Zero rows affected *is* the refusal. No read to race against, no explicit transaction, and
-  therefore no collision with `EnableRetryOnFailure`'s execution-strategy rule (ADR 0014).
+- **The last-administrator check must not be read-then-write** — and, as it turned out, putting
+  the condition in the `UPDATE`'s own `WHERE` clause is *not on its own sufficient either*. That
+  was the plan's original instruction and it was wrong; see Phase 2's "What changed" below. A
+  subquery read takes no locks, so two overlapping transactions demoting different administrators
+  both pass the `EXISTS` and the table ends with nobody. The implementation needs the conditional
+  statement **and** a transaction-scoped advisory lock that serialises demotions.
 - **`ICurrentUser.Id` memoizes** (ADR 0009). That is what makes the self-demotion check safe to
   read inside a handler, but it also means a test substituting it must set it before dispatch.
 - **`RoleIsConfigured` is a per-row call into options, not a database join.** `AdminOptions` is a
@@ -237,6 +230,51 @@ want when reconstructing how someone came to have access six months ago. The kno
 `Monitoring__AdminActionRetentionDays` and it is independent of the sign-in one precisely so this
 can be revisited without touching the other. **Settle this before 2.7 lands** — raising it later
 does not recover rows already deleted.
+
+### What changed during implementation
+
+- **The last-administrator rail took three attempts, and the first two passed their tests while
+  being wrong.** This is the finding worth carrying forward from this phase.
+
+  The plan said: put the condition in the `UPDATE`'s own `WHERE` clause, "no read to race
+  against." That closes the read-then-write gap and nothing else. A subquery read takes **no
+  locks**, so two *overlapping transactions* demoting *different* administrators each miss the
+  other's uncommitted change under READ COMMITTED, both pass the `EXISTS`, and the table ends
+  with zero administrators. Demonstrated against real Postgres.
+
+  Worse, the tests written for it had no teeth. A two-way `Task.WhenAll` race passed against the
+  broken implementation; so did an eight-way one. EF and Npgsql serialise concurrent calls in
+  practice, so the interleaving cannot be produced on demand, and **a race test that cannot
+  observe the race is worse than no test** — it converts an open question into false confidence.
+
+  The fix is a transaction-scoped advisory lock (`pg_advisory_xact_lock`) that serialises every
+  demotion, through the execution strategy per ADR 0014. The test asserts the *mechanism* rather
+  than trying to win a race: it holds the same lock from another connection and proves the
+  demotion waits. Removing the lock fails it, which was verified by doing exactly that.
+
+- **Retention defaulted to 365 days, not the 30 the decision table recorded.** Flagged as an open
+  decision when the plan was written and settled here rather than left implicit: `sign_in_events`
+  is high-volume operational noise where a month is generous, while a privilege change is rare and
+  is precisely the record wanted months later. It has its own knob
+  (`Monitoring__AdminActionRetentionDays`), so 30 is one configuration value away — and the
+  asymmetry runs one way, since deleted audit rows do not come back.
+
+- **The audit is tracked, unlike `SignInAudit`, and the contrast is the design.** `SignInAudit`
+  writes immediate SQL because it must record *failures*, which the unit of work discards along
+  with the failed command. `AdminAudit` records only changes that happened, so it wants the
+  opposite guarantee — the row and its effect commit together. One documented exception: a
+  demotion lands immediately because its rail owns a transaction, so a failed commit can leave a
+  demotion applied and unaudited. That is the safer direction, and it is argued on the port rather
+  than hidden.
+
+- **Integration tests had to opt into string enums explicitly.** The API serialises enum names
+  (root `CLAUDE.md`, Notifications), but `ReadFromJsonAsync` with framework defaults expects
+  integers and threw. Supplying a `JsonStringEnumConverter` in the test mirrors what the API
+  actually sends, and incidentally makes these tests notice if that convention ever regresses.
+
+- **`ChangeUserRole` reports success, not a conflict, when the role already matches.** The caller
+  asked for a state the system is already in. It returns `false` and writes no audit row, so a
+  retried click cannot pile up records claiming a role changed when it did not.
 
 ---
 

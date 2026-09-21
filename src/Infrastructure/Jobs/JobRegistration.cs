@@ -102,6 +102,7 @@ public static class JobRegistration
         // request volume rather than with events, and a week answers "what changed" without the
         // table becoming an archive.
         JobDescriptor.Scheduled<PruneTrafficBuckets>("0 30 3 * * ?"),
+        JobDescriptor.Scheduled<PruneAdminActions>("0 35 3 * * ?"),
     ];
 
     /// <summary>
@@ -176,7 +177,8 @@ public static class JobRegistration
             .IncludeType<PruneProcessedOutboxHandler>()
             .IncludeType<PruneJobRunsHandler>()
             .IncludeType<PruneSignInEventsHandler>()
-            .IncludeType<PruneTrafficBucketsHandler>();
+            .IncludeType<PruneTrafficBucketsHandler>()
+            .IncludeType<PruneAdminActionsHandler>();
 
         // Set on the WORKER only — the API keeps Wolverine 6's NotAllowed default, so this
         // relaxation reaches exactly the host that needs it.
