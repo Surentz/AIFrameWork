@@ -18,8 +18,8 @@ those readable and makes Ctrl-C mean "stop this one".
 
 The migration step is the part worth having: it sets `ConnectionStrings__Default` before calling
 `dotnet ef`, which is exactly the trap described under "The gotcha that will cost you an
-afternoon" in the root `CLAUDE.md`. Without it, `database update` aims at the
-`design_time_only` placeholder rather than your dev database.
+afternoon" in the `local-dev` skill (`.claude/skills/local-dev/SKILL.md`). Without it,
+`database update` aims at the `design_time_only` placeholder rather than your dev database.
 
 `scripts/stop-dev.ps1` stops the database (and Seq, if `-WithSeq` started it); the two windows
 are yours to Ctrl-C. A bare `docker compose down` also stops the database, but **not** Seq if it

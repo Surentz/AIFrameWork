@@ -2,22 +2,13 @@
 
 Vite + React workspace, TypeScript, client-side SPA.
 
-## After `npm create vite`, apply this `tsconfig.json` delta
+## TypeScript strictness
 
-The generator writes this file, so these cannot be pre-written — apply them once:
-
-```jsonc
-{
-  "compilerOptions": {
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitReturns": true
-  }
-}
-```
+`tsconfig.app.json` and `tsconfig.node.json` both carry the repo's strictness delta — `strict`,
+`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`,
+`noFallthroughCasesInSwitch`, `noImplicitReturns`. Keep the two files in step: the node config is
+what gives `e2e/**` and the config files themselves the same checks. Never relax a flag to make an
+error go away.
 
 ## Conventions
 

@@ -8,7 +8,8 @@ Implement the feature `$ARGUMENTS` across every layer, in dependency order.
 Working outward in this order is what stops Clean Architecture degrading into one layer
 edited and the other three forgotten. Do not skip ahead.
 
-Read `CLAUDE.md` plus the `CLAUDE.md` of each layer as you reach it.
+Read the `CLAUDE.md` of each layer as you reach it, and load
+any skill the feature touches (`caching`, `auth`, `jobs`, `notifications`, `resilience`, `regenerate`).
 
 ## 1. Domain — `src/Domain/`
 

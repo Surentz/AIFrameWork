@@ -3,8 +3,8 @@
 The job host. A second composition root beside `src/Api`, running the same `AddInfrastructure`
 against the same database — the only difference is which Wolverine queues it listens on.
 
-See ADR 0016, and root `CLAUDE.md`'s `## Jobs` section for the rules that apply wherever a job is
-written. This file is what is specific to *this project*.
+See ADR 0016, and the `jobs` skill for the rules that apply wherever a job is written — lanes,
+enqueueing, retry, Quartz, and configuration keys. This file is what is specific to *this project*.
 
 ## Belongs here
 
@@ -34,33 +34,15 @@ project's own `codegen write` reachable.
 
 ## The generated code is this project's own
 
-**Release loads pre-generated Wolverine adapters from `Internal/Generated`, and they are separate
-from the Api's.** `TypeLoadMode.Static` resolves pre-built types out of `opts.ApplicationAssembly`,
-which here is `AiFramework.Worker`. It cannot be the Api's assembly: that needs a `Worker → Api`
-reference the dependency rule forbids.
+**Release loads pre-generated Wolverine adapters from `Internal/Generated`, separate from the
+Api's.** After adding or changing a job handler — or touching `JobUserMiddleware` — run
+`dotnet run --project src/Worker -- codegen write`, commit the result, and restart the worker. The
+`regenerate` skill has why the trees cannot be shared, the Debug-green/Release-broken trap, and
+two codegen failures that compile cleanly (the interface-typed middleware parameter, and service
+location under `NotAllowed`).
 
-**After adding or changing a job handler — or touching `JobUserMiddleware` — regenerate:**
+One more codegen failure specific to middleware here:
 
-```bash
-dotnet run --project src/Worker -- codegen write
-```
-
-Then commit the result. Debug does not need it, which is exactly the trap: stale generated code
-leaves Debug green and breaks the worker at startup in Release only. `WorkerCodegenTests` catches a
-*missing* adapter in the Debug suite; CI's `codegen` job re-runs the command and fails on any diff,
-catching one that merely drifted. **Both trees must be regenerated** — `src/Api` too, if an event
-handler changed.
-
-Three codegen failures that compile perfectly well and only show up when you run the command:
-
-- **A middleware parameter JasperFx cannot resolve.** It matches chain variables by exact type and
-  will not upcast a concrete message to an interface, so `Before(IUserScopedJob job, ...)` fails
-  with "unable to resolve a variable of type IUserScopedJob". `JobUserMiddleware` takes the
-  `Envelope` and pattern-matches instead.
-- **Service location.** A job handler that reuses a use case injects `ICommandDispatcher` or
-  `IQueryDispatcher`, and ADR 0003's reflection-free dispatchers take `IServiceProvider`, which
-  Wolverine 6 refuses under its `NotAllowed` default. `JobRegistration.IncludeJobHandlers` sets
-  `ServiceLocationPolicy.AlwaysAllowed` **on this host only** — the Api keeps the strict default.
 - **A middleware method Wolverine silently ignores.** `OnException` binds only when the exception
   is its FIRST parameter. `OnException(Envelope, Exception)` is dropped with no warning, no error,
   and a green build — the method simply never appears in the generated adapter. The async spelling
@@ -168,15 +150,9 @@ tracking session — never wait for a cron to come round.
 
 ## Configuration
 
-| Key | Why it matters |
-|---|---|
-| `Jobs__Queues` | The lanes this pod consumes, comma-separated. **This one value is the host split** — a host listing no lane is publish-only, which is what the Api does. An unknown name fails at startup rather than leaving a queue unconsumed |
-| `Jobs__LightParallelism` / `Jobs__HeavyParallelism` | Per-pod concurrency per lane. Heavy defaults to 2 deliberately; scale replicas, not this |
-| `Jobs__Schedules__<JobName>` | Overrides one scheduled job's cron (Quartz syntax, seconds first). An unknown job name or an invalid cron fails startup naming the key. Only the timing is configurable; which jobs are scheduled is code |
-| `Cache__Enabled` | **`false` here, in `appsettings.json` and in the manifest.** See root `CLAUDE.md`'s Jobs section |
-| `Observability__ServiceName` | `aiframework-worker`, so the two hosts are distinguishable in the log store |
-
-Double underscores, always. A single underscore binds nothing and warns nothing.
+The keys (`Jobs__Queues`, the parallelism pair, `Jobs__Schedules__<JobName>`, `Cache__Enabled`,
+`Observability__ServiceName`) are tabled in the `jobs` skill. `Cache__Enabled` is `false` here
+in **both** `appsettings.json` and `k8s/base/worker.yaml` — change one, change the other.
 
 `JobOptions` is bound straight off `builder.Configuration` rather than resolved from DI, because
 `AddWolverineEventPath` needs the lane list at *configuration* time — `UseWolverine` hooks the host
@@ -213,16 +189,7 @@ silently falling back to no profile at all.
 
 ## Tests
 
-`tests/Worker.IntegrationTests`, against the real host on Testcontainers Postgres. It joins one
-collection (`WorkerFactoryCollection`) so xUnit starts exactly one container, the same rule
-`tests/CLAUDE.md` states for `PostgresCollection` and `ApiFactoryCollection`.
-
-Two things a new test here has to know:
-
-- **`IncludeExternalTransports()` is required on a tracking session.** A job goes out to a Postgres
-  queue and comes back through this host's listener, and a session ignores external transports by
-  default — without it every delivery assertion fails with "No messages of type … were received".
-- **Do not use a tracking session to prove something did *not* happen.** `ExecuteAndWaitAsync`
-  waits for a message to be handled, so a message that must never be handled only ever produces a
-  timeout. Assert on the stored envelope instead: a scheduled job waits in
-  `wolverine_queues.wolverine_queue_<lane>_scheduled` — its own schema, not the `wolverine` one.
+`tests/Worker.IntegrationTests`, against the real host on Testcontainers Postgres, in one
+`WorkerFactoryCollection`. Read `tests/CLAUDE.md`'s "Worker tests" section before writing one —
+tracking sessions need `IncludeExternalTransports()`, and must never be used to prove something
+did *not* happen.

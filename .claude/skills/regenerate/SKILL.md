@@ -46,10 +46,13 @@ Three things about that incantation, each of which cost someone an afternoon:
 - **It cannot be folded in as `-t:"Restore;Build;..."`.** MSBuild evaluates the project once,
   before Restore writes NuGet's props, and the OpenAPI XML-comment source generator then fails
   with CS9137 about interceptors.
-- **Both environment variables are required.** Generation runs the whole application: without a
-  connection string it dies on `Program.cs`'s startup guard, and with one but still durable,
-  Wolverine's startup migration dials PostgreSQL. The connection string is never actually opened
-  — it only has to be non-empty. No database needs to be running.
+- **All three environment variables are required.** Generation runs the whole application:
+  without a connection string it dies on `Program.cs`'s startup guard; with one but still durable,
+  Wolverine's startup migration dials PostgreSQL; and with `Admin__ReconcileOnStart` left on,
+  `AdminReconciler` dials it too and the generator dies with an `ObjectDisposedException` that
+  names nothing useful (ADR 0020). The connection string is never actually opened — it only has
+  to be non-empty. No database needs to be running. **Any new startup path that would open it
+  needs its own switch here**, and `HealthTests` is the canary that catches one.
 
 Generation is an explicit MSBuild target and deliberately **not** part of `dotnet build`. Running
 it on every build was tried and reverted: it made a plain `dotnet build` of `src/Api` fail
@@ -75,6 +78,16 @@ the dependency rule forbids. ADR 0016.
 startup, so a stale tree leaves Debug green and the build succeeding, and breaks only in Release,
 at startup. `WolverineCodegenTests` and `WorkerCodegenTests` catch a *missing* adapter in the
 Debug suite; CI catches one that merely drifted.
+
+`codegen write` needs only `ConnectionStrings__Default` and `Wolverine__Durable=false` — a
+JasperFx command never starts hosted services, so the admin reconciler does not run.
+
+**Why `codegen write` is reachable at all.** `Program.cs` routes to `RunJasperFxCommands(args)`
+when args are present and to plain `RunAsync()` when they are not, so an ordinary `dotnet run`
+or F5 skips JasperFx's command discovery. `WebApplicationFactory` passes args of its own, so
+tests take the JasperFx branch and need `JasperFxEnvironment.AutoStartHost` — set once in
+`tests/Api.IntegrationTests/JasperFxTestEnvironment.cs`. Without it nearly every integration test
+fails with "The server has not been started". ADR 0005.
 
 **Restart the worker afterwards.** New adapters do not take effect in a running worker.
 `./scripts/worker.ps1` restarts just that window, leaving a working API and Vite alone.

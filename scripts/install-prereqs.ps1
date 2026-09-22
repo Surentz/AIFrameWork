@@ -149,7 +149,7 @@ else {
 
 # --- k9s --------------------------------------------------------------------------------------
 # Optional in the sense that nothing in dev.ps1/deploy.ps1 needs it, but it is the recommended
-# way to look inside the kind cluster (see CLAUDE.md's Kubernetes section), so it belongs here.
+# way to look inside the kind cluster (see the kubernetes skill, .claude/skills/kubernetes), so it belongs here.
 Write-Host '==> Checking k9s' -ForegroundColor Cyan
 if (Test-CommandExists 'k9s') {
     Add-Result -Tool 'k9s' -Status 'OK'

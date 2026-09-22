@@ -25,7 +25,7 @@ limited, the limiter partitions by client address, and against the kind cluster 
 shares one partition with a budget of 10 per 60 seconds. A registration per test would cap a
 cluster run at about ten tests a minute, surfacing as navigation timeouts that look like flakes.
 
-## Two rules that are correctness, not style
+## Three rules that are correctness, not style
 
 1. **Anything that rotates the security stamp takes `isolatedPage`/`freshUser`.** That means
    changing a password, signing out everywhere, or tripping the account lockout. Rotating the
