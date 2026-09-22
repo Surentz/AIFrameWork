@@ -1,6 +1,7 @@
 ---
 name: dotnet-conventions
 description: Use when writing or modifying C# in this repo - covers nullability, required-ness, the DataAnnotations trap, exception handling, and EF Core patterns.
+paths: "src/**/*.cs"
 ---
 
 # .NET Conventions

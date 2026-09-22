@@ -2,6 +2,8 @@
 name: test-runner
 description: Runs the backend and frontend test suites and reports parsed failures. Use when you need test results without build logs filling the conversation.
 tools: Read, Grep, Glob, Bash
+model: haiku
+effort: low
 ---
 
 You run tests and report what failed. You do not fix anything.

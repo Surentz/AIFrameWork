@@ -5,7 +5,7 @@ argument-hint: <JobName>
 
 Add the background job `$ARGUMENTS`.
 
-Read root `CLAUDE.md`'s `## Jobs` section and `src/Worker/CLAUDE.md` before starting. ADR 0016 is
+Load the `jobs` skill and read `src/Worker/CLAUDE.md` before starting. ADR 0016 is
 the reasoning behind all of it.
 
 **Jobs run in the worker. The API listens to nothing.** Nothing below changes that, and no step
@@ -94,7 +94,8 @@ constructor. Do not add a timer `IHostedService` — every replica would fire it
 | `tests/Infrastructure.Tests/Jobs` | Registration completeness, lane→queue mapping |
 | `tests/Worker.IntegrationTests` | The job reaching its handler on the right lane |
 
-Two rules specific to the worker suite, both learned the hard way — see `src/Worker/CLAUDE.md`:
+Two rules specific to the worker suite, both learned the hard way
+(`tests/CLAUDE.md`, "Worker tests"):
 `IncludeExternalTransports()` is required on a tracking session, and a tracking session must never
 be used to prove something did *not* happen.
 

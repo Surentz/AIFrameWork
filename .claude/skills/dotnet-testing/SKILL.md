@@ -1,6 +1,7 @@
 ---
 name: dotnet-testing
 description: Use when writing or modifying .NET tests in this repo - xUnit, FluentAssertions, NSubstitute, and what belongs at each layer.
+paths: "tests/**/*.cs"
 ---
 
 # .NET Testing

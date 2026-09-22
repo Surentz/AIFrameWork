@@ -1,6 +1,7 @@
 ---
 name: react-testing
 description: Use when writing or modifying React tests in this repo - Vitest, React Testing Library, MSW, and what not to test.
+paths: "frontend/src/**/*.test.{ts,tsx}"
 ---
 
 # React Testing

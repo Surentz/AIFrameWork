@@ -72,7 +72,7 @@ to commit the regenerated tree.
 
 **If the only difference is statement ordering inside a handler you did not change, keep the
 committed version.** Windows and Linux each produce a stable but different order, and CI's Linux
-output is the authority — see "Wolverine codegen" in `CLAUDE.md`.
+output is the authority — see the `regenerate` skill.
 
 ### 3b. The API contract
 

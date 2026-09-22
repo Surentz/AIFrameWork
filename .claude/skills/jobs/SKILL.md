@@ -36,8 +36,10 @@ The lane picks the queue; `Jobs__Queues` picks which host listens. Both lanes ru
 today — splitting them onto differently-sized Deployments later is a manifest copy and no code
 change.
 
-Every job type must appear in `src/Infrastructure/Jobs/JobRegistration.cs` — explicit and
-greppable, with `JobRegistrationTests` failing the build on an omission.
+Enqueue through `IJobScheduler` (`src/Application/Abstractions/Jobs.cs`); Wolverine never appears
+in `Application`. Every job type must appear in `src/Infrastructure/Jobs/JobRegistration.cs` —
+explicit and greppable, mirroring `AddMessaging()`, with `JobRegistrationTests` failing the build
+on an omission.
 
 ## Diagnosing a job that misbehaves
 

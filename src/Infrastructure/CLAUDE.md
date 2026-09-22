@@ -73,8 +73,8 @@ beside the command ones. Off by configuration everywhere it is not the subject �
 
 `Resilience/` holds `ResilienceOptions`, `ResilienceRegistration` (`AddResilience`,
 `AddExchangeRateClient`), and the one typed client that exists today, `ExchangeRateClient`. Both
-outbound HTTP and the Npgsql provider retry transient faults now — see root `CLAUDE.md`'s
-Resilience section for the three that will cost you an afternoon. This section is the rules for
+outbound HTTP and the Npgsql provider retry transient faults now — see the `resilience`
+skill for the three that will cost you an afternoon. This section is the rules for
 writing the *next* typed client.
 
 - **The pipeline lives under the port, never over it.** Polly decides whether to retry by
@@ -158,12 +158,8 @@ event, it is persisted with the aggregate, and it is delivered at least once aft
 - The two `BackgroundService` pumps in `OutboxHostedServices.cs` (`OutboxPollerService`,
   `OutboxWorkerService`) are deliberately thin: they own scope creation and the channel hop, and
   delegate the actual work to `OutboxPoller`/`OutboxWorkItemProcessor` above. `OutboxHostedServices.cs`
-  holds the repo's only CA1031 exemption — see the file-scoped comment above
-  `[src/Infrastructure/Outbox/OutboxHostedServices.cs]` in `.editorconfig` for why both pumps need
-  it (a worker loop and a `BackgroundService`'s `ExecuteAsync` have no `IExceptionHandler`-style
-  parameter to receive the exception, unlike the Api layer's global handler); root `CLAUDE.md`'s
-  "Never `catch (Exception)`" bullet also describes it. Do not re-explain the reasoning here —
-  point at `.editorconfig`, the one place it should live.
+  holds the repo's only CA1031 exemption; the reasoning lives in the file-scoped comment above
+  `[src/Infrastructure/Outbox/OutboxHostedServices.cs]` in `.editorconfig`, and only there.
 
 ## dotnet-ef
 

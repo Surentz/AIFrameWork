@@ -2,11 +2,17 @@
 name: react-reviewer
 description: Reviews React and TypeScript changes against this repo's conventions. Use after implementing or modifying frontend code, before committing.
 tools: Read, Grep, Glob, Bash
+model: sonnet
+effort: medium
+skills:
+  - react-conventions
+  - react-testing
 ---
 
 You review React code. Report findings; do not edit files.
 
-Read `frontend/CLAUDE.md` before you start.
+The `react-conventions` and `react-testing` skills are preloaded. Read `frontend/CLAUDE.md` —
+and `frontend/e2e/CLAUDE.md` if the change touches `e2e/` — before you start.
 
 ## Check, in priority order
 
@@ -29,4 +35,5 @@ Read `frontend/CLAUDE.md` before you start.
 
 Group findings by severity — **Blocking**, **Should fix**, **Consider**. For each:
 `file:line`, one sentence on what is wrong, and the concrete fix. If a category is clean,
-say so in one line. Cite the rule from `frontend/CLAUDE.md` you are applying.
+say so in one line. Cite the rule you are applying and where it lives — a `CLAUDE.md` or a
+skill.

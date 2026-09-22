@@ -97,7 +97,7 @@ else {
     # ConnectionStrings__Default must be set explicitly. DesignTimeDbContextFactory falls back to
     # "Host=localhost;Database=design_time_only" when it is absent — a placeholder that exists for
     # the `dotnet ef` verbs which never dial out — so a bare `database update` would appear to run
-    # and then fail against a database nobody created. This is the trap the root CLAUDE.md calls
+    # and then fail against a database nobody created. This is the trap the `local-dev` skill calls
     # "the gotcha that will cost you an afternoon"; absorbing it is half the reason this step is here.
     Invoke-Step 'Applying migrations' {
         $env:ConnectionStrings__Default =
