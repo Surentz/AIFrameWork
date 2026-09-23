@@ -84,7 +84,7 @@ public sealed class WolverineOutboxAtomicityTests(ApiFactory factory)
                 // the two cannot diverge, because there is only one transaction.
                 await outbox.SaveChangesAndFlushMessagesAsync(CancellationToken.None);
             });
-        });
+        }, timeoutInMilliseconds: MessageTracking.TimeoutMs);
 
         recorder.WasHandled(orderId).Should().BeTrue(
             "a committed message must be delivered");

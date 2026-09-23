@@ -133,7 +133,7 @@ public sealed class JobEnqueueMechanismTests(ApiFactory factory, ITestOutputHelp
 
                 await outbox.SaveChangesAndFlushMessagesAsync(CancellationToken.None);
             });
-        });
+        }, timeoutInMilliseconds: MessageTracking.TimeoutMs);
 
         await CountOutgoingAsync("C AFTER SaveChangesAndFlushMessagesAsync");
 
