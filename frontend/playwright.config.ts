@@ -29,11 +29,14 @@ export default defineConfig({
   use: {
     baseURL: target.baseURL,
     ignoreHTTPSErrors: target.ignoreHTTPSErrors,
-    trace: 'on-first-retry',
+    // Locally there are no retries, so 'on-first-retry' would never record anything. CI keeps
+    // it: a trace per failed first attempt is what the retry is for, without tracing every pass.
+    trace: isCI ? 'on-first-retry' : 'retain-on-failure',
     screenshot: 'only-on-failure',
     // No `video` option: it is honored only by the built-in page/context fixtures'
-    // _contextFactory, but signedInPage/isolatedPage (e2e/fixtures/index.ts's newSignedInPage) -
-    // most of this suite - call browser.newContext() directly and would silently record
+    // _contextFactory, but signedInPage/isolatedPage/adminPage/openSession
+    // (e2e/fixtures/index.ts's newSignedInPage) - most of this suite - call
+    // browser.newContext() directly and would silently record
     // nothing, making a blanket `video: 'retain-on-failure'` a promise the config could not keep
     // for those tests. Trace and screenshot ARE captured for every context regardless of how it
     // was created, so failure diagnosis is not lost - just not doubled with video everywhere.

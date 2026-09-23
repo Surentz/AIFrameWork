@@ -260,8 +260,11 @@ jobs:
 
       - run: npm run e2e --prefix frontend
 
+      # !cancelled(), not failure(): a test that fails and then passes on its retry leaves the
+      # job green, and its first-attempt trace (trace: 'on-first-retry') is the only record of
+      # the flake. Uploading on failure alone threw exactly that evidence away.
       - name: Upload Playwright report
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report

@@ -3,6 +3,14 @@ import type { Locator, Page } from '@playwright/test';
 export const overviewHeading = (p: Page): Locator =>
   p.getByRole('heading', { name: 'Monitoring', level: 1 });
 
+/** A monitoring sub-page's <h1>: 'Traffic', 'Job runs', 'Sign-ins', 'Users'. */
+export const pageHeading = (p: Page, name: string): Locator =>
+  p.getByRole('heading', { name, level: 1 });
+
+/** The traffic page's per-endpoint table, rendered whether or not a bucket has been flushed. */
+export const endpointBreakdownHeading = (p: Page): Locator =>
+  p.getByRole('heading', { name: 'By endpoint and handler', level: 2 });
+
 /** The shell's nav entry, rendered only for an administrator. */
 export const navLink = (p: Page): Locator => p.getByRole('link', { name: 'Monitoring' });
 
@@ -38,9 +46,40 @@ export const userRow = (p: Page, username: string): Locator =>
 
 export const userSearch = (p: Page): Locator => p.getByLabel('Search');
 
+export type UserAction = 'Promote' | 'Demote' | 'Sign out' | 'History' | 'Confirm' | 'Cancel';
+
+/** One of a user row's buttons. Scoped to the row, so the shell's own "Sign out" never matches. */
+export const userAction = (p: Page, username: string, action: UserAction): Locator =>
+  userRow(p, username).getByRole('button', { name: action, exact: true });
+
+/**
+ * The inline confirmation, a `role="group"` named by its question - "Promote <name> to Admin?".
+ * The question names the account in words, so a misclick cannot act on the wrong person.
+ */
+export const confirmation = (p: Page, question: string): Locator =>
+  p.getByRole('group', { name: question });
+
+/** The audit table the History button opens, captioned with the account it describes. */
+export const userHistory = (p: Page, username: string): Locator =>
+  p.getByRole('table', { name: `What has been done to ${username}` });
+
 /** Finds an account by username, which is also how an operator would. */
 export async function findUser(p: Page, username: string): Promise<void> {
   await userSearch(p).fill(username);
   await p.getByRole('button', { name: 'Search' }).click();
   await userRow(p, username).waitFor();
+}
+
+/**
+ * Promotes or demotes an account and waits for the change to land: the row offers the opposite
+ * action only once the confirmation has closed on success.
+ */
+export async function changeRole(
+  p: Page,
+  username: string,
+  action: 'Promote' | 'Demote',
+): Promise<void> {
+  await userAction(p, username, action).click();
+  await userAction(p, username, 'Confirm').click();
+  await userAction(p, username, action === 'Promote' ? 'Demote' : 'Promote').waitFor();
 }

@@ -37,22 +37,30 @@ test(
   'accepts the new password and refuses the old one',
   { tag: '@local-only' },
   async ({ isolatedPage, freshUser }) => {
-    await account.changePassword(isolatedPage, {
-      current: freshUser.password,
-      next: NewPassword,
+    await test.step('change the password', async () => {
+      await account.changePassword(isolatedPage, {
+        current: freshUser.password,
+        next: NewPassword,
+      });
+      await expect(account.successAlert(isolatedPage)).toBeVisible();
     });
-    await expect(account.successAlert(isolatedPage)).toBeVisible();
 
-    await isolatedPage.goto('/orders');
-    await shell.signOut(isolatedPage);
-
-    await login.signIn(isolatedPage, {
-      username: freshUser.username,
-      password: freshUser.password,
+    await test.step('sign out', async () => {
+      await isolatedPage.goto('/orders');
+      await shell.signOut(isolatedPage);
     });
-    await expect(login.alert(isolatedPage)).toHaveText(/do not match/i);
 
-    await login.signIn(isolatedPage, { username: freshUser.username, password: NewPassword });
-    await expect(orders.pageHeading(isolatedPage)).toBeVisible();
+    await test.step('the old password is refused', async () => {
+      await login.signIn(isolatedPage, {
+        username: freshUser.username,
+        password: freshUser.password,
+      });
+      await expect(login.alert(isolatedPage)).toHaveText(/do not match/i);
+    });
+
+    await test.step('the new password is accepted', async () => {
+      await login.signIn(isolatedPage, { username: freshUser.username, password: NewPassword });
+      await expect(orders.pageHeading(isolatedPage)).toBeVisible();
+    });
   },
 );

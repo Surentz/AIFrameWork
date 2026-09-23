@@ -17,6 +17,7 @@ fixture below.
 | `isolatedPage` / `freshUser` | test | See the rule below — not optional |
 | `adminPage` / `adminUser` | test / worker | The monitoring pages — `@local-only`, see below |
 | `api` | test | Arranging data over HTTP |
+| `openSession` | test | A further signed-in page for a given user — e.g. a second browser. Closed at teardown |
 | `workerUser` | worker | The user `signedInPage` is signed in as |
 
 **`workerUser` registers once per worker, not once per test.** Auth calls therefore scale with
@@ -50,8 +51,17 @@ cluster run at about ten tests a minute, surfacing as navigation timeouts that l
 - **Assertions never live in a screen.** They belong in the spec, where the reader can see what
   the test claims.
 - Queries stay role- and label-based. Do not add `data-testid`.
+- Row- or dialog-scoped buttons get a screen function too (`monitoring.userAction`), not an
+  inline `getByRole` in the spec.
 - Where two accessible names overlap — "Sign out" and "Sign out everywhere" — use
   `{ exact: true }`. Playwright matches names as substrings by default.
+
+## Specs
+
+- A test with more than one phase wraps each in `test.step('…')`, so the report and trace say
+  which phase failed rather than showing one unbroken block. A three-line test needs none.
+- Never close a context at the end of a test body — a failed assertion skips that line and leaks
+  it. Open extra pages through `openSession`, which closes them at teardown either way.
 
 ## Arranging data
 
@@ -80,21 +90,21 @@ says otherwise. Add the tag when a test needs any of these:
 - a database with nothing in it;
 - a single API replica — the cluster runs two.
 
-**Three specs carry it today, for two different reasons, and the arithmetic is worth spelling
+**Four specs carry it today, for two different reasons, and the arithmetic is worth spelling
 out.** `registration.spec.ts` registers three times across its two tests (a UI register, an
 `api.register`, and the duplicate attempt); `change-password.spec.ts` spends four across its two —
 the first test only registers, the second registers and then signs in twice, once with the old
 password and once with the new. Run untagged against the cluster's shared 10-per-60-seconds
 partition, those two alone would eat most of the budget before the rest of the suite got a permit.
 
-`monitoring.spec.ts` is tagged for a different reason: its three administrator tests need
-`Admin__Usernames` to name the e2e operator, and nothing off-target does. Against the cluster that
-account registers as an ordinary member and every assertion fails on the refusal. Its two
-*access* tests are untagged deliberately — refusing a member is the security-relevant half and
+`monitoring.spec.ts` and `users.spec.ts` are tagged for a different reason: their six
+administrator tests need `Admin__Usernames` to name the e2e operator, and nothing off-target does.
+Against the cluster that account registers as an ordinary member and every assertion fails on the
+refusal. `monitoring.spec.ts`'s two *access* tests are untagged deliberately — refusing a member is the security-relevant half and
 needs no administrator, so it runs everywhere.
 
-**A `kind` run therefore executes 13 of the 20 tests, not all 20** — `npm run e2e` still runs all
-twenty locally, where the test host's limit is raised out of the way (ADR 0008).
+**A `kind` run therefore executes 13 of the 23 tests, not all 23** — `npm run e2e` still runs all
+twenty-three locally, where the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
 
