@@ -6,9 +6,25 @@ import { resolveTarget } from './e2e/support/target.ts';
 const target = resolveTarget();
 const isCI = Boolean(process.env.CI);
 
+/**
+ * How much the API and the worker print while the suite runs. At the hosts' own Information
+ * default, EF Core logs every SQL command it executes - about 1,900 of them, twelve thousand lines
+ * per run - which buried the test results in CI. Warning still shows every failure: an unhandled
+ * exception is logged at Error by GlobalExceptionHandler. Set E2E_SERVER_LOG_LEVEL=Information
+ * (or Debug) to see everything again while chasing a problem.
+ */
+const serverLogLevel = process.env.E2E_SERVER_LOG_LEVEL ?? 'Warning';
+
+/** Shared by both .NET hosts. The Lifetime category keeps its "Now listening on ..." lines. */
+const serverLogging = {
+  Logging__LogLevel__Default: serverLogLevel,
+  'Logging__LogLevel__Microsoft.Hosting.Lifetime': 'Information',
+};
+
 export default defineConfig({
   testDir: './e2e/specs',
-  globalTeardown: './e2e/setup/global-teardown.ts',
+  // No globalTeardown: it runs BEFORE the webServers stop, so the database went away under a live
+  // API and worker. e2e/setup/run.ts tears it down after Playwright exits instead.
 
   fullyParallel: true,
 
@@ -73,6 +89,7 @@ export default defineConfig({
             stdout: 'pipe',
             stderr: 'pipe',
             env: {
+              ...serverLogging,
               ConnectionStrings__Default: E2E_CONNECTION_STRING,
               ASPNETCORE_URLS: `http://localhost:${API_PORT}`,
               ASPNETCORE_ENVIRONMENT: 'Development',
@@ -109,6 +126,7 @@ export default defineConfig({
             stdout: 'pipe',
             stderr: 'pipe',
             env: {
+              ...serverLogging,
               ConnectionStrings__Default: E2E_CONNECTION_STRING,
               ASPNETCORE_URLS: `http://localhost:${WORKER_PORT}`,
               ASPNETCORE_ENVIRONMENT: 'Development',

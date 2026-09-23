@@ -11,8 +11,8 @@
 // It hid locally, too: anyone with the container already up from a previous run saw a green
 // suite. CI, starting clean every time, failed on the first run.
 //
-// Teardown is still `globalTeardown` in playwright.config.ts — that one runs late, which is
-// exactly when it should.
+// Teardown is teardown-database.ts, which run.ts runs after Playwright exits - not Playwright's
+// globalTeardown, which runs before the webServers stop.
 import { execFileSync } from 'node:child_process';
 import { E2E_CONNECTION_STRING } from '../support/env.ts';
 

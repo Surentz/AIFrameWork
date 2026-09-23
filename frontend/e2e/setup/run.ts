@@ -1,5 +1,5 @@
-// The single entry point for every e2e run. Two jobs: decide the target, and make sure the
-// database exists before Playwright starts anything.
+// The single entry point for every e2e run. Three jobs: decide the target, make sure the database
+// exists before Playwright starts anything, and take it down again after Playwright has exited.
 //
 // The database prep deliberately stays OUTSIDE Playwright. Playwright launches `webServer`
 // processes before `globalSetup` runs, so as a global setup it arrived too late and the API
@@ -15,14 +15,21 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-function run(command: string, args: readonly string[]): void {
+/** Runs a child to completion and returns its exit code. */
+function spawn(command: string, args: readonly string[]): number {
   const result = spawnSync(command, [...args], { stdio: 'inherit' });
 
   if (result.error) {
     throw result.error;
   }
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+  return result.status ?? 1;
+}
+
+/** Runs a child, and ends this process with its code if it fails. */
+function run(command: string, args: readonly string[]): void {
+  const status = spawn(command, args);
+  if (status !== 0) {
+    process.exit(status);
   }
 }
 
@@ -84,4 +91,20 @@ if (target !== 'local') {
 // as a pipe instead of passed through - silent, Windows-only breakage on ordinary input.
 // Resolving Playwright's own CLI entry point and running it directly with `process.execPath`
 // avoids a shim, a shell, and the quoting question entirely, on every platform.
-run(process.execPath, [require.resolve('@playwright/test/cli'), ...playwrightArgs]);
+// Ctrl+C reaches Playwright too - it is in the same process group - and Playwright stops its own
+// servers and exits. Ignoring it HERE is what lets the teardown below still run afterwards,
+// instead of this process dying first and leaving the container behind.
+process.on('SIGINT', () => undefined);
+
+const status = spawn(process.execPath, [
+  require.resolve('@playwright/test/cli'),
+  ...playwrightArgs,
+]);
+
+// After Playwright has exited, pass or fail, so its webServers are already stopped - see
+// teardown-database.ts for why this cannot be Playwright's globalTeardown.
+if (target === 'local') {
+  spawn(process.execPath, ['e2e/setup/teardown-database.ts']);
+}
+
+process.exit(status);
