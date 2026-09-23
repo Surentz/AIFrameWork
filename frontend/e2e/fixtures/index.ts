@@ -21,7 +21,7 @@ export type { TestUser } from './api.ts';
  * not inherit the config's `use` block the way the built-in `page` fixture does — without this,
  * relative goto()s have no base URL and the kind run fails its TLS handshake.
  */
-export async function newSignedInPage(browser: Browser, user: TestUser): Promise<Page> {
+async function newSignedInPage(browser: Browser, user: TestUser): Promise<Page> {
   const context = await browser.newContext({ ...connectionOptions, storageState: user.state });
   return context.newPage();
 }
@@ -33,6 +33,7 @@ interface WorkerFixtures {
 
 interface TestFixtures {
   api: ApiClient;
+  openSession: (user: TestUser) => Promise<Page>;
   freshUser: TestUser;
   signedInPage: Page;
   isolatedPage: Page;
@@ -83,6 +84,21 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     const client = createApiClient();
     await use(client);
     await client.dispose();
+  },
+
+  /**
+   * Further sessions within one test — a second browser for the same user, say. Every context it
+   * opens is closed at teardown, pass or fail; closing them at the end of the test body instead
+   * leaks both whenever an assertion fails first.
+   */
+  openSession: async ({ browser }, use) => {
+    const pages: Page[] = [];
+    await use(async (user) => {
+      const page = await newSignedInPage(browser, user);
+      pages.push(page);
+      return page;
+    });
+    await Promise.all(pages.map((page) => page.context().close()));
   },
 
   /** The default for a signed-in test. */

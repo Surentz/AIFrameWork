@@ -38,7 +38,7 @@ test.describe('monitoring', { tag: '@local-only' }, () => {
     await monitoring.drillDown(adminPage, /Request rates, latency/).click();
     await adminPage.waitForURL('**/monitoring/traffic');
 
-    await expect(adminPage.getByRole('heading', { name: 'Traffic', level: 1 })).toBeVisible();
+    await expect(monitoring.pageHeading(adminPage, 'Traffic')).toBeVisible();
 
     // Two charts, never one with two y-axes: requests and errors share a unit, latency does not.
     await expect(monitoring.chartTitle(adminPage, 'Requests and errors')).toBeVisible();
@@ -49,22 +49,24 @@ test.describe('monitoring', { tag: '@local-only' }, () => {
     await expect(monitoring.windowFilter(adminPage)).toHaveValue('1440');
 
     // Rendered whether or not a bucket has been flushed yet, which is what makes it assertable.
-    await expect(
-      adminPage.getByRole('heading', { name: 'By endpoint and handler' }),
-    ).toBeVisible();
+    await expect(monitoring.endpointBreakdownHeading(adminPage)).toBeVisible();
   });
 
   test('links the operator to the jobs and sign-ins pages', async ({ adminPage }) => {
     await adminPage.goto('/monitoring');
 
-    await monitoring.drillDown(adminPage, 'Job runs and dead letters').click();
-    await adminPage.waitForURL('**/monitoring/jobs');
-    await expect(adminPage.getByRole('heading', { name: 'Job runs', level: 1 })).toBeVisible();
+    await test.step('to job runs', async () => {
+      await monitoring.drillDown(adminPage, 'Job runs and dead letters').click();
+      await adminPage.waitForURL('**/monitoring/jobs');
+      await expect(monitoring.pageHeading(adminPage, 'Job runs')).toBeVisible();
+    });
 
-    await adminPage.goto('/monitoring');
-    await monitoring.drillDown(adminPage, /Sign-in history/).click();
-    await adminPage.waitForURL('**/monitoring/logins');
-    await expect(adminPage.getByRole('heading', { name: 'Sign-ins', level: 1 })).toBeVisible();
+    await test.step('to sign-ins', async () => {
+      await adminPage.goto('/monitoring');
+      await monitoring.drillDown(adminPage, /Sign-in history/).click();
+      await adminPage.waitForURL('**/monitoring/logins');
+      await expect(monitoring.pageHeading(adminPage, 'Sign-ins')).toBeVisible();
+    });
   });
 });
 
