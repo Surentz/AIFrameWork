@@ -141,6 +141,7 @@ the test host's limit is raised out of the way (ADR 0008).
 | `npm run e2e:kind` | The deployed kind cluster |
 | `npm run e2e:url -- https://…` | Any URL — including a dev loop already running on 5173 |
 | `npm run e2e:report` | The last HTML report |
+| GitHub → Actions → **e2e** → *Run workflow* | The managed stack on a runner, for any branch; optional `grep` and `repeat_each` |
 
 `./scripts/e2e.ps1`, `./deploy/e2e-k8s.ps1` and `./scripts/e2e-report.ps1` are the same things
 from `local-run/control-panel.bat`.

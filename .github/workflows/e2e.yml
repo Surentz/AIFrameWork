@@ -1,0 +1,112 @@
+# The Playwright suite against a stack it starts itself: compose Postgres, the API, the job worker
+# and the preview build (frontend/e2e/CLAUDE.md, ADRs 0012 and 0023).
+#
+# Two ways in, one definition:
+# - workflow_call: ci.yml runs it on every push and pull request, after backend and frontend.
+# - workflow_dispatch: run it by hand from the Actions tab ("e2e" -> "Run workflow"), against any
+#   branch, optionally narrowed with --grep or repeated to hunt a flake.
+name: e2e
+
+on:
+  workflow_call:
+    inputs:
+      grep:
+        type: string
+        default: ''
+      repeat_each:
+        type: number
+        default: 1
+  workflow_dispatch:
+    inputs:
+      grep:
+        description: >-
+          Only run tests whose title matches this (Playwright --grep). Tags work too: @local-only.
+          Empty runs the whole suite.
+        type: string
+        default: ''
+      repeat_each:
+        description: Run every selected test this many times (--repeat-each), to hunt a flake.
+        type: number
+        default: 1
+
+# No `concurrency` here, deliberately. Called from ci.yml, `github.workflow` is the CALLER's name,
+# so a group built from it here would be ci.yml's own group, and the run would cancel itself. The
+# caller's concurrency already covers the called run.
+
+permissions:
+  contents: read
+
+env:
+  # A called workflow does not inherit its caller's `env`, so these are repeated from ci.yml.
+  # Both follow CLAUDE.md's version table; change all three together.
+  DOTNET_VERSION: '10.0.400'
+  NODE_VERSION: '24.20.0'
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --prefix frontend
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Built as its own step so a compile error fails here, named, rather than inside the
+      # suite's setup. e2e/setup/prepare-database.ts builds the two hosts again before Playwright
+      # starts them with --no-build; after this step that is a no-op.
+      - name: Build backend
+        run: dotnet build -c Debug
+
+      # `npm run e2e` (e2e/setup/run.ts) already does `dotnet tool restore`,
+      # `docker compose up --wait` and `dotnet ef database update` itself via
+      # e2e/setup/prepare-database.ts, so the only thing it cannot provide is the browser
+      # binary — the same one-off documented in frontend/CLAUDE.md for a fresh machine.
+      - name: Install Playwright browser
+        run: npx --prefix frontend playwright install --with-deps chromium
+
+      # The inputs reach the shell as environment variables, never as ${{ }} spliced into the
+      # script: whatever someone types into the dispatch form is then data, not shell.
+      - name: Run the suite
+        env:
+          GREP: ${{ inputs.grep }}
+          REPEAT_EACH: ${{ inputs.repeat_each }}
+        run: |
+          args=()
+          if [ -n "$GREP" ]; then
+            args+=(--grep "$GREP")
+          fi
+          if [ "$REPEAT_EACH" != "1" ]; then
+            args+=(--repeat-each "$REPEAT_EACH")
+          fi
+          npm run e2e --prefix frontend -- "${args[@]}"
+
+      # !cancelled(), not failure(): a test that fails and then passes on its retry leaves the
+      # job green, and its first-attempt trace (trace: 'on-first-retry') is the only record of
+      # the flake. Uploading on failure alone threw exactly that evidence away.
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

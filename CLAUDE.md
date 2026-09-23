@@ -11,9 +11,9 @@ Rationale lives in `docs/adr/`.
 
 | | Version | Where it is pinned |
 |---|---|---|
-| .NET SDK | 10.0.400 | `.github/workflows/ci.yml`. There is no `global.json`, so any 10.x SDK builds |
+| .NET SDK | 10.0.400 | `.github/workflows/ci.yml` and `e2e.yml`. There is no `global.json`, so any 10.x SDK builds |
 | Target framework | net10.0 | `Directory.Build.props`, alongside `LangVersion` 14.0 |
-| Node | 24.20.0 | `.github/workflows/ci.yml`. 24.15.0 is the hard floor — see below |
+| Node | 24.20.0 | `.github/workflows/ci.yml` and `e2e.yml`. 24.15.0 is the hard floor — see below |
 | React | 19.3.0 | `frontend/package-lock.json`, declared `^19.2.8` |
 | Vite | 8.3.0 | `frontend/package-lock.json`, declared `^8.2.2` |
 | TypeScript | 6.0.3 | `frontend/package-lock.json`, declared `~6.0.2` |
@@ -189,6 +189,7 @@ must go through `CreateExecutionStrategy().ExecuteAsync(...)`.
 (**Debug and Release** — Release was broken for the whole Wolverine spike behind a green Debug
 build, because only its *startup* failed), `codegen`,
 `contract`, `frontend`, and `e2e`. `/verify` runs the same checks locally, including the two
-diff checks.
+diff checks. The `e2e` job is defined in `.github/workflows/e2e.yml`, which `ci.yml` calls; the
+same workflow runs by hand from the Actions tab, with optional `grep` and `repeat_each` inputs.
 
 Design rationale for this setup: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`
