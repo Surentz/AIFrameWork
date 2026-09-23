@@ -128,7 +128,8 @@ results without logs in the conversation.
 ```
 
 Dev Postgres is **55433** (persistent); the e2e one is **55432** (throwaway). `npm run e2e`
-starts its own API on 5234, so stop the dev API first or set `API_PORT`.
+starts its own API on 5234 and worker on 5235 (ADR 0023), so stop the dev loop first or set
+`API_PORT` / `WORKER_PORT`.
 
 **`dotnet ef` cannot see user-secrets** — it reads only the `ConnectionStrings__Default`
 environment variable, and `src/Infrastructure` is both `--project` and `--startup-project`

@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { API_PORT, E2E_CONNECTION_STRING, PREVIEW_PORT } from './e2e/support/env.ts';
+import { API_PORT, E2E_CONNECTION_STRING, PREVIEW_PORT, WORKER_PORT } from './e2e/support/env.ts';
 import { ADMIN_USERNAME } from './e2e/support/identity.ts';
 import { resolveTarget } from './e2e/support/target.ts';
 
@@ -58,7 +58,9 @@ export default defineConfig({
             // --no-launch-profile, not --launch-profile http: launchSettings.json hard-codes
             // applicationUrl to 5234 and wins over ASPNETCORE_URLS, so API_PORT was silently
             // ignored and the run hung for 120s. Setting the environment explicitly keeps it honest.
-            command: 'dotnet run --project ../src/Api --no-launch-profile',
+            // --no-build: e2e/setup/prepare-database.ts has already built both hosts, once - see
+            // its closing comment for why two parallel `dotnet run` builds are a race.
+            command: 'dotnet run --project ../src/Api --no-launch-profile --no-build',
             // /health already exists, so readiness is a real check rather than a fixed wait.
             // (Only true here, where this reaches the API directly. Through the kind ingress
             // /health is served by nginx — see deploy/e2e-k8s.ps1.)
@@ -94,6 +96,22 @@ export default defineConfig({
               // underscores and the __0 index, like every other key here - a single underscore
               // binds nothing and warns nothing, and the list is bound as a collection.
               Admin__Usernames__0: ADMIN_USERNAME,
+            },
+          },
+          {
+            // The job host (ADR 0016). The API listens to no queue, so without this every job the
+            // stack enqueues - a scheduled job run from the monitoring page, an order confirmation
+            // - sits in Postgres forever and the job-runs table never has a row to show.
+            command: 'dotnet run --project ../src/Worker --no-launch-profile --no-build',
+            url: `http://localhost:${WORKER_PORT}/health`,
+            timeout: 120_000,
+            reuseExistingServer: false,
+            stdout: 'pipe',
+            stderr: 'pipe',
+            env: {
+              ConnectionStrings__Default: E2E_CONNECTION_STRING,
+              ASPNETCORE_URLS: `http://localhost:${WORKER_PORT}`,
+              ASPNETCORE_ENVIRONMENT: 'Development',
             },
           },
           {

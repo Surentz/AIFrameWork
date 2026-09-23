@@ -1,4 +1,4 @@
-// Brings the e2e database up and migrates it. Run by the `e2e` npm script BEFORE
+// Brings the e2e database up, migrates it, and builds both .NET hosts. Run by the `e2e` npm script BEFORE
 // `playwright test`, deliberately — this cannot be Playwright's `globalSetup`.
 //
 // Playwright launches `webServer` processes before it runs `globalSetup`, so as a global setup
@@ -44,3 +44,12 @@ execFileSync(
     env: { ...process.env, ConnectionStrings__Default: E2E_CONNECTION_STRING },
   },
 );
+
+// Both hosts are built HERE, once, and playwright.config.ts starts them with `--no-build`.
+// Playwright launches its webServers in parallel, so two `dotnet run`s would each build the
+// projects they share (Application, Infrastructure, Domain) at the same moment and race on the
+// same obj/ files. A compile error is also readable here, where a webServer reports only "Process
+// from config.webServer was not able to start. Exit code: 1".
+for (const host of ['../src/Api', '../src/Worker']) {
+  execFileSync('dotnet', ['build', host], { stdio: 'inherit' });
+}

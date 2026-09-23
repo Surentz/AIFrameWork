@@ -104,13 +104,59 @@ export interface NewProduct {
   readonly price: string;
 }
 
+/** One row of `GET /api/notifications`. Only the fields a spec arranges or waits on. */
+export interface FeedItem {
+  readonly id: string;
+  readonly kind: 'OrderPlaced' | 'OrderShipped' | 'OrderCancelled' | 'ProductPriceChanged';
+  readonly title: string;
+  readonly body: string;
+  readonly subjectId?: string | null;
+  readonly readAt?: string | null;
+}
+
 export interface ApiClient {
   register(): Promise<TestUser>;
+  /**
+   * One sign-in attempt with the wrong password, over HTTP. Spends an auth rate-limit permit and
+   * one of the account's five attempts before lockout (User.MaxFailedSignInAttempts) - never
+   * aim it at `workerUser`.
+   */
+  failSignIn(username: string): Promise<void>;
+  /** Creates a product for `sku` (named after it, priced 19.95) and orders it. Returns the order id. */
   placeOrder(user: TestUser, order: { sku: string; quantity: number }): Promise<string>;
+  /** Orders a product ALREADY in the catalogue - see createProduct. Returns the order id. */
+  orderProduct(user: TestUser, order: { sku: string; quantity: number }): Promise<string>;
   /** `count` orders with generated SKUs, in parallel. Returns the SKUs, newest-first order not guaranteed. */
   placeOrders(user: TestUser, count: number): Promise<readonly string[]>;
+  shipOrder(user: TestUser, orderId: string): Promise<void>;
+  cancelOrder(user: TestUser, orderId: string, reason: string): Promise<void>;
   /** Returns the new product's id. The catalogue is global, so any signed-in user may add to it. */
   createProduct(user: TestUser, product: NewProduct): Promise<string>;
+  /** Replaces a product's editable fields; a changed price notifies everyone who ordered it. */
+  updateProduct(
+    user: TestUser,
+    id: string,
+    product: { name: string; price: string; description?: string | null },
+  ): Promise<void>;
+  /**
+   * Waits until `user`'s feed holds a notification of `kind` whose body contains `text`, and
+   * returns it.
+   *
+   * Notifications are written by the outbox pump after the command that raised them has
+   * committed, so they arrive a moment AFTER the request that caused them returns. Waiting here,
+   * over HTTP, keeps that race out of the page: a spec that navigates only once this resolves
+   * sees the row on first render, and never needs to reload in a loop.
+   */
+  waitForNotification(
+    user: TestUser,
+    match: { kind: FeedItem['kind']; text: string },
+  ): Promise<FeedItem>;
+  /**
+   * How many runs the job-runs table holds for `jobName`, optionally in one status. Needs an
+   * administrator. A spec that triggers a job compares this before and after, because a
+   * scheduled job may already have runs from its cron or an earlier test.
+   */
+  countJobRuns(admin: TestUser, jobName: string, status?: 'Succeeded' | 'Failed'): Promise<number>;
   dispose(): Promise<void>;
 }
 
@@ -142,6 +188,13 @@ export function createApiClient(): ApiClient {
     // instead of pushing a createProduct call onto each of them.
     await createProduct(user, { sku: order.sku, name: order.sku, price: '19.95' });
 
+    return orderProduct(user, order);
+  }
+
+  async function orderProduct(
+    user: TestUser,
+    order: { sku: string; quantity: number },
+  ): Promise<string> {
     const context = await contextFor(user);
     const response = await context.post('/api/orders', { data: order });
 
@@ -169,10 +222,107 @@ export function createApiClient(): ApiClient {
     return (await response.json()) as string;
   }
 
+  async function postOrFail(
+    user: TestUser,
+    url: string,
+    what: string,
+    options: { data?: unknown; method?: 'post' | 'put' } = {},
+  ): Promise<void> {
+    const context = await contextFor(user);
+    const response = await context[options.method ?? 'post'](url, { data: options.data });
+
+    if (!response.ok()) {
+      throw new Error(
+        `${what} failed with ${String(response.status())}: ${await response.text()}`,
+      );
+    }
+  }
+
+  async function waitForNotification(
+    user: TestUser,
+    match: { kind: FeedItem['kind']; text: string },
+  ): Promise<FeedItem> {
+    const context = await contextFor(user);
+    // The pump polls every second; ten is generous without hiding a notifier that never fires.
+    const deadline = Date.now() + 10_000;
+
+    for (;;) {
+      const response = await context.get('/api/notifications?limit=50');
+      if (!response.ok()) {
+        throw new Error(
+          `Reading the feed failed with ${String(response.status())}: ${await response.text()}`,
+        );
+      }
+
+      const page = (await response.json()) as { items: readonly FeedItem[] };
+      const found = page.items.find((n) => n.kind === match.kind && n.body.includes(match.text));
+      if (found !== undefined) {
+        return found;
+      }
+
+      if (Date.now() > deadline) {
+        throw new Error(
+          `No ${match.kind} notification mentioning '${match.text}' reached ${user.username} within 10s.`,
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
   return {
     register: registerUser,
+    async failSignIn(username) {
+      const context = await request.newContext(connectionOptions);
+      try {
+        const response = await context.post('/api/auth/login', {
+          data: { username, password: 'not the right password', rememberMe: false },
+        });
+        // Anything but the refusal means the arrange did not do what the spec thinks it did. A
+        // locked account answers the same 401, so this cannot tell the fifth attempt apart.
+        if (response.status() !== 401) {
+          throw new Error(
+            `A wrong password for '${username}' answered ${String(response.status())}: ${await response.text()}`,
+          );
+        }
+      } finally {
+        await context.dispose();
+      }
+    },
     placeOrder,
+    orderProduct,
     createProduct,
+    async shipOrder(user, orderId) {
+      await postOrFail(user, `/api/orders/${orderId}/ship`, `Shipping order ${orderId}`);
+    },
+    async cancelOrder(user, orderId, reason) {
+      await postOrFail(user, `/api/orders/${orderId}/cancel`, `Cancelling order ${orderId}`, {
+        data: { reason },
+      });
+    },
+    async updateProduct(user, id, product) {
+      await postOrFail(user, `/api/products/${id}`, `Updating product ${id}`, {
+        method: 'put',
+        data: { description: null, ...product },
+      });
+    },
+    waitForNotification,
+    async countJobRuns(admin, jobName, status) {
+      const context = await contextFor(admin);
+      const query = new URLSearchParams({ jobName });
+      if (status !== undefined) {
+        query.set('status', status);
+      }
+
+      const response = await context.get(`/api/monitoring/jobs/runs?${query.toString()}`);
+      if (!response.ok()) {
+        throw new Error(
+          `Reading job runs failed with ${String(response.status())}: ${await response.text()}`,
+        );
+      }
+
+      return Number(((await response.json()) as { totalCount: number | string }).totalCount);
+    },
     async placeOrders(user, count) {
       const skus = Array.from({ length: count }, () => uniqueSku());
       await Promise.all(skus.map((sku) => placeOrder(user, { sku, quantity: 1 })));

@@ -7,8 +7,8 @@
   relationship scripts/dev.ps1 has with the dev loop. Exists so local-run/control-panel.bat can
   offer the run without encoding any logic of its own.
 
-  This starts its own API on 5234. Stop the dev loop first (scripts/stop-dev.ps1) or set
-  API_PORT, or the two collide.
+  This starts its own API on 5234 and worker on 5235. Stop the dev loop first
+  (scripts/stop-dev.ps1) or set API_PORT and WORKER_PORT, or they collide.
 #>
 [CmdletBinding()]
 param(

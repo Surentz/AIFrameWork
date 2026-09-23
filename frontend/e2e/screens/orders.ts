@@ -5,6 +5,15 @@ export const productField = (p: Page): Locator => p.getByLabel('Product');
 export const quantityField = (p: Page): Locator => p.getByLabel('Quantity');
 export const submitButton = (p: Page): Locator => p.getByRole('button', { name: 'Place order' });
 
+/** The list's body rows - the header row excluded, which `getByRole('row')` would count. */
+export const listRows = (p: Page): Locator =>
+  p.getByRole('table', { name: 'Orders' }).locator('tbody tr');
+export const loadMoreButton = (p: Page): Locator => p.getByRole('button', { name: 'Load more' });
+export const emptyState = (p: Page): Locator => p.getByText('No orders yet.', { exact: true });
+/** The empty state's call to action. */
+export const placeFirstOrderLink = (p: Page): Locator =>
+  p.getByRole('link', { name: 'Place the first one' });
+
 /** A row's link in the list. */
 export const orderLink = (p: Page, name: string): Locator => p.getByRole('link', { name });
 
@@ -22,6 +31,10 @@ export const fact = (p: Page, term: string): Locator =>
     .locator('.order-facts > div')
     .filter({ has: p.getByText(term, { exact: true }) })
     .locator('dd');
+
+/** The detail page's sku, which links to the catalogue product the order was placed against. */
+export const productLink = (p: Page, sku: string): Locator =>
+  p.getByRole('link', { name: sku, exact: true });
 
 export async function placeOrder(p: Page, order: { sku: string; quantity: number }): Promise<void> {
   await p.goto('/orders/new');

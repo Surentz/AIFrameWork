@@ -64,3 +64,27 @@ test(
     });
   },
 );
+
+test('refuses a wrong current password', { tag: '@local-only' }, async ({
+  isolatedPage,
+}) => {
+  await account.changePassword(isolatedPage, {
+    current: 'not the current password',
+    next: NewPassword,
+  });
+
+  await expect(account.alert(isolatedPage)).toHaveText(/current password is not correct/i);
+  // A refused change must not have signed the caller out on the way.
+  await isolatedPage.goto('/orders');
+  await expect(orders.pageHeading(isolatedPage)).toBeVisible();
+});
+
+test('explains a new password that is too short, next to the field', { tag: '@local-only' }, async ({
+  isolatedPage,
+  freshUser,
+}) => {
+  await account.changePassword(isolatedPage, { current: freshUser.password, next: 'short' });
+
+  await expect(account.newPasswordField(isolatedPage)).toHaveAttribute('aria-invalid', 'true');
+  await expect(account.newPasswordField(isolatedPage)).toHaveAccessibleDescription(/12/);
+});
