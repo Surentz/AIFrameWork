@@ -151,6 +151,13 @@ The database prep runs from `setup/run.ts`, **before** Playwright starts — nev
 setup it arrived after the API had already tried and failed to boot against a database that did
 not exist. Do not move it.
 
+Teardown is the mirror image: `setup/teardown-database.ts`, run by `run.ts` **after** Playwright
+exits. Not `globalTeardown`, which runs before the `webServer`s stop and so took Postgres away
+from a live API and worker.
+
+The API and worker log at Warning; `E2E_SERVER_LOG_LEVEL=Information` brings their full output
+back when a failure needs it.
+
 The same step **builds both .NET hosts**, and the `webServer`s start them with `--no-build`:
 Playwright launches them in parallel, and two `dotnet run` builds of the projects they share race
 on the same `obj/` files. A consequence: `npx playwright test` run directly, bypassing `run.ts`,

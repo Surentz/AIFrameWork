@@ -75,8 +75,13 @@ worker, which Playwright then starts with `--no-build` — see `e2e/CLAUDE.md`.
 `globalSetup`, so as a global setup the database arrived too late and the API booted against
 nothing. Durable Wolverine migrates its envelope schema during host startup (ADR 0005), so that
 now means the API does not boot at all, and Playwright reports only "Process from
-config.webServer was not able to start. Exit code: 1". Teardown stays `globalTeardown`, which
-runs late by design.
+config.webServer was not able to start. Exit code: 1". Teardown is not `globalTeardown` either:
+that runs *before* the webServers stop, so it pulled the database from under a live API and
+worker. `run.ts` runs `e2e/setup/teardown-database.ts` after Playwright has exited.
+
+The API and worker log at **Warning** during a run (`E2E_SERVER_LOG_LEVEL`, default `Warning`).
+At their own Information default EF Core prints every SQL command — about twelve thousand lines
+a run. Set `E2E_SERVER_LOG_LEVEL=Information` to see it all while debugging.
 
 See `frontend/e2e/CLAUDE.md` for the fixture and screen conventions — the fixtures, the
 `@local-only` tag, and the two rules that are correctness rather than style.
