@@ -3,6 +3,9 @@
 // copy lives in docker-compose.e2e.yml, which cannot import this - it reads the same
 // PG_PORT name directly via shell ${PG_PORT:-55432} substitution instead).
 export const API_PORT = process.env.API_PORT ?? '5234';
+// The job worker's health endpoint. 5235 is also the dev loop's worker, so the two collide the
+// same way the APIs do - stop the dev loop or set this.
+export const WORKER_PORT = process.env.WORKER_PORT ?? '5235';
 export const PREVIEW_PORT = process.env.PREVIEW_PORT ?? '4173';
 export const PG_PORT = process.env.PG_PORT ?? '55432';
 

@@ -6,6 +6,9 @@ export const displayNameField = (p: Page): Locator => p.getByLabel('Display name
 export const passwordField = (p: Page): Locator => p.getByLabel('Password', { exact: true });
 export const submitButton = (p: Page): Locator => p.getByRole('button', { name: 'Create account' });
 export const alert = (p: Page): Locator => p.getByRole('alert');
+export const heading = (p: Page): Locator =>
+  p.getByRole('heading', { name: 'Create an account' });
+export const signInLink = (p: Page): Locator => p.getByRole('link', { name: 'Sign in' });
 
 /** Fills and submits the form. Does not wait for navigation - the caller decides what success means. */
 export async function submit(

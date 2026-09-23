@@ -9,6 +9,11 @@ export const createButton = (p: Page): Locator => p.getByRole('button', { name: 
 export const saveButton = (p: Page): Locator => p.getByRole('button', { name: 'Save changes' });
 export const editLink = (p: Page): Locator => p.getByRole('link', { name: 'Edit' });
 
+/** The list's body rows - the header row excluded. */
+export const listRows = (p: Page): Locator =>
+  p.getByRole('table', { name: 'Catalogue' }).locator('tbody tr');
+export const loadMoreButton = (p: Page): Locator => p.getByRole('button', { name: 'Load more' });
+
 /** A row's link in the list, which carries the product NAME rather than its sku. */
 export const productLink = (p: Page, name: string): Locator =>
   p.getByRole('link', { name, exact: true });

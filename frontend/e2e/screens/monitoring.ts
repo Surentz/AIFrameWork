@@ -45,6 +45,7 @@ export const userRow = (p: Page, username: string): Locator =>
   p.locator('table.runs tbody tr').filter({ has: p.getByRole('cell', { name: username, exact: true }) });
 
 export const userSearch = (p: Page): Locator => p.getByLabel('Search');
+export const userSearchButton = (p: Page): Locator => p.getByRole('button', { name: 'Search' });
 
 export type UserAction = 'Promote' | 'Demote' | 'Sign out' | 'History' | 'Confirm' | 'Cancel';
 
@@ -66,7 +67,7 @@ export const userHistory = (p: Page, username: string): Locator =>
 /** Finds an account by username, which is also how an operator would. */
 export async function findUser(p: Page, username: string): Promise<void> {
   await userSearch(p).fill(username);
-  await p.getByRole('button', { name: 'Search' }).click();
+  await userSearchButton(p).click();
   await userRow(p, username).waitFor();
 }
 
@@ -83,3 +84,58 @@ export async function changeRole(
   await userAction(p, username, 'Confirm').click();
   await userAction(p, username, action === 'Promote' ? 'Demote' : 'Promote').waitFor();
 }
+
+// --- /monitoring/jobs ---------------------------------------------------------------------------
+
+/**
+ * Two controls on this page are labelled "Job" - the runs filter (a text box) and the trigger (a
+ * select) - so both are located by role as well as name. `getByLabel('Job')` is a strict-mode
+ * failure.
+ */
+export const runJobFilter = (p: Page): Locator => p.getByRole('textbox', { name: 'Job' });
+export const runStatusFilter = (p: Page): Locator => p.getByRole('combobox', { name: 'Status' });
+
+/** Captioned "Job runs: <n> total", so matched on the prefix. */
+export const runsTable = (p: Page): Locator => p.getByRole('table', { name: /^Job runs:/ });
+
+/** Every row of the runs table for one job. Rows carry no role of their own beyond `row`. */
+export const runRows = (p: Page, jobName: string): Locator =>
+  runsTable(p)
+    .getByRole('row')
+    .filter({ has: p.getByRole('cell', { name: jobName, exact: true }) });
+
+export const triggerJobSelect = (p: Page): Locator => p.getByRole('combobox', { name: 'Job' });
+export const runNowButton = (p: Page): Locator => p.getByRole('button', { name: 'Run now' });
+
+/** The confirmation `TriggerJob` renders once the trigger request has been accepted. */
+export const triggerQueued = (p: Page): Locator =>
+  p.getByRole('status').filter({ hasText: /^Queued\./ });
+
+export async function triggerJob(p: Page, jobName: string): Promise<void> {
+  await triggerJobSelect(p).selectOption(jobName);
+  await runNowButton(p).click();
+}
+
+// --- /monitoring/logins -------------------------------------------------------------------------
+
+export const signInOutcomeFilter = (p: Page): Locator =>
+  p.getByRole('combobox', { name: 'Outcome' });
+export const signInUsernameFilter = (p: Page): Locator =>
+  p.getByRole('textbox', { name: 'Username' });
+
+/** Captioned "Sign-in attempts: <n> total". */
+export const signInsTable = (p: Page): Locator =>
+  p.getByRole('table', { name: /^Sign-in attempts:/ });
+
+export const signInRows = (p: Page, username: string): Locator =>
+  signInsTable(p)
+    .getByRole('row')
+    .filter({ has: p.getByRole('cell', { name: username, exact: true }) });
+
+export const lockedAccountsTable = (p: Page): Locator =>
+  p.getByRole('table', { name: 'Locked accounts' });
+
+// --- /monitoring/users (continued) --------------------------------------------------------------
+
+export const noUsersMatch = (p: Page): Locator =>
+  p.getByText('No accounts match that search.', { exact: true });

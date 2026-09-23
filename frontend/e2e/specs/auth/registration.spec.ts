@@ -29,3 +29,25 @@ test('refuses a username that is already taken', { tag: '@local-only' }, async (
   await expect(register.alert(page)).toHaveText(/already taken/i);
   await expect(page).toHaveURL(/\/register$/);
 });
+
+test('explains a password that is too short, next to the field', { tag: '@local-only' }, async ({
+  page,
+}) => {
+  await register.submit(page, { username: uniqueUsername(), password: 'too short' });
+
+  // PasswordPolicy.MinimumLength is 12. The message is wired to the field through
+  // aria-describedby, which is what a screen reader reads out on focus - so that is the assertion.
+  await expect(register.passwordField(page)).toHaveAttribute('aria-invalid', 'true');
+  await expect(register.passwordField(page)).toHaveAccessibleDescription(/12/);
+  await expect(page).toHaveURL(/\/register$/);
+});
+
+test('refuses a username with characters outside the allowed set', { tag: '@local-only' }, async ({
+  page,
+}) => {
+  await register.submit(page, { username: 'has spaces' });
+
+  await expect(register.usernameField(page)).toHaveAccessibleDescription(
+    /letters, digits, dots, underscores and hyphens/,
+  );
+});

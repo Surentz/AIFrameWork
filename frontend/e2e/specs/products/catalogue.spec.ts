@@ -51,3 +51,57 @@ test('refuses a duplicate sku', async ({ signedInPage, api, workerUser }) => {
 
   await expect(signedInPage.getByRole('alert')).toContainText('already in the catalogue');
 });
+
+test('opens the edit form from the product page, filled with what is there', async ({
+  signedInPage,
+  api,
+  workerUser,
+}) => {
+  const sku = uniqueProductSku();
+  const id = await api.createProduct(workerUser, { sku, name: sku, price: '3.45' });
+
+  await signedInPage.goto(`/products/${id}`);
+  await products.editLink(signedInPage).click();
+
+  await expect(signedInPage).toHaveURL(new RegExp(`/products/${id}/edit$`));
+  await expect(products.nameField(signedInPage)).toHaveValue(sku);
+  // Not a price with a trailing zero: the form seeds the field with String(price) from a JSON
+  // number, so "3.40" comes back as "3.4" - the same value, but not the same text.
+  await expect(products.priceField(signedInPage)).toHaveValue('3.45');
+});
+
+test('explains invalid fields next to each one', async ({ signedInPage }) => {
+  // 1.005, not a negative: three decimal places is the case ProductFields.tsx keeps a text input
+  // for. A type="number" field with step="0.01" would block the submit in the browser, and the
+  // server's message - the one asserted here - would never arrive.
+  await products.createProduct(signedInPage, { sku: uniqueProductSku(), name: '', price: '1.005' });
+
+  // Both messages come from the server's validator and are wired to their fields through
+  // aria-describedby - the assertion is what a screen reader would announce.
+  await expect(products.nameField(signedInPage)).toHaveAttribute('aria-invalid', 'true');
+  await expect(products.nameField(signedInPage)).toHaveAccessibleDescription(/must not be empty/);
+  await expect(products.priceField(signedInPage)).toHaveAttribute('aria-invalid', 'true');
+  await expect(products.priceField(signedInPage)).toHaveAccessibleDescription(
+    /cannot have more than 2 decimal places/,
+  );
+  await expect(signedInPage).toHaveURL(/\/products\/new$/);
+});
+
+test('pages through the catalogue', async ({ signedInPage, api, workerUser }) => {
+  // The catalogue is global and only grows, so this guarantees MORE than a page rather than an
+  // exact count: 21 of this test's own on top of whatever is already there.
+  await Promise.all(
+    Array.from({ length: 21 }, () => {
+      const sku = uniqueProductSku();
+      return api.createProduct(workerUser, { sku, name: sku, price: '1.00' });
+    }),
+  );
+
+  await signedInPage.goto('/products');
+  await expect(products.listRows(signedInPage)).toHaveCount(20);
+
+  await products.loadMoreButton(signedInPage).click();
+  await expect
+    .poll(() => products.listRows(signedInPage).count())
+    .toBeGreaterThan(20);
+});

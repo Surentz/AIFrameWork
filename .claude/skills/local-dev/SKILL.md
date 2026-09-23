@@ -45,9 +45,9 @@ credentials against a localhost-only container that is never deployed, the same 
 already applied to `docker-compose.e2e.yml`. The no-secrets-in-`appsettings*.json` rule still
 holds for everything else.
 
-The two *databases* coexist happily, but the two *API* processes do not: `npm run e2e` starts
-its own API on 5234 — the same port `dotnet run` uses — with `reuseExistingServer: false`. Stop
-the dev API before an e2e run, or set `API_PORT`.
+The two *databases* coexist happily, but the .NET processes do not: `npm run e2e` starts its own
+API on 5234 and its own worker on 5235 — the dev loop's ports — with `reuseExistingServer: false`.
+Stop the dev loop before an e2e run, or set `API_PORT` / `WORKER_PORT`.
 
 **The gotcha that will cost you an afternoon: `dotnet ef` cannot see user-secrets.** Migrations
 run through `src/Infrastructure/Persistence/DesignTimeDbContextFactory.cs`, which reads only the
@@ -80,7 +80,7 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Stop dev loop | `scripts/stop-dev.ps1` — kills the API/worker/Vite ports, tears down the database (and Seq, if it was started) |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
-| Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses port 5234 |
+| Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses ports 5234 and 5235 |
 | Run e2e tests (against Kubernetes) | `deploy/e2e-k8s.ps1` — deploy it first with "Start Kubernetes" |
 | Open last e2e report | `scripts/e2e-report.ps1` |
 | Pull latest | `scripts/update-branch.ps1` — fast-forwards whatever branch is currently checked out |

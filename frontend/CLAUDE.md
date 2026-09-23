@@ -34,11 +34,12 @@ the *dev server* for the hub and gets Vite's own 404, so realtime push silently 
 everything under `/api` keeps working normally. `ws: true` is what upgrades the connection instead
 of leaving it on the long-polling fallback. Both `server` and `preview` carry both entries.
 
-Ports are fixed (5173 dev, 4173 preview, 5234 API, 55432 the e2e Postgres) and can collide on
-a busy machine. Each is overridable by environment variable: `DEV_PORT`, `PREVIEW_PORT`,
-`API_PORT`, and `PG_PORT` respectively. `vite.config.ts` reads the first three;
-`playwright.config.ts` and `e2e/setup/prepare-database.ts` (via the shared `e2e/support/env.ts`)
-and `docker-compose.e2e.yml` read all four between them for the e2e run.
+Ports are fixed (5173 dev, 4173 preview, 5234 API, 5235 the job worker, 55432 the e2e Postgres)
+and can collide on a busy machine. Each is overridable by environment variable: `DEV_PORT`,
+`PREVIEW_PORT`, `API_PORT`, `WORKER_PORT` and `PG_PORT` respectively. `vite.config.ts` reads the
+first three; `playwright.config.ts` and `e2e/setup/prepare-database.ts` (via the shared
+`e2e/support/env.ts`) and `docker-compose.e2e.yml` read the last four between them for the e2e
+run.
 
 ## Commands
 
@@ -48,7 +49,7 @@ and `docker-compose.e2e.yml` read all four between them for the e2e run.
 | `npm run build` | production build |
 | `npm test` | Vitest |
 | `npm run lint` | `eslint . --max-warnings 0` |
-| `npm run e2e` | Playwright, against a real API and a real Postgres |
+| `npm run e2e` | Playwright, against a real API, job worker and Postgres |
 | `npm run e2e:ui` | The same, in UI mode; keeps the database between runs |
 | `npm run e2e:kind` | The deployed kind cluster |
 | `npm run e2e:url -- https://…` | Any URL — including a dev loop already running on 5173 |
@@ -66,7 +67,8 @@ npx --prefix frontend playwright install chromium
 ```
 
 `e2e/setup/prepare-database.ts` runs `dotnet tool restore` itself, so `dotnet-ef` (pinned in the
-repo's `.config/dotnet-tools.json`) needs no separate setup step.
+repo's `.config/dotnet-tools.json`) needs no separate setup step. It also builds the API and the
+worker, which Playwright then starts with `--no-build` — see `e2e/CLAUDE.md`.
 
 **It runs from the `e2e` npm script, before `playwright test` — not as Playwright's
 `globalSetup`, and it must not be moved back.** Playwright starts `webServer` processes *before*

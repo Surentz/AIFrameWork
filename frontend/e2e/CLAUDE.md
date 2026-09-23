@@ -1,6 +1,7 @@
 # End-to-end tests
 
-Playwright, against a real API and a real Postgres. See ADR 0012 for why it is shaped this way.
+Playwright, against a real API, a real job worker and a real Postgres. See ADR 0012 for why it is
+shaped this way, and ADR 0023 for why the worker is part of it.
 
 ## The one import
 
@@ -70,11 +71,33 @@ reaching into Postgres. Reaching into the database would not work against the cl
 which is what the target switch exists for.
 
 ```ts
-await api.placeOrder(workerUser, { sku, quantity: 3 });
+await api.placeOrder(workerUser, { sku, quantity: 3 });   // creates the product too
 await api.placeOrders(workerUser, 25);
+const id = await api.createProduct(workerUser, { sku, name: sku, price: '19.95' });
+await api.orderProduct(workerUser, { sku, quantity: 1 });  // a product that already exists
+await api.shipOrder(workerUser, orderId);
+await api.cancelOrder(workerUser, orderId, 'reason');
+await api.updateProduct(workerUser, id, { name: sku, price: '9.95' });
+await api.failSignIn(freshUser.username);                  // never workerUser: see rule 1
 ```
 
-Only the auth endpoints are rate limited, so bulk arrange is free on every target.
+Only `register` and `login` are rate limited, so bulk arrange is free on every target —
+`failSignIn` is the one helper that spends a permit.
+
+## Waiting for background work
+
+Two things happen after the request that caused them returns: notifications (written by the
+outbox pump) and job runs (executed by the worker). **Wait for them over HTTP, then navigate.**
+Never reload a page in a loop until a row appears.
+
+```ts
+await api.waitForNotification(workerUser, { kind: 'OrderPlaced', text: sku });
+await expect.poll(() => api.countJobRuns(adminUser, Job, 'Succeeded')).toBeGreaterThan(before);
+```
+
+`countJobRuns` is compared against a count taken *before* acting: scheduled jobs have a cron and
+earlier runs, so "a row exists" proves nothing. Locate a notification by its **body**, which
+carries the unique sku; its title ("Order placed") is shared by every order.
 
 ## Tags
 
@@ -90,27 +113,30 @@ says otherwise. Add the tag when a test needs any of these:
 - a database with nothing in it;
 - a single API replica — the cluster runs two.
 
-**Four specs carry it today, for two different reasons, and the arithmetic is worth spelling
-out.** `registration.spec.ts` registers three times across its two tests (a UI register, an
-`api.register`, and the duplicate attempt); `change-password.spec.ts` spends four across its two —
-the first test only registers, the second registers and then signs in twice, once with the old
-password and once with the new. Run untagged against the cluster's shared 10-per-60-seconds
-partition, those two alone would eat most of the budget before the rest of the suite got a permit.
+It is carried for two reasons, and the arithmetic behind the first is worth spelling out.
 
-`monitoring.spec.ts` and `users.spec.ts` are tagged for a different reason: their six
-administrator tests need `Admin__Usernames` to name the e2e operator, and nothing off-target does.
-Against the cluster that account registers as an ordinary member and every assertion fails on the
-refusal. `monitoring.spec.ts`'s two *access* tests are untagged deliberately — refusing a member is the security-relevant half and
-needs no administrator, so it runs everywhere.
+**The auth budget.** Only `register` and `login` spend permits, and the cluster allows 10 per 60
+seconds for the whole suite. The untagged tests spend **seven**: two `workerUser` registrations
+(one per worker), three `freshUser` registrations (`sign-out-everywhere`, the bell test in
+`feed.spec.ts`, `order-list.spec.ts`), and two sign-ins (`sign-in.spec.ts`'s sign-out-and-back-in
+and wrong-password tests). Anything that would push that past seven is tagged instead:
+`registration.spec.ts`, `change-password.spec.ts`, `lockout.spec.ts` (six permits on its own),
+and the remember-me test. **Recount before adding an untagged test that registers or signs in.**
 
-**A `kind` run therefore executes 13 of the 23 tests, not all 23** — `npm run e2e` still runs all
-twenty-three locally, where the test host's limit is raised out of the way (ADR 0008).
+**The administrator, and the worker.** `monitoring.spec.ts`, `users.spec.ts`, `jobs.spec.ts` and
+`logins.spec.ts` need `Admin__Usernames` to name the e2e operator, and nothing off-target does.
+`jobs.spec.ts` also needs the worker, which an arbitrary URL target cannot be assumed to run.
+`monitoring.spec.ts`'s two *access* tests are untagged deliberately — refusing a member is the
+security-relevant half and needs no administrator, so it runs everywhere.
+
+**A `kind` run therefore executes 26 of the 51 tests** — `npm run e2e` runs all of them, where
+the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
 
 | Command | Runs against |
 |---|---|
-| `npm run e2e` | A stack Playwright starts: compose Postgres, the API, the preview build |
+| `npm run e2e` | A stack Playwright starts: compose Postgres, the API, the worker, the preview build |
 | `npm run e2e:ui` | The same, in UI mode; keeps the database between runs |
 | `npm run e2e:kind` | The deployed kind cluster |
 | `npm run e2e:url -- https://…` | Any URL — including a dev loop already running on 5173 |
@@ -123,6 +149,28 @@ The database prep runs from `setup/run.ts`, **before** Playwright starts — nev
 `globalSetup`. Playwright launches `webServer` processes before `globalSetup`, so as a global
 setup it arrived after the API had already tried and failed to boot against a database that did
 not exist. Do not move it.
+
+The same step **builds both .NET hosts**, and the `webServer`s start them with `--no-build`:
+Playwright launches them in parallel, and two `dotnet run` builds of the projects they share race
+on the same `obj/` files. A consequence: `npx playwright test` run directly, bypassing `run.ts`,
+starts whatever was last built.
+
+The managed stack uses ports 5234 (API), 5235 (worker), 4173 (preview) and 55432 (Postgres) —
+the first two are also the dev loop's. Stop it first, or set `API_PORT` / `WORKER_PORT`.
+
+## What is covered
+
+| Area | Specs |
+|---|---|
+| Auth | sign-in, remember me, reveal password, navigation, registration (+ validation), change password (+ validation), sign out everywhere, lockout |
+| Orders | place, list + paging + empty state, detail (price, total, product link), validation |
+| Products | create, edit, edit-from-detail, duplicate sku, field validation, paging |
+| Notifications | placed, shipped, cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
+| Monitoring | access, overview, drill-downs, traffic window, jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
+
+Not covered end to end, deliberately: the dead-letter retry (nothing dead-letters on purpose),
+traffic numbers (a clock race against the minute flush — ADR 0021), and realtime push (off in the
+managed stack; the feed is the truth — ADR 0019).
 
 ## Lint
 
