@@ -79,7 +79,7 @@
       Relational comment above describes — for the identical reason: the lower requirement is the
       only one Infrastructure.csproj's own graph sees.
     -->
-    <PackageReference Include="OpenTelemetry.Api" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.19.1" />
     <PackageReference Include="WolverineFx" Version="6.40.0" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.40.0" />
     <PackageReference Include="WolverineFx.Postgresql" Version="6.40.0" />

@@ -35,7 +35,7 @@ services:
   # `docker compose --profile observability down`, which scripts/stop-dev.ps1 always passes
   # (harmless when Seq was never started — there is then nothing in that profile to stop).
   seq:
-    image: datalust/seq:2026.1
+    image: datalust/seq:2026.1.17114
     profiles: ['observability']
     environment:
       ACCEPT_EULA: 'Y'
