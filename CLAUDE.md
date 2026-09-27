@@ -191,5 +191,7 @@ build, because only its *startup* failed), `codegen`,
 `contract`, `frontend`, and `e2e`. `/verify` runs the same checks locally, including the two
 diff checks. The `e2e` job is defined in `.github/workflows/e2e.yml`, which `ci.yml` calls; the
 same workflow runs by hand from the Actions tab, with optional `grep` and `repeat_each` inputs.
+Every job runs on `vars.CI_RUNNER`, defaulting to `ubuntu-latest`; setting it to `self-hosted`
+moves CI onto your own Linux machine (`docs/self-hosted-runner.md`).
 
 Design rationale for this setup: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`

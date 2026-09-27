@@ -48,7 +48,8 @@ env:
 jobs:
   e2e:
     name: e2e
-    runs-on: ubuntu-latest
+    # CI_RUNNER picks GitHub-hosted or self-hosted; see the note above `jobs:` in ci.yml.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -81,8 +82,14 @@ jobs:
       # `docker compose up --wait` and `dotnet ef database update` itself via
       # e2e/setup/prepare-database.ts, so the only thing it cannot provide is the browser
       # binary — the same one-off documented in frontend/CLAUDE.md for a fresh machine.
+      #
+      # --with-deps installs Chromium's system libraries through apt and sudo. That is fine on a
+      # throwaway GitHub-hosted VM; on a self-hosted runner they are installed once by hand
+      # (docs/self-hosted-runner.md) so CI never needs root on that machine.
       - name: Install Playwright browser
-        run: npx --prefix frontend playwright install --with-deps chromium
+        env:
+          WITH_DEPS: ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }}
+        run: npx --prefix frontend playwright install $WITH_DEPS chromium
 
       # The inputs reach the shell as environment variables, never as ${{ }} spliced into the
       # script: whatever someone types into the dispatch form is then data, not shell.

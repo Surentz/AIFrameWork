@@ -44,12 +44,17 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
 
+# Where every job runs. Unset, that is GitHub's ubuntu-latest. Set the repository variable
+# CI_RUNNER (Settings -> Secrets and variables -> Actions -> Variables) to a self-hosted runner's
+# label - `self-hosted` - and every job here and in e2e.yml runs on that machine instead, with no
+# billed minutes. Delete the variable to go back. The runner must be Linux with Docker:
+# docs/self-hosted-runner.md.
 jobs:
   backend:
     # Both configurations, deliberately. See the note at the top of this file: Debug alone is
     # what let a non-booting Release sit in the repo unnoticed.
     name: backend (${{ matrix.configuration }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     strategy:
       # Debug and Release fail for different reasons and both answers are wanted.
       fail-fast: false
@@ -79,7 +84,8 @@ jobs:
         run: dotnet build -c ${{ matrix.configuration }} --no-restore
 
       # Testcontainers needs a Docker daemon; ubuntu-latest runners ship one already running,
-      # which is why there is no service container or setup step here.
+      # which is why there is no service container or setup step here. A self-hosted runner has
+      # to provide it (docs/self-hosted-runner.md).
       - name: Test
         run: dotnet test -c ${{ matrix.configuration }} --no-build
 
@@ -90,7 +96,7 @@ jobs:
     # adapter; this catches one that merely drifted. `codegen write` is deterministic, so a
     # non-empty diff here means the committed output is genuinely out of date.
     name: generated code is current
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -149,7 +155,7 @@ jobs:
     # against a shape the API no longer returns - which is the failure this whole feature
     # exists to make impossible.
     name: api contract is current
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -207,7 +213,7 @@ jobs:
 
   frontend:
     name: frontend
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
