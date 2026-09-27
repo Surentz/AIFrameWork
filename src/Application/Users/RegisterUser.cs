@@ -38,19 +38,16 @@ public sealed class RegisterUserHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        // Check-then-insert, so a taken name is a friendly 409 rather than a 500. The unique
-        // index on UsernameNormalized is still the real guard: two simultaneous registrations of
-        // the same name both pass this check, and the second one fails at SaveChanges.
+        // The pre-check answers the common case with no failed insert, which EF would log at
+        // Error. It is not the guard: two simultaneous registrations of one name both pass it,
+        // and TryAddAsync below is where the second finds out.
         var taken = await users
             .GetByNormalizedUsernameAsync(User.Normalize(command.Username), cancellationToken)
             .ConfigureAwait(false);
 
         if (taken is not null)
         {
-            return Result.Failure<SessionView>(new Error(
-                ErrorKind.Conflict,
-                "user.username_taken",
-                $"The username '{command.Username}' is already taken."));
+            return UsernameTaken(command.Username);
         }
 
         var user = User.Register(
@@ -70,9 +67,20 @@ public sealed class RegisterUserHandler(
             user.ChangeRole(UserRole.Admin);
         }
 
-        await users.AddAsync(user, cancellationToken).ConfigureAwait(false);
+        // The race: someone registered this name between the pre-check and here. The same 409,
+        // so a caller cannot tell which of the two caught it.
+        if (!await users.TryAddAsync(user, cancellationToken).ConfigureAwait(false))
+        {
+            return UsernameTaken(command.Username);
+        }
 
         return Result.Success(
             new SessionView(user.Id, user.Username, user.DisplayName, user.SecurityStamp, user.Role));
     }
+
+    private static Result<SessionView> UsernameTaken(string username) =>
+        Result.Failure<SessionView>(new Error(
+            ErrorKind.Conflict,
+            "user.username_taken",
+            $"The username '{username}' is already taken."));
 }

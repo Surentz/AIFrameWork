@@ -22,6 +22,7 @@ public sealed class RegisterUserHandlerTests
         _hasher.Hash(Arg.Any<string>()).Returns("hashed");
         _users.GetByNormalizedUsernameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((User?)null);
+        _users.TryAddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
     [Fact]
@@ -33,7 +34,7 @@ public sealed class RegisterUserHandlerTests
             new RegisterUser("ada", "correct horse battery", "Ada Lovelace"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _users.Received(1).AddAsync(
+        await _users.Received(1).TryAddAsync(
             Arg.Is<User>(u => u.Username == "ada" && u.DisplayName == "Ada Lovelace" && u.RegisteredAt == Now),
             Arg.Any<CancellationToken>());
     }
@@ -47,7 +48,7 @@ public sealed class RegisterUserHandlerTests
             new RegisterUser("ada", "correct horse battery", "Ada Lovelace"), CancellationToken.None);
 
         _hasher.Received(1).Hash("correct horse battery");
-        await _users.Received(1).AddAsync(
+        await _users.Received(1).TryAddAsync(
             Arg.Is<User>(u => u.PasswordHash == "hashed"), Arg.Any<CancellationToken>());
     }
 
@@ -77,7 +78,22 @@ public sealed class RegisterUserHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Conflict);
         result.Error.Code.Should().Be("user.username_taken");
-        await _users.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _users.DidNotReceive().TryAddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenTheNameIsTakenBetweenTheCheckAndTheInsert_FailsAsConflict()
+    {
+        // The race: the pre-check saw the name free, and a concurrent registration took it first.
+        _users.TryAddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(false);
+        var handler = new RegisterUserHandler(_users, _hasher, _clock, _administrators);
+
+        var result = await handler.HandleAsync(
+            new RegisterUser("ada", "correct horse battery", "Ada Lovelace"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Kind.Should().Be(ErrorKind.Conflict);
+        result.Error.Code.Should().Be("user.username_taken");
     }
 
     [Fact]
@@ -105,7 +121,7 @@ public sealed class RegisterUserHandlerTests
         // Without this, a fresh deployment's operator holds no access until someone restarts the
         // API - the reconciler cannot promote an account that did not exist when it ran.
         result.Value.Role.Should().Be(UserRole.Admin);
-        await _users.Received(1).AddAsync(
+        await _users.Received(1).TryAddAsync(
             Arg.Is<User>(u => u.Role == UserRole.Admin), Arg.Any<CancellationToken>());
     }
 
