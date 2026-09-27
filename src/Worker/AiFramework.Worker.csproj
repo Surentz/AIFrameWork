@@ -57,7 +57,7 @@
     fails in the Debug suite if this tree goes stale. ADR 0005, ADR 0016.
   -->
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
-    <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.33.0" />
+    <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.40.0" />
   </ItemGroup>
 
 </Project>

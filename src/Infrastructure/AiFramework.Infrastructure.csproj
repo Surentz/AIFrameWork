@@ -80,9 +80,9 @@
       only one Infrastructure.csproj's own graph sees.
     -->
     <PackageReference Include="OpenTelemetry.Api" Version="1.18.0" />
-    <PackageReference Include="WolverineFx" Version="6.33.0" />
-    <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.33.0" />
-    <PackageReference Include="WolverineFx.Postgresql" Version="6.33.0" />
+    <PackageReference Include="WolverineFx" Version="6.40.0" />
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.40.0" />
+    <PackageReference Include="WolverineFx.Postgresql" Version="6.40.0" />
     <!--
       Quartz 4.1 is the job CLOCK only: its one job type enqueues through IJobScheduler, and
       Wolverine runs the work (ADR 0017). Referenced here and nowhere else — Application never
@@ -108,7 +108,7 @@
     generated code stops matching its handlers, which neither the compiler nor a Debug run can see.
   -->
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
-    <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.33.0" />
+    <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.40.0" />
   </ItemGroup>
 
 </Project>
