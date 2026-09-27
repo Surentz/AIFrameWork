@@ -77,8 +77,11 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # deps, not ci, like every other ecosystem: the prefix is the PR title's Conventional Commit
+    # type, and pr-labels.yml labels a `ci:` title `ci` and drops Dependabot's `dependencies`. The
+    # `ci` area label still comes from the workflow files it changes.
     commit-message:
-      prefix: ci
+      prefix: deps
     groups:
       actions:
         patterns: ['*']
