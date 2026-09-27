@@ -1,0 +1,111 @@
+# Version updates: weekly PRs that keep dependencies current. Vulnerability alerts and security
+# PRs are switched on in the repository's settings, not here, and arrive whenever GitHub finds
+# one - but the `ignore` rules below apply to those too.
+#
+# Grouped so a week's updates arrive as a handful of PRs, not one per package. Each PR runs the
+# full CI like any other and must pass the `main` ruleset's checks before it can merge.
+#
+# Two kinds of bump go red in CI by design, and Dependabot cannot fix either itself - check out
+# its branch, use the `regenerate` skill, and push the result onto the PR:
+# - WolverineFx: the committed handler adapters (`generated code is current`).
+# - Microsoft.AspNetCore.OpenApi or anything that changes the API's shape: the committed contract
+#   (`api contract is current`).
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    # Root for .config/dotnet-tools.json and Directory.Build.props (the analyzers); every project
+    # directory explicitly, rather than trusting discovery through AiFramework.slnx.
+    directories:
+      - /
+      - /src/*
+      - /tests/*
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: deps
+    groups:
+      # These move in lockstep and must never be split across PRs: EF Core, ASP.NET Core and the
+      # extensions share a servicing train, dotnet-ef must match EF Core, and Npgsql's EF provider
+      # tracks EF Core's major.
+      dotnet:
+        patterns:
+          - Microsoft.*
+          - dotnet-ef
+          - Npgsql*
+        exclude-patterns:
+          - Microsoft.NET.Test.Sdk
+      wolverine:
+        patterns:
+          - WolverineFx*
+      opentelemetry:
+        patterns:
+          - OpenTelemetry*
+      analyzers:
+        patterns:
+          - SonarAnalyzer.CSharp
+          - Meziantou.Analyzer
+          - AsyncFixer
+      testing:
+        patterns:
+          - xunit*
+          - Microsoft.NET.Test.Sdk
+          - coverlet.*
+          - NSubstitute
+          - FluentAssertions
+          - Testcontainers*
+    ignore:
+      # 8.0 moved FluentAssertions to a paid commercial licence. Staying on 7.x is deliberate.
+      - dependency-name: FluentAssertions
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: deps
+    groups:
+      # Majors stay one PR per package: those are the ones that need reading.
+      frontend:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: deps
+    groups:
+      images:
+        patterns: ['*']
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: deps
+    groups:
+      compose-images:
+        patterns: ['*']
+    ignore:
+      # A Postgres major cannot read the previous major's data directory, and the dev database on
+      # 55433 is a persistent volume. Upgrading is a deliberate dump-and-restore, not a PR.
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
