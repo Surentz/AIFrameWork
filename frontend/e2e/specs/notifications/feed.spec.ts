@@ -36,35 +36,46 @@ test('tells the buyer their order was placed, and links to it', async ({
   await expect(orders.detailHeading(signedInPage, sku)).toBeVisible();
 });
 
-test('tells the buyer when an order ships or is cancelled', async ({
+// @local-only: shipping is the operator's (ADR 0024), and only the stack playwright.config.ts
+// starts names an administrator. Split from the cancellation test below so that half, which the
+// buyer does for themselves, still runs everywhere.
+test('tells the buyer when the operator ships their order', { tag: '@local-only' }, async ({
   signedInPage,
   api,
   workerUser,
+  adminUser,
 }) => {
   const shipped = uniqueSku();
-  const cancelled = uniqueSku();
-  const reason = 'Ordered the wrong size.';
 
-  await test.step('arrange: one order shipped, one cancelled', async () => {
-    const [shippedId, cancelledId] = await Promise.all([
-      api.placeOrder(workerUser, { sku: shipped, quantity: 1 }),
-      api.placeOrder(workerUser, { sku: cancelled, quantity: 1 }),
-    ]);
-    await api.shipOrder(workerUser, shippedId);
-    await api.cancelOrder(workerUser, cancelledId, reason);
-
-    await Promise.all([
-      api.waitForNotification(workerUser, { kind: 'OrderShipped', text: shipped }),
-      api.waitForNotification(workerUser, { kind: 'OrderCancelled', text: cancelled }),
-    ]);
+  await test.step('arrange: an order the operator has shipped', async () => {
+    const shippedId = await api.placeOrder(workerUser, { sku: shipped, quantity: 1 });
+    await api.shipOrder(adminUser, shippedId);
+    await api.waitForNotification(workerUser, { kind: 'OrderShipped', text: shipped });
   });
 
   await notifications.open(signedInPage);
 
-  // Each order also has its "Order placed" row, so these filter on the body, which differs.
+  // The order also has its "Order placed" row, so this filters on the body, which differs.
   await expect(
     notifications.item(signedInPage, `Your order for ${shipped} is on its way.`),
   ).toContainText('Order shipped');
+});
+
+test('tells the buyer when they cancel an order, with their reason', async ({
+  signedInPage,
+  api,
+  workerUser,
+}) => {
+  const cancelled = uniqueSku();
+  const reason = 'Ordered the wrong size.';
+
+  await test.step('arrange: an order the buyer has cancelled', async () => {
+    const cancelledId = await api.placeOrder(workerUser, { sku: cancelled, quantity: 1 });
+    await api.cancelOrder(workerUser, cancelledId, reason);
+    await api.waitForNotification(workerUser, { kind: 'OrderCancelled', text: cancelled });
+  });
+
+  await notifications.open(signedInPage);
 
   // The buyer's own reason is carried into the notification, not just the fact of cancellation.
   await expect(

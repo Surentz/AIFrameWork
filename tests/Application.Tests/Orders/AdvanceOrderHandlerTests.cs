@@ -8,13 +8,15 @@ namespace AiFramework.Application.Tests.Orders;
 
 /// <summary>
 /// The two transition commands. The assertion that matters most in both: an illegal transition
-/// becomes a 409 Conflict, not the 400 a bare DomainException would produce.
+/// becomes a 409 Conflict, not the 400 a bare DomainException would produce. Shipping is the
+/// operator's and reaches any buyer's order; cancelling stays the buyer's own (ADR 0024).
 /// </summary>
 public sealed class AdvanceOrderHandlerTests
 {
     private static readonly DateTimeOffset PlacedAt = new(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset Now = new(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
     private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid Buyer = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private readonly IOrderRepository _orders = Substitute.For<IOrderRepository>();
     private readonly IClock _clock = Substitute.For<IClock>();
@@ -36,14 +38,25 @@ public sealed class AdvanceOrderHandlerTests
         return order;
     }
 
+    /// <summary>
+    /// Another buyer's order, reachable only through the fulfilment read — the caller is the
+    /// operator, not the owner.
+    /// </summary>
+    private Order AwaitingFulfilment()
+    {
+        var order = Order.Place(Guid.NewGuid(), Buyer, 2, PlacedAt, AnOrderedProduct.Any(), "SKU-1");
+        _orders.GetForFulfilmentAsync(order.Id, Arg.Any<CancellationToken>()).Returns(order);
+        return order;
+    }
+
     private ShipOrderHandler ShipHandler() => new(_orders, _currentUser, _clock);
 
     private CancelOrderHandler CancelHandler() => new(_orders, _currentUser, _clock);
 
     [Fact]
-    public async Task ShipOrder_OnAPlacedOrder_ShipsIt()
+    public async Task ShipOrder_OnAnotherBuyersPlacedOrder_ShipsIt()
     {
-        var order = Stored();
+        var order = AwaitingFulfilment();
 
         var result = await ShipHandler().HandleAsync(new ShipOrder(order.Id), CancellationToken.None);
 
@@ -53,16 +66,18 @@ public sealed class AdvanceOrderHandlerTests
     }
 
     [Fact]
-    public async Task ShipOrder_ReadsTheOrderTracked()
+    public async Task ShipOrder_ReadsThroughTheTrackedFulfilmentPath()
     {
-        // GetAsync reads untracked, so using it here would drop the write silently. This test is
-        // the net under that.
-        var order = Stored();
+        // GetAsync reads untracked, so using it would drop the write silently; the owner-scoped
+        // GetForUpdateAsync would answer 404 for every order the operator did not place. This
+        // test is the net under both.
+        var order = AwaitingFulfilment();
 
         await ShipHandler().HandleAsync(new ShipOrder(order.Id), CancellationToken.None);
 
-        await _orders.Received(1).GetForUpdateAsync(
-            order.Id, UserId, Arg.Any<CancellationToken>());
+        await _orders.Received(1).GetForFulfilmentAsync(order.Id, Arg.Any<CancellationToken>());
+        await _orders.DidNotReceive().GetForUpdateAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _orders.DidNotReceive().GetAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
@@ -70,7 +85,7 @@ public sealed class AdvanceOrderHandlerTests
     [Fact]
     public async Task ShipOrder_OnAnAlreadyShippedOrder_ReturnsConflict()
     {
-        var order = Stored();
+        var order = AwaitingFulfilment();
         order.Ship(Now.AddHours(-1));
 
         var result = await ShipHandler().HandleAsync(new ShipOrder(order.Id), CancellationToken.None);
@@ -82,7 +97,7 @@ public sealed class AdvanceOrderHandlerTests
     [Fact]
     public async Task ShipOrder_OnACancelledOrder_ReturnsConflict()
     {
-        var order = Stored();
+        var order = AwaitingFulfilment();
         order.Cancel("Out of stock.", Now.AddHours(-1));
 
         var result = await ShipHandler().HandleAsync(new ShipOrder(order.Id), CancellationToken.None);
@@ -93,7 +108,7 @@ public sealed class AdvanceOrderHandlerTests
     [Fact]
     public async Task ShipOrder_WithAnIdThatDoesNotExist_ReturnsNotFound()
     {
-        _orders.GetForUpdateAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _orders.GetForFulfilmentAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((Order?)null);
 
         var result = await ShipHandler().HandleAsync(

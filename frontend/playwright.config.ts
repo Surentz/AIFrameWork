@@ -69,6 +69,8 @@ export default defineConfig({
 
   ...(target.managesStack
     ? {
+        // After the webServers start, before any worker: see the file for the race it removes.
+        globalSetup: './e2e/setup/seed-admin.ts',
         webServer: [
           {
             // --no-launch-profile, not --launch-profile http: launchSettings.json hard-codes

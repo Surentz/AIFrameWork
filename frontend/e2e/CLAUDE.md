@@ -16,7 +16,7 @@ fixture below.
 | `signedInPage` | test | The default for anything needing a session |
 | `page` | test | Anonymous visitors, and sign-in tests |
 | `isolatedPage` / `freshUser` | test | See the rule below — not optional |
-| `adminPage` / `adminUser` | test / worker | The monitoring pages — `@local-only`, see below |
+| `adminPage` / `adminUser` | test / worker | The monitoring and fulfilment pages, and `api.shipOrder` — `@local-only`, see below |
 | `api` | test | Arranging data over HTTP |
 | `openSession` | test | A further signed-in page for a given user — e.g. a second browser. Closed at teardown |
 | `workerUser` | worker | The user `signedInPage` is signed in as |
@@ -39,9 +39,11 @@ cluster run at about ten tests a minute, surfacing as navigation timeouts that l
 3. **`adminUser` is the one fixed username in the suite, and it must stay fixed.** The
    administrator role is granted solely by the API's `Admin__Usernames` (ADR 0020), which
    `playwright.config.ts` sets on the stack it starts — a generated name could never appear in a
-   config written before the run. Being fixed, it collides two ways a generated one cannot:
-   `--ui` keeps the database between runs, and two workers arrange in parallel. `registerOrSignIn`
-   absorbs both by signing in on a 409. Anything needing this fixture carries `@local-only`.
+   config written before the run. Being fixed, it would collide in ways a generated one cannot, so
+   `e2e/setup/seed-admin.ts` (a `globalSetup`, managed stack only) registers it once before any
+   worker starts, and `registerOrSignIn` signs in on the 409. Never let workers create it: two
+   registrations racing past the API's check-then-insert answer the loser with a **500**, not a
+   409. Anything needing this fixture carries `@local-only`.
 
 ## Screens
 
@@ -75,7 +77,7 @@ await api.placeOrder(workerUser, { sku, quantity: 3 });   // creates the product
 await api.placeOrders(workerUser, 25);
 const id = await api.createProduct(workerUser, { sku, name: sku, price: '19.95' });
 await api.orderProduct(workerUser, { sku, quantity: 1 });  // a product that already exists
-await api.shipOrder(workerUser, orderId);
+await api.shipOrder(adminUser, orderId);                  // the operator ships: @local-only
 await api.cancelOrder(workerUser, orderId, 'reason');
 await api.updateProduct(workerUser, id, { name: sku, price: '9.95' });
 await api.failSignIn(freshUser.username);                  // never workerUser: see rule 1
@@ -129,7 +131,13 @@ and the remember-me test. **Recount before adding an untagged test that register
 `monitoring.spec.ts`'s two *access* tests are untagged deliberately — refusing a member is the
 security-relevant half and needs no administrator, so it runs everywhere.
 
-**A `kind` run therefore executes 26 of the 51 tests** — `npm run e2e` runs all of them, where
+**Shipping, likewise.** It is the operator's since ADR 0024, so `api.shipOrder` takes
+`adminUser`: `fulfilment.spec.ts`'s queue tests and `feed.spec.ts`'s shipped-notification test are
+tagged. The feed's cancellation test was split out of the shipped one to stay untagged — the buyer
+cancels for themselves — and `fulfilment.spec.ts`'s member refusal is untagged for the reason the
+monitoring access tests are. Neither spends an auth permit: both run as `workerUser`.
+
+**A `kind` run therefore executes 27 of the 55 tests** — `npm run e2e` runs all of them, where
 the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
@@ -171,9 +179,9 @@ the first two are also the dev loop's. Stop it first, or set `API_PORT` / `WORKE
 | Area | Specs |
 |---|---|
 | Auth | sign-in, remember me, reveal password, navigation, registration (+ validation), change password (+ validation), sign out everywhere, lockout |
-| Orders | place, list + paging + empty state, detail (price, total, product link), validation |
+| Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation) |
 | Products | create, edit, edit-from-detail, duplicate sku, field validation, paging |
-| Notifications | placed, shipped, cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
+| Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
 | Monitoring | access, overview, drill-downs, traffic window, jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
 
 Not covered end to end, deliberately: the dead-letter retry (nothing dead-letters on purpose),

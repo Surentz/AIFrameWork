@@ -3,7 +3,7 @@ import * as monitoring from '../../screens/monitoring.ts';
 
 /**
  * The operator's view, end to end: a real cookie, a real role read from Postgres on every
- * request, and the real `[Authorize(Policy = "Monitoring")]` behind each panel.
+ * request, and the real `Monitoring.Read` policy behind each panel (ADR 0024).
  *
  * What is asserted here is STRUCTURE, not counts. The traffic tables are written by a flush that
  * runs on its own minute boundary (ADR 0021) and the job tiles count whatever earlier tests
@@ -75,9 +75,7 @@ test.describe('monitoring access', () => {
     // Typed by hand: the nav entry is hidden for a member, so there is nothing to click.
     await signedInPage.goto('/monitoring');
 
-    await expect(monitoring.refusal(signedInPage)).toContainText(
-      'This page is for administrators',
-    );
+    await expect(monitoring.refusal(signedInPage)).toContainText('This page is for administrators');
     await expect(monitoring.overviewHeading(signedInPage)).toBeHidden();
 
     // The gate the frontend one only explains. Reaching the API directly must fail the same way.
@@ -85,7 +83,7 @@ test.describe('monitoring access', () => {
     expect(response.status()).toBe(403);
   });
 
-  test('keeps the monitoring nav entry out of a member\'s shell', async ({ signedInPage }) => {
+  test("keeps the monitoring nav entry out of a member's shell", async ({ signedInPage }) => {
     await signedInPage.goto('/orders');
 
     await expect(monitoring.navLink(signedInPage)).toBeHidden();

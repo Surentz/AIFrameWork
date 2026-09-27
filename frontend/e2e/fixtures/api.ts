@@ -57,10 +57,11 @@ export async function registerUser(): Promise<TestUser> {
  *
  * Only the administrator needs this, and only because its name has to be known before the run
  * starts — `playwright.config.ts` names it in the API's `Admin__Usernames`, which is the sole
- * grant of the role (ADR 0020). A fixed name collides two ways that a generated one cannot, and
- * both land here rather than in a spec: `--ui` keeps the database between runs, so the account
- * already exists on the second iteration; and two Playwright workers arranging in parallel both
- * pass the API's check-then-insert, so one of them gets the unique index's 409.
+ * grant of the role (ADR 0020). A fixed name already exists on every call but the first: `--ui`
+ * keeps the database between runs, and `e2e/setup/seed-admin.ts` registers it once before any
+ * worker starts. Workers therefore get the check's 409 and sign in. They must not be the ones to
+ * create it: two registrations racing past the API's check-then-insert answer the loser with a
+ * 500 from the unique index, not a 409 — see seed-admin.ts.
  *
  * Every other user in this suite is generated and registered exactly once — see `registerUser`.
  */
@@ -128,7 +129,11 @@ export interface ApiClient {
   orderProduct(user: TestUser, order: { sku: string; quantity: number }): Promise<string>;
   /** `count` orders with generated SKUs, in parallel. Returns the SKUs, newest-first order not guaranteed. */
   placeOrders(user: TestUser, count: number): Promise<readonly string[]>;
-  shipOrder(user: TestUser, orderId: string): Promise<void>;
+  /**
+   * Ships any buyer's order through the fulfilment endpoint. Needs an administrator, so a spec
+   * that calls it passes `adminUser` and carries `@local-only`. ADR 0024.
+   */
+  shipOrder(admin: TestUser, orderId: string): Promise<void>;
   cancelOrder(user: TestUser, orderId: string, reason: string): Promise<void>;
   /** Returns the new product's id. The catalogue is global, so any signed-in user may add to it. */
   createProduct(user: TestUser, product: NewProduct): Promise<string>;
@@ -292,8 +297,8 @@ export function createApiClient(): ApiClient {
     placeOrder,
     orderProduct,
     createProduct,
-    async shipOrder(user, orderId) {
-      await postOrFail(user, `/api/orders/${orderId}/ship`, `Shipping order ${orderId}`);
+    async shipOrder(admin, orderId) {
+      await postOrFail(admin, `/api/fulfilment/orders/${orderId}/ship`, `Shipping order ${orderId}`);
     },
     async cancelOrder(user, orderId, reason) {
       await postOrFail(user, `/api/orders/${orderId}/cancel`, `Cancelling order ${orderId}`, {

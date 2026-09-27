@@ -21,7 +21,8 @@ Five things that will cost you time:
 - **`GetAsync` reads untracked; `GetForUpdateAsync` tracks.** Two methods rather than a bool,
   because the distinction decides whether a write happens at all and a caller that gets it wrong
   gets no feedback. `ShipOrder`, `CancelOrder` and `MarkNotificationRead` all mutate what they
-  read, so all three take the tracked one.
+  read, so all three take a tracked read — `ShipOrder`'s is `GetForFulfilmentAsync`, the
+  cross-owner one, since the operator ships (ADR 0024).
 - **Idempotency is the unique index, not the check.** `(SourceMessageId, UserId)` is unique;
   `ListNotifiedRecipientsAsync` is an optimization in front of it. Delivery is at-least-once, so
   every notifier WILL run twice — two concurrent deliveries can both pass the check, and the index

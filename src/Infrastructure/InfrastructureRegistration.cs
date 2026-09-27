@@ -53,6 +53,7 @@ public static class InfrastructureRegistration
         services.AddCommand<CancelOrder, OrderStatusView, CancelOrderHandler>();
         services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
         services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
+        services.AddQuery<GetOrdersToFulfil, FulfilmentQueuePage, GetOrdersToFulfilHandler>();
 
         services.AddCommand<MarkNotificationRead, NotificationReadResult, MarkNotificationReadHandler>();
         services.AddCommand<MarkAllNotificationsRead, NotificationReadResult, MarkAllNotificationsReadHandler>();

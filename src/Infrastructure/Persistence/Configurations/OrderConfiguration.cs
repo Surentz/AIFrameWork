@@ -83,5 +83,13 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         // that query also takes Max(PlacedAt) per user to order the fan-out.
         builder.HasIndex(o => new { o.Sku, o.UserId, o.PlacedAt })
             .HasDatabaseName("IX_Orders_Sku_UserId_PlacedAt");
+
+        // ListForFulfilmentAsync — the operator's queue — filters on Status across every owner
+        // and orders by (PlacedAt, Id) ASCENDING, oldest first. Neither index above leads with
+        // Status, so without this one the queue is a sequential scan plus sort of every order
+        // ever placed, to show the handful still waiting. Status leads because it is the equality
+        // predicate; PlacedAt and Id then serve both the keyset comparison and the ORDER BY.
+        builder.HasIndex(o => new { o.Status, o.PlacedAt, o.Id })
+            .HasDatabaseName("IX_Orders_Status_PlacedAt_Id");
     }
 }

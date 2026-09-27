@@ -67,6 +67,30 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('link', { name: 'Monitoring' })).not.toBeInTheDocument();
   });
 
+  it('renders the fulfilment queue, and its nav entry, for an administrator', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)));
+
+    renderAt('/fulfilment');
+
+    expect(await screen.findByRole('heading', { name: 'Fulfilment' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Fulfilment' })).toBeInTheDocument();
+  });
+
+  it('keeps the fulfilment nav entry out of an ordinary member\'s shell', async () => {
+    renderAt('/orders');
+
+    expect(await screen.findByRole('link', { name: 'All orders' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Fulfilment' })).not.toBeInTheDocument();
+  });
+
+  it('explains the refusal when an ordinary member opens the fulfilment queue', async () => {
+    // The default Member session, reaching the route by a typed address.
+    renderAt('/fulfilment');
+
+    expect(await screen.findByText(/This page is for administrators/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Fulfilment' })).not.toBeInTheDocument();
+  });
+
   // The reason /login sits outside the layout route: it is a full-bleed page, and rendering it
   // under the shell would put it beneath an "Orders" heading and the app nav.
   it('renders login outside the app shell, with a main landmark of its own', () => {
