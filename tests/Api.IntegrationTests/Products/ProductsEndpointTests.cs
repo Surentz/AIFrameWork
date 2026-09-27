@@ -59,9 +59,47 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task PostProducts_AsAMember_Returns403()
+    {
+        using var member = await factory.CreateAuthenticatedClientAsync();
+
+        var response = await member.PostAsJsonAsync("/api/products", NewProduct(NewSku()));
+
+        // 403, not 404: the route is in the SPA bundle and admits nothing by existing. ADR 0025.
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task PutProducts_AsAMember_Returns403()
+    {
+        using var admin = await factory.CreateAdminClientAsync();
+        var id = await CreateAsync(admin, NewProduct(NewSku()));
+        using var member = await factory.CreateAuthenticatedClientAsync();
+
+        var response = await member.PutAsJsonAsync(
+            $"/api/products/{id}", new { Name = "Renamed by a member", Price = 1m });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task PutProducts_AsAMember_LeavesTheProductUnchanged()
+    {
+        using var admin = await factory.CreateAdminClientAsync();
+        var id = await CreateAsync(admin, NewProduct(NewSku(), "Widget", 9.99m));
+        using var member = await factory.CreateAuthenticatedClientAsync();
+
+        await member.PutAsJsonAsync($"/api/products/{id}", new { Name = "Renamed", Price = 1m });
+
+        var reread = await member.GetFromJsonAsync<ProductResponseDto>($"/api/products/{id}");
+        reread!.Name.Should().Be("Widget");
+        reread.Price.Should().Be(9.99m);
+    }
+
+    [Fact]
     public async Task PostProducts_WithAValidRequest_Returns201()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
 
         var response = await client.PostAsJsonAsync("/api/products", NewProduct(NewSku()));
 
@@ -73,7 +111,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PostProducts_ThenGet_ReturnsTheProduct()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
         var sku = NewSku();
         var id = await CreateAsync(client, NewProduct(sku, "Widget", 19.95m));
 
@@ -90,7 +128,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PostProducts_NormalizesTheSku()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
         var sku = NewSku();
         var id = await CreateAsync(client, NewProduct(sku.ToLowerInvariant()));
 
@@ -102,7 +140,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PostProducts_WithADuplicateSku_Returns409()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
         var sku = NewSku();
         await CreateAsync(client, NewProduct(sku));
 
@@ -116,7 +154,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     {
         // The availability check runs against the normalized form, so case must not slip past it
         // into the unique index and come back as a 500.
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
         var sku = NewSku();
         await CreateAsync(client, NewProduct(sku));
 
@@ -129,7 +167,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PostProducts_WithABlankName_Returns400()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
 
         var response = await client.PostAsJsonAsync(
             "/api/products", NewProduct(NewSku(), name: ""));
@@ -146,7 +184,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PostProducts_WithANegativePrice_Returns400()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
 
         var response = await client.PostAsJsonAsync(
             "/api/products", NewProduct(NewSku(), price: -1m));
@@ -158,7 +196,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     public async Task PostProducts_WithTooManyDecimalPlaces_Returns400()
     {
         // The column is numeric(18,2); a third decimal would be rounded away silently.
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
 
         var response = await client.PostAsJsonAsync(
             "/api/products", NewProduct(NewSku(), price: 1.005m));
@@ -182,7 +220,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
         // The catalogue is global, unlike orders: a product one caller creates is readable by
         // every other signed-in caller. This is the test that would fail if an owner filter
         // were ever added to the read path.
-        using var author = await factory.CreateAuthenticatedClientAsync();
+        using var author = await factory.CreateAdminClientAsync();
         var id = await CreateAsync(author, NewProduct(NewSku()));
 
         using var other = await factory.CreateAuthenticatedClientAsync();
@@ -194,7 +232,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PutProducts_WithAValidRequest_Returns204AndApplies()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
         var sku = NewSku();
         var id = await CreateAsync(client, NewProduct(sku));
 
@@ -215,7 +253,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PutProducts_WithAnUnknownId_Returns404()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
 
         var response = await client.PutAsJsonAsync(
             $"/api/products/{Guid.NewGuid()}", new { Name = "Gadget", Price = 1m });
@@ -226,7 +264,7 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     [Fact]
     public async Task PutProducts_WithABlankName_Returns400()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        using var client = await factory.CreateAdminClientAsync();
         var id = await CreateAsync(client, NewProduct(NewSku()));
 
         var response = await client.PutAsJsonAsync(
@@ -236,13 +274,15 @@ public sealed class ProductsEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task GetProducts_ReturnsAPageContainingANewProduct()
+    public async Task GetProducts_AsAMember_ReturnsAPageContainingANewProduct()
     {
-        using var client = await factory.CreateAuthenticatedClientAsync();
+        // Writes are the administrator's; reading the catalogue is still every member's.
+        using var admin = await factory.CreateAdminClientAsync();
         var sku = NewSku();
-        await CreateAsync(client, NewProduct(sku));
+        await CreateAsync(admin, NewProduct(sku));
 
-        var page = await client.GetFromJsonAsync<ProductPageDto>("/api/products?limit=100");
+        using var member = await factory.CreateAuthenticatedClientAsync();
+        var page = await member.GetFromJsonAsync<ProductPageDto>("/api/products?limit=100");
 
         page.Should().NotBeNull();
         page.Items.Should().Contain(i => i.Sku == sku);

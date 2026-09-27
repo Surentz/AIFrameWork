@@ -12,7 +12,7 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     public async Task GetOrders_AfterPlacingAnOrder_ReturnsItInTheList()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var created = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = sku, Quantity = 3 });
         created.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -28,8 +28,8 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     public async Task GetOrders_WithALimitOfOne_ReturnsOneItemAndACursor()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var skuA = await CatalogueSetup.CreateProductAsync(client);
-        var skuB = await CatalogueSetup.CreateProductAsync(client);
+        var skuA = await CatalogueSetup.CreateProductAsync(factory);
+        var skuB = await CatalogueSetup.CreateProductAsync(factory);
         await client.PostAsJsonAsync("/api/orders", new { Sku = skuA, Quantity = 1 });
         await client.PostAsJsonAsync("/api/orders", new { Sku = skuB, Quantity = 1 });
 
@@ -48,9 +48,9 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
         // Each order gets its own product: this shared database also holds rows from every
         // other test in ApiFactoryCollection, so the ids returned - not the row count - are
         // what this test can safely pin down.
-        var skuA = await CatalogueSetup.CreateProductAsync(client);
-        var skuB = await CatalogueSetup.CreateProductAsync(client);
-        var skuC = await CatalogueSetup.CreateProductAsync(client);
+        var skuA = await CatalogueSetup.CreateProductAsync(factory);
+        var skuB = await CatalogueSetup.CreateProductAsync(factory);
+        var skuC = await CatalogueSetup.CreateProductAsync(factory);
         var createdA = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = skuA, Quantity = 1 });
         var idA = await createdA.Content.ReadFromJsonAsync<Guid>();
@@ -112,7 +112,7 @@ public sealed class OrdersListEndpointTests(ApiFactory factory)
     {
         using var owner = await factory.CreateAuthenticatedClientAsync();
         using var stranger = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(owner);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var created = await owner.PostAsJsonAsync(
             "/api/orders", new { Sku = sku, Quantity = 1 });
         created.StatusCode.Should().Be(HttpStatusCode.Created);

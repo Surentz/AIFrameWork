@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { aProduct, server } from '../../test/handlers';
+import { anAdminSession, aProduct, server } from '../../test/handlers';
 import { withQueryClient } from '../../test/withQueryClient';
 import { ProductDetail } from './ProductDetail';
 
@@ -35,12 +35,21 @@ describe('ProductDetail', () => {
     expect(await screen.findByText('No description.')).toBeInTheDocument();
   });
 
-  it('links to the edit screen for this product', async () => {
+  it('links an administrator to the edit screen for this product', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)));
     renderDetail();
 
     const edit = await screen.findByRole('link', { name: 'Edit' });
 
     expect(edit).toHaveAttribute('href', `/products/${aProduct.id}/edit`);
+  });
+
+  it('offers a member no edit link', async () => {
+    // The default session is a Member. Editing needs Catalogue.Manage (ADR 0025).
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: aProduct.name })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
   it('renders the failure when the product cannot be loaded', async () => {

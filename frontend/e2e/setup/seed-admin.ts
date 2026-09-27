@@ -1,21 +1,26 @@
-import { registerOrSignIn } from '../fixtures/api.ts';
-import { ADMIN_USERNAME } from '../support/identity.ts';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { signInOrRegister } from '../fixtures/api.ts';
+import { ADMIN_STATE_PATH, ADMIN_USERNAME } from '../support/identity.ts';
 
 /**
- * Registers the e2e operator ONCE, before any worker starts, so the `adminUser` fixture only ever
- * finds the account already there and signs in.
+ * Signs the e2e operator in ONCE per run, before any worker starts, and saves the session for the
+ * `adminUser` fixture to load.
  *
- * Without this, every Playwright worker that needed `adminUser` registered the same fixed
- * username at the same moment. The API checks then inserts, so two registrations racing past the
- * check both reach the insert, and the loser's unique-index violation is answered with a 500 —
- * not the 409 `registerOrSignIn` recovers from. It took more specs needing an administrator
- * (ADR 0024) to make the race lose every run locally; CI's single worker never hit it.
+ * Once, because of the auth budget. Nearly every spec arranges a product, and writing to the
+ * catalogue needs an administrator (ADR 0025), so every worker needs this session. Signing in per
+ * worker would spend a permit per worker against the kind cluster's 10-per-60-seconds limit;
+ * loading a saved session spends none. Workers therefore never sign in as the operator, and never
+ * register it — which also keeps them out of the registration race that used to 500.
  *
- * A `globalSetup`, and only on the stack Playwright manages. Unlike the database prep in
- * `run.ts`, this has to run AFTER the webServers are up, which is exactly when Playwright runs a
- * global setup. Off-target it is not configured at all: nothing there names this account an
- * administrator, and registering it would spend an auth permit for nothing.
+ * A `globalSetup` on every target, because it has to run AFTER the webServers are up on the
+ * stack Playwright manages — exactly when Playwright runs a global setup. Off that stack, the
+ * target must name `e2e-admin` in `Admin__Usernames` (the kind overlay does), or every spec that
+ * arranges a product fails with a 403.
  */
 export default async function seedAdmin(): Promise<void> {
-  await registerOrSignIn(ADMIN_USERNAME);
+  const operator = await signInOrRegister(ADMIN_USERNAME);
+
+  mkdirSync(dirname(ADMIN_STATE_PATH), { recursive: true });
+  writeFileSync(ADMIN_STATE_PATH, JSON.stringify(operator.state));
 }

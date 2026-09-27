@@ -39,9 +39,14 @@ export function AppRoutes(): React.JSX.Element {
           {/* /products/new is declared before /products/:id so "new" is matched as the literal
               route, not captured as an id. */}
           <Route path="/products" element={<ProductList />} />
-          <Route path="/products/new" element={<CreateProductForm />} />
+          {/* Writing to the catalogue is an administrator's (ADR 0025). Gated here, like the
+              monitoring routes, so a member who types the address is told rather than shown a
+              form whose submit the API would refuse. */}
+          <Route element={<RequireRole allow="Admin" />}>
+            <Route path="/products/new" element={<CreateProductForm />} />
+            <Route path="/products/:id/edit" element={<EditProductForm />} />
+          </Route>
           <Route path="/products/:id" element={<ProductDetail />} />
-          <Route path="/products/:id/edit" element={<EditProductForm />} />
           <Route path="/notifications" element={<NotificationList />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
 

@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { useProduct } from './queries';
+import { useCanManageCatalogue, useProduct } from './queries';
 import { formatPrice } from './types';
 import '../orders/orders.css';
 import './products.css';
@@ -7,6 +7,7 @@ import './products.css';
 export function ProductDetail(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const { data, isPending, error } = useProduct(id);
+  const canManage = useCanManageCatalogue();
 
   if (isPending) {
     return (
@@ -36,9 +37,11 @@ export function ProductDetail(): React.JSX.Element {
           <h1 className="page-title">{data.name}</h1>
           <p className="page-subtitle">{data.sku}</p>
         </div>
-        <Link className="btn btn--secondary" to={`/products/${data.id}/edit`}>
-          Edit
-        </Link>
+        {canManage && (
+          <Link className="btn btn--secondary" to={`/products/${data.id}/edit`}>
+            Edit
+          </Link>
+        )}
       </div>
 
       <div className="card">
