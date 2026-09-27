@@ -23,14 +23,14 @@ namespace Internal.Generated.WolverineHandlers
             Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Wolverine.Runtime.ScopedMessageContextHolder>(serviceScope.ServiceProvider).Context = context;
             
             /*
-            * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
-            */
-            var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
-            
-            /*
             * Concrete type AiFramework.Infrastructure.Monitoring.AdminActionRetention is not public, so requires service location
             */
             var adminActionRetention = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Monitoring.IAdminActionRetention>(serviceScope.ServiceProvider);
+            
+            /*
+            * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
+            */
+            var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
             // The actual message body
             var pruneAdminActions = (AiFramework.Application.Monitoring.PruneAdminActions)context.Envelope.Message;
 
