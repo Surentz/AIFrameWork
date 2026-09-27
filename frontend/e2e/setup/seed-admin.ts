@@ -6,10 +6,11 @@ import { ADMIN_USERNAME } from '../support/identity.ts';
  * finds the account already there and signs in.
  *
  * Without this, every Playwright worker that needed `adminUser` registered the same fixed
- * username at the same moment. The API checks then inserts, so two registrations racing past the
- * check both reach the insert, and the loser's unique-index violation is answered with a 500 —
- * not the 409 `registerOrSignIn` recovers from. It took more specs needing an administrator
- * (ADR 0024) to make the race lose every run locally; CI's single worker never hit it.
+ * username at the same moment, and all but one lost the race at the unique index. That race is
+ * how the API's old 500-on-a-lost-race was found; the API now answers it with the 409
+ * `registerOrSignIn` recovers from, so this is no longer load-bearing for correctness. It stays
+ * because each lost race still costs a failed insert that EF logs at Error, which is noise in a
+ * run's server log that looks like a failure.
  *
  * A `globalSetup`, and only on the stack Playwright manages. Unlike the database prep in
  * `run.ts`, this has to run AFTER the webServers are up, which is exactly when Playwright runs a

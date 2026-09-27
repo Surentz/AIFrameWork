@@ -41,9 +41,9 @@ cluster run at about ten tests a minute, surfacing as navigation timeouts that l
    `playwright.config.ts` sets on the stack it starts — a generated name could never appear in a
    config written before the run. Being fixed, it would collide in ways a generated one cannot, so
    `e2e/setup/seed-admin.ts` (a `globalSetup`, managed stack only) registers it once before any
-   worker starts, and `registerOrSignIn` signs in on the 409. Never let workers create it: two
-   registrations racing past the API's check-then-insert answer the loser with a **500**, not a
-   409. Anything needing this fixture carries `@local-only`.
+   worker starts, and `registerOrSignIn` signs in on the 409. (Workers racing to create it would
+   also get a 409, but each lost race is a failed insert EF logs at Error — see seed-admin.ts.)
+   Anything needing this fixture carries `@local-only`.
 
 ## Screens
 

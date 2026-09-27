@@ -13,16 +13,15 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
     private static string AUniqueName() => $"ada{Guid.NewGuid():N}"[..User.MaxUsernameLength];
 
     [Fact]
-    public async Task AddAsync_ThenSaveChanges_PersistsTheUser()
+    public async Task TryAddAsync_WithAFreeUsername_PersistsTheUser()
     {
         var id = Guid.NewGuid();
         var username = AUniqueName();
 
         await using (var context = fixture.CreateContext())
         {
-            await new UserRepository(context).AddAsync(
+            await new UserRepository(context).TryAddAsync(
                 User.Register(id, username, "hash", "Ada Lovelace", RegisteredAt), CancellationToken.None);
-            await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         }
 
         await using var verify = fixture.CreateContext();
@@ -42,10 +41,9 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
 
         await using (var context = fixture.CreateContext())
         {
-            await new UserRepository(context).AddAsync(
+            await new UserRepository(context).TryAddAsync(
                 User.Register(Guid.NewGuid(), username, "hash", "Ada Lovelace", RegisteredAt),
                 CancellationToken.None);
-            await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         }
 
         await using var verify = fixture.CreateContext();
@@ -68,27 +66,111 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task SaveChanges_WithAUsernameDifferingOnlyByCase_ViolatesTheUniqueIndex()
+    public async Task TryAddAsync_WithAUsernameDifferingOnlyByCase_ReturnsFalse()
     {
         var username = AUniqueName();
 
         await using (var context = fixture.CreateContext())
         {
-            await new UserRepository(context).AddAsync(
+            await new UserRepository(context).TryAddAsync(
                 User.Register(Guid.NewGuid(), username, "hash", "The First Ada", RegisteredAt),
                 CancellationToken.None);
-            await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         }
 
         await using var second = fixture.CreateContext();
-        await new UserRepository(second).AddAsync(
+
+        // The database is the real guard, not the check in RegisterUserHandler: two simultaneous
+        // registrations of the same name both pass that check, and this is what stops the second -
+        // as a false the handler turns into a 409, not an exception that becomes a 500.
+        var added = await new UserRepository(second).TryAddAsync(
             User.Register(Guid.NewGuid(), username.ToUpperInvariant(), "hash", "The Second Ada", RegisteredAt),
             CancellationToken.None);
 
-        var act = async () => await new UnitOfWork(second).SaveChangesAsync(CancellationToken.None);
+        added.Should().BeFalse();
+    }
 
-        // The database is the real guard, not the check in RegisterUserHandler: two simultaneous
-        // registrations of the same name both pass that check, and this is what stops the second.
+    [Fact]
+    public async Task TryAddAsync_WhenTheUsernameIsTaken_LeavesNothingForTheUnitOfWorkToRetry()
+    {
+        var username = AUniqueName();
+        await using (var context = fixture.CreateContext())
+        {
+            await new UserRepository(context).TryAddAsync(
+                User.Register(Guid.NewGuid(), username, "hash", "The First Ada", RegisteredAt),
+                CancellationToken.None);
+        }
+
+        await using var second = fixture.CreateContext();
+        await new UserRepository(second).TryAddAsync(
+            User.Register(Guid.NewGuid(), username, "hash", "The Second Ada", RegisteredAt),
+            CancellationToken.None);
+
+        // Detached on failure: were the loser still tracked as Added, any later commit in the same
+        // request would replay the insert and throw after all.
+        var saved = await new UnitOfWork(second).SaveChangesAsync(CancellationToken.None);
+
+        saved.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TryAddAsync_WithAFreeUsername_LeavesNothingForTheUnitOfWorkToCommit()
+    {
+        // TryAddAsync commits immediately, and RegisterUser's pipeline still runs the unit of
+        // work's commit afterwards. That second commit must be empty, or one command becomes two
+        // transactions - which is exactly what the "handlers never commit" rule exists to prevent.
+        await using var context = fixture.CreateContext();
+        await new UserRepository(context).TryAddAsync(
+            User.Register(Guid.NewGuid(), AUniqueName(), "hash", "Ada Lovelace", RegisteredAt),
+            CancellationToken.None);
+
+        var saved = await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
+
+        saved.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TryAddAsync_RacingTheSameUsername_AddsExactlyOne()
+    {
+        var username = AUniqueName();
+        var contexts = Enumerable.Range(0, 8).Select(_ => fixture.CreateContext()).ToArray();
+
+        try
+        {
+            var results = await Task.WhenAll(contexts.Select((context, i) =>
+                new UserRepository(context).TryAddAsync(
+                    User.Register(Guid.NewGuid(), username, "hash", $"Ada {i}", RegisteredAt),
+                    CancellationToken.None)));
+
+            // Whatever the interleaving, the losers report false rather than throwing.
+            results.Count(added => added).Should().Be(1);
+        }
+        finally
+        {
+            foreach (var context in contexts)
+            {
+                await context.DisposeAsync();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task TryAddAsync_WhenAnotherConstraintIsViolated_StillThrows()
+    {
+        // Only a taken username is "taken". A duplicate primary key is a bug, and reporting it as
+        // a 409 would hide it.
+        var id = Guid.NewGuid();
+        await using (var context = fixture.CreateContext())
+        {
+            await new UserRepository(context).TryAddAsync(
+                User.Register(id, AUniqueName(), "hash", "The First Ada", RegisteredAt),
+                CancellationToken.None);
+        }
+
+        await using var second = fixture.CreateContext();
+        var act = () => new UserRepository(second).TryAddAsync(
+            User.Register(id, AUniqueName(), "hash", "Someone Else", RegisteredAt),
+            CancellationToken.None);
+
         await act.Should().ThrowAsync<DbUpdateException>();
     }
 
@@ -99,10 +181,9 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
 
         await using (var context = fixture.CreateContext())
         {
-            await new UserRepository(context).AddAsync(
+            await new UserRepository(context).TryAddAsync(
                 User.Register(id, AUniqueName(), "old-hash", "Ada Lovelace", RegisteredAt),
                 CancellationToken.None);
-            await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         }
 
         await using (var mutate = fixture.CreateContext())
@@ -223,8 +304,7 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         var repository = new UserRepository(context);
         var ada = User.Register(Guid.NewGuid(), AUniqueName(), "hash", "Ada Lovelace", RegisteredAt);
         var stamp = ada.SecurityStamp;
-        await repository.AddAsync(ada, CancellationToken.None);
-        await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
+        await repository.TryAddAsync(ada, CancellationToken.None);
 
         await using var reading = fixture.CreateContext();
         var found = await new UserRepository(reading).GetAsync(ada.Id, CancellationToken.None);
@@ -238,8 +318,7 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         await using var context = fixture.CreateContext();
         var repository = new UserRepository(context);
         var ada = User.Register(Guid.NewGuid(), AUniqueName(), "hash", "Ada Lovelace", RegisteredAt);
-        await repository.AddAsync(ada, CancellationToken.None);
-        await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
+        await repository.TryAddAsync(ada, CancellationToken.None);
         var original = ada.SecurityStamp;
         var rotated = Guid.NewGuid().ToString("N");
 
@@ -264,8 +343,7 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
         await using var context = fixture.CreateContext();
         var repository = new UserRepository(context);
         var ada = User.Register(Guid.NewGuid(), AUniqueName(), "hash", "Ada Lovelace", RegisteredAt);
-        await repository.AddAsync(ada, CancellationToken.None);
-        await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
+        await repository.TryAddAsync(ada, CancellationToken.None);
         var original = ada.SecurityStamp;
 
         await repository.TryRecordFailedSignInAsync(
@@ -284,9 +362,8 @@ public sealed class UserRepositoryTests(PostgresFixture fixture)
     private async Task SeedAsync(Guid id)
     {
         await using var seed = fixture.CreateContext();
-        await new UserRepository(seed).AddAsync(
+        await new UserRepository(seed).TryAddAsync(
             User.Register(id, $"u{id:N}"[..32], "hash", "Ada Lovelace", RegisteredAt),
             CancellationToken.None);
-        await new UnitOfWork(seed).SaveChangesAsync(CancellationToken.None);
     }
 }

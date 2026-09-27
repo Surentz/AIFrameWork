@@ -59,9 +59,8 @@ export async function registerUser(): Promise<TestUser> {
  * starts — `playwright.config.ts` names it in the API's `Admin__Usernames`, which is the sole
  * grant of the role (ADR 0020). A fixed name already exists on every call but the first: `--ui`
  * keeps the database between runs, and `e2e/setup/seed-admin.ts` registers it once before any
- * worker starts. Workers therefore get the check's 409 and sign in. They must not be the ones to
- * create it: two registrations racing past the API's check-then-insert answer the loser with a
- * 500 from the unique index, not a 409 — see seed-admin.ts.
+ * worker starts. Workers therefore get the 409 and sign in — as they would even if two raced to
+ * create it, since a registration that loses at the unique index is a 409 too.
  *
  * Every other user in this suite is generated and registered exactly once — see `registerUser`.
  */

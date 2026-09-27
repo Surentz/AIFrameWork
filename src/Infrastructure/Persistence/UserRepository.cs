@@ -1,13 +1,40 @@
 using AiFramework.Application.Users;
 using AiFramework.Domain.Users;
+using AiFramework.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AiFramework.Infrastructure.Persistence;
 
 public sealed class UserRepository(AiFrameworkDbContext context) : IUserRepository
 {
-    public async Task AddAsync(User user, CancellationToken cancellationToken) =>
+    public async Task<bool> TryAddAsync(User user, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+
         await context.Users.AddAsync(user, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        // Only the username index, by name. Any other failure - another constraint, a lost
+        // connection - is not "that name is taken" and must stay a 500 rather than be reported as
+        // one. Not a transient fault either, so the retrying execution strategy rethrows it as
+        // the DbUpdateException itself rather than wrapping it.
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: UserConfiguration.UsernameIndex,
+        })
+        {
+            // Left Added, the entity would be written again by the unit of work's commit - and
+            // fail the same way - were anything else in the request to succeed afterwards.
+            context.Entry(user).State = EntityState.Detached;
+            return false;
+        }
+    }
 
     /// <summary>
     /// Tracked, unlike the reads in <see cref="OrderRepository"/>: ChangePassword mutates the
