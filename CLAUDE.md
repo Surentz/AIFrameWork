@@ -192,4 +192,9 @@ build, because only its *startup* failed), `codegen`,
 diff checks. The `e2e` job is defined in `.github/workflows/e2e.yml`, which `ci.yml` calls; the
 same workflow runs by hand from the Actions tab, with optional `grep` and `repeat_each` inputs.
 
+`main` is protected by a branch ruleset that requires all six checks **by name**: `backend (Debug)`,
+`backend (Release)`, `generated code is current`, `api contract is current`, `frontend` and
+`e2e / e2e`. Renaming a job, or adding a path filter to the `pull_request` trigger, leaves a
+required check that never reports, and every PR blocks — update the ruleset in the same change.
+
 Design rationale for this setup: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`

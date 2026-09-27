@@ -13,18 +13,17 @@ on:
   # instead, so a push to a branch with an open PR no longer runs the whole pipeline twice. A
   # branch with no PR yet gets no CI until one is opened - run /verify locally before that.
   #
-  # Docs-only changes skip CI entirely: nothing under docs/ and no Markdown file (CLAUDE.md,
-  # skills, ADRs, READMEs) feeds the build, tests or generated artifacts. A change that touches
-  # any other file still runs everything.
+  # A docs-only push to main skips CI: nothing under docs/ and no Markdown file (CLAUDE.md,
+  # skills, ADRs, READMEs) feeds the build, tests or generated artifacts, and the PR it came from
+  # already ran everything. pull_request deliberately has no such filter. main's branch ruleset
+  # requires these checks, and a workflow skipped by a path filter leaves a required check
+  # pending forever - a docs-only PR could then never be merged.
   push:
     branches: [main]
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
   pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
 
 # A newer push to the same branch makes the older run's answer irrelevant.
 concurrency:
