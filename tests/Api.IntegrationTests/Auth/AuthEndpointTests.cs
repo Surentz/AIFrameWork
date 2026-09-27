@@ -70,6 +70,34 @@ public sealed class AuthEndpointTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task PostRegister_RacingTheSameUsername_AnswersOneSuccessAndOnlyConflicts()
+    {
+        // Simultaneous, so several requests pass the handler's pre-check together and meet at the
+        // unique index. Whatever the interleaving, a loser is a 409 - it used to be a 500. The
+        // e2e suite's parallel registrations of its fixed administrator are what found this.
+        var username = AUsername();
+        var clients = Enumerable.Range(0, 8).Select(_ => factory.CreateClient()).ToArray();
+
+        try
+        {
+            var responses = await Task.WhenAll(clients.Select(
+                client => client.PostAsJsonAsync("/api/auth/register", ARegistration(username))));
+
+            var statuses = responses.Select(r => r.StatusCode).ToArray();
+            statuses.Should().ContainSingle(status => status == HttpStatusCode.OK);
+            statuses.Where(status => status != HttpStatusCode.OK).Should()
+                .AllBeEquivalentTo(HttpStatusCode.Conflict);
+        }
+        finally
+        {
+            foreach (var client in clients)
+            {
+                client.Dispose();
+            }
+        }
+    }
+
+    [Fact]
     public async Task PostRegister_WithATooShortPassword_Returns400WithAFieldError()
     {
         using var client = factory.CreateClient();

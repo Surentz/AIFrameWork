@@ -6,6 +6,13 @@ namespace AiFramework.Infrastructure.Persistence.Configurations;
 
 internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 {
+    /// <summary>
+    /// Named once because <c>UserRepository.TryAddAsync</c> recognises a taken username by this
+    /// constraint in the database's error, and a rename here must not silently turn that 409 back
+    /// into a 500.
+    /// </summary>
+    internal const string UsernameIndex = "IX_Users_UsernameNormalized";
+
     public void Configure(EntityTypeBuilder<User> builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -54,9 +61,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         // The uniqueness guarantee, on the case-folded column rather than on Username: without
         // it "Ada" and "ada" are two accounts, and the check in RegisterUserHandler is only a
-        // friendly pre-check - two simultaneous registrations both pass it.
+        // friendly pre-check - two simultaneous registrations both pass it, and this index is what
+        // turns the second into UserRepository.TryAddAsync's false.
         builder.HasIndex(u => u.UsernameNormalized)
             .IsUnique()
-            .HasDatabaseName("IX_Users_UsernameNormalized");
+            .HasDatabaseName(UsernameIndex);
     }
 }
