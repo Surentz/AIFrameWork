@@ -88,7 +88,7 @@
       Wolverine runs the work (ADR 0017). Referenced here and nowhere else — Application never
       sees a Quartz type, and only the worker starts a scheduler.
     -->
-    <PackageReference Include="Quartz" Version="4.1.0" />
+    <PackageReference Include="Quartz" Version="4.2.1" />
   </ItemGroup>
 
   <!--
