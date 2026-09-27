@@ -1,0 +1,28 @@
+# Groups GitHub's generated release notes (Releases -> Draft a new release -> Generate release
+# notes) by the type labels .github/workflows/pr-labels.yml applies. A PR lands in the FIRST
+# category it matches, so the type categories come before `docs` and `ci`, which are also areas:
+# a feature that touched docs is listed under Features, not Documentation.
+changelog:
+  categories:
+    - title: Breaking changes
+      labels: [breaking]
+    - title: Features
+      labels: [feature]
+    - title: Bug fixes
+      labels: [bug]
+    - title: Performance
+      labels: [performance]
+    - title: Refactoring
+      labels: [refactor]
+    - title: Reverts
+      labels: [revert]
+    - title: Dependencies
+      labels: [dependencies]
+    - title: Tests
+      labels: [tests]
+    - title: Build and CI
+      labels: [build, ci]
+    - title: Documentation
+      labels: [docs]
+    - title: Other changes
+      labels: ['*']
