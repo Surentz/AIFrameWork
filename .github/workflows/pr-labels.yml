@@ -34,7 +34,7 @@ jobs:
     name: pr title and labels
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The tip of the base branch - the same commit this workflow file was loaded from - so the
           # rules that run are the reviewed ones on main, never the PR's own copy. Not
@@ -44,7 +44,7 @@ jobs:
           sparse-checkout: .github/scripts
           persist-credentials: false
 
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
             const { LABELS, typeLabels, areaLabels } = require('./.github/scripts/pr-labels.js');
