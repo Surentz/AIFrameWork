@@ -11,9 +11,9 @@
       configured the framework falls back to a per-machine filesystem ring, which does not
       exist across containers. See ADR 0010.
     -->
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -26,14 +26,14 @@
       while Infrastructure.dll is compiled against 10.0.11, producing an MSB3277 conflict at
       Api's build. Pinning it here unifies both projects on 10.0.11.
     -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <!--
       HybridCache, for the query-caching behavior in Messaging/Behaviors.cs. Chosen over a bare
       IMemoryCache for three things that would otherwise be hand-rolled: stampede protection (ten
       concurrent misses collapse to one load), RemoveByTagAsync for per-caller invalidation, and an
       L2 tier that can be added later without touching a call site. L1 only today. See ADR 0009.
     -->
-    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.9.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.10.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <!--
       For PasswordHasher<T> alone (Security/PasswordHasher.cs). This is the plain hashing
@@ -41,7 +41,7 @@
       stack: no UserManager, no EF stores, no eight tables. The User aggregate stays hand-rolled
       in Domain, which is what keeps EF Core and DataAnnotations out of that layer (ADR 0006).
     -->
-    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.12" />
     <!-- BackgroundService/IHostedService for the outbox pumps (OutboxHostedServices.cs). -->
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
     <!--
@@ -79,7 +79,7 @@
       Relational comment above describes — for the identical reason: the lower requirement is the
       only one Infrastructure.csproj's own graph sees.
     -->
-    <PackageReference Include="OpenTelemetry.Api" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.19.1" />
     <PackageReference Include="WolverineFx" Version="6.33.0" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.33.0" />
     <PackageReference Include="WolverineFx.Postgresql" Version="6.33.0" />

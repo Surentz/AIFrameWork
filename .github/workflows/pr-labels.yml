@@ -1,0 +1,91 @@
+# Checks every pull request's title and labels it, so main's history reads by type and by area.
+#
+# - Type: the title must start with a Conventional Commit type (`feat(orders): ...`), and the
+#   matching label is applied: feat -> feature, fix -> bug, deps -> dependencies, and so on. A
+#   title without one fails this check, which main's ruleset requires, so it cannot merge.
+# - Area: labels from the files the PR changes - playwright, frontend, backend, worker, database,
+#   api-contract, kubernetes, ci, docs.
+#
+# The rules and label colours live in .github/scripts/pr-labels.js. Only labels defined there are
+# ever removed; anything added by hand stays.
+name: PR labels
+
+on:
+  # pull_request_target, not pull_request: labelling needs a write token, and pull_request gets a
+  # read-only one on fork PRs. It is safe here because nothing from the PR is checked out or run -
+  # checkout below is the BASE branch, and the title and file list are read as data through the API.
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+# One run per PR: a title edit made while an earlier run is labelling supersedes it.
+concurrency:
+  group: pr-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  labels:
+    # This name is the check the `main` ruleset requires. Renaming it blocks every PR until the
+    # ruleset is updated to match.
+    name: pr title and labels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tip of the base branch - the same commit this workflow file was loaded from - so the
+          # rules that run are the reviewed ones on main, never the PR's own copy. Not
+          # pull_request.base.sha: that is the base as of the PR's last push, and on a PR opened
+          # before this workflow existed it predates .github/scripts entirely.
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const { LABELS, typeLabels, areaLabels } = require('./.github/scripts/pr-labels.js');
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+
+            // Create or recolour the managed labels, so editing pr-labels.js is all it takes.
+            const existing = new Map(
+              (await github.paginate(github.rest.issues.listLabelsForRepo, { owner, repo, per_page: 100 }))
+                .map((l) => [l.name, l]));
+            for (const [name, { color, description }] of Object.entries(LABELS)) {
+              const label = existing.get(name);
+              if (!label) {
+                await github.rest.issues.createLabel({ owner, repo, name, color, description });
+              } else if (label.color !== color || (label.description ?? '') !== description) {
+                await github.rest.issues.updateLabel({ owner, repo, name, color, description });
+              }
+            }
+
+            const files = (await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            })).flatMap((f) => (f.previous_filename ? [f.filename, f.previous_filename] : [f.filename]));
+
+            const type = typeLabels(pr.title);
+            const wanted = new Set([...(type.labels ?? []), ...areaLabels(files)]);
+            const current = pr.labels.map((l) => l.name);
+
+            const toAdd = [...wanted].filter((name) => !current.includes(name));
+            const toRemove = current.filter((name) => name in LABELS && !wanted.has(name));
+            if (toAdd.length) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: toAdd });
+            }
+            for (const name of toRemove) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: pr.number, name });
+              } catch (error) {
+                // Already gone - removed by hand since this event's payload was taken.
+                if (error.status !== 404) throw error;
+              }
+            }
+            core.info(`Labels: ${[...wanted].join(', ') || '(none)'}`);
+
+            // Labelled first, failed last: areas still show on a PR whose title needs fixing.
+            if (type.error) core.setFailed(type.error);

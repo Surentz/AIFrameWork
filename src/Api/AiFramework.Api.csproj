@@ -24,10 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.17.2" />
     <!-- AddDbContextCheck, for the /health/ready readiness probe. -->
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
     <!--
       The SignalR backplane. Not optional above one replica: the outbox pump that writes a
       notification runs on EVERY replica and claims rows with FOR UPDATE SKIP LOCKED, so the pod
@@ -35,8 +35,8 @@
       reaches the user only when those happen to coincide - about half the time at the two
       replicas k8s/base/api.yaml runs - and fails silently the rest. See ADR 0019.
     -->
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.11" />
-    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.11">
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.12">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -49,11 +49,11 @@
     docs/superpowers/plans/2026-09-13-centralized-logging.md and ADR 0014.
   -->
   <ItemGroup>
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
   </ItemGroup>
 
 </Project>
