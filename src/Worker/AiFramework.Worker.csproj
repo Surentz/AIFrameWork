@@ -36,9 +36,9 @@
     patch line, and are released together — keep them on one version. See ADR 0015.
   -->
   <ItemGroup>
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
   </ItemGroup>
 
   <!--
@@ -57,7 +57,7 @@
     fails in the Debug suite if this tree goes stale. ADR 0005, ADR 0016.
   -->
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
-    <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.33.0" />
+    <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.40.0" />
   </ItemGroup>
 
 </Project>
