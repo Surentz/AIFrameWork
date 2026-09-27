@@ -36,9 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The base branch, explicitly: the rules that run are the reviewed ones on main, never the
-          # PR's own copy.
-          ref: ${{ github.event.pull_request.base.sha }}
+          # The tip of the base branch - the same commit this workflow file was loaded from - so the
+          # rules that run are the reviewed ones on main, never the PR's own copy. Not
+          # pull_request.base.sha: that is the base as of the PR's last push, and on a PR opened
+          # before this workflow existed it predates .github/scripts entirely.
+          ref: ${{ github.sha }}
           sparse-checkout: .github/scripts
           persist-credentials: false
 
