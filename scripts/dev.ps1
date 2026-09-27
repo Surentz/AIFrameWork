@@ -181,18 +181,37 @@ Invoke-Step 'Launching the job worker' {
 Write-Host '==> Giving the API a moment to finish starting' -ForegroundColor Cyan
 Start-Sleep -Seconds 5
 
-# A missing node_modules doesn't fail loudly: `npm start` still launches, and only the
-# `vite` binary it shells out to is missing, so the error surfaces inside the new window
-# ("'vite' is not recognized...") well after this script has already reported success. Checking
-# here instead means a first run on a fresh clone (or a machine where npm install was never run)
-# just works.
+# A node_modules that is missing, or merely behind the lockfile, doesn't fail loudly: `npm start`
+# still launches, and the failure surfaces inside the new window well after this script has
+# reported success - as "'vite' is not recognized..." when nothing is installed, or as a Vite
+# "Failed to resolve import" for the one package a pulled commit added. Checking here means a
+# first run on a fresh clone, and a `git pull` across a dependency-adding commit, both just work.
 Invoke-Step 'Checking frontend dependencies' {
     $frontendDir = Join-Path $repoRoot 'frontend'
-    if (Test-Path (Join-Path $frontendDir 'node_modules')) {
+    $modulesDir = Join-Path $frontendDir 'node_modules'
+    $lockFile = Join-Path $frontendDir 'package-lock.json'
+    # npm rewrites node_modules/.package-lock.json on every install - including one that finds
+    # nothing to do, confirmed by touching the lockfile and re-running - so its timestamp is
+    # npm's own record of when the tree was last reconciled, and it always lands after the
+    # lockfile's. That makes this comparison self-healing: a lockfile whose timestamp moved
+    # without its contents changing costs one redundant install, not one on every launch.
+    $installedLock = Join-Path $modulesDir '.package-lock.json'
+    $reason =
+        if (-not (Test-Path $modulesDir)) { 'node_modules missing' }
+        # No record of what npm last installed, so there is nothing to compare against and the
+        # tree has to be assumed stale.
+        elseif (-not (Test-Path $installedLock)) { 'node_modules/.package-lock.json missing' }
+        elseif ((Test-Path $lockFile) -and
+                (Get-Item $lockFile).LastWriteTimeUtc -gt (Get-Item $installedLock).LastWriteTimeUtc) {
+            'package-lock.json is newer than the installed tree'
+        }
+        else { $null }
+
+    if (-not $reason) {
         $global:LASTEXITCODE = 0
         return
     }
-    Write-Host '    node_modules missing, running npm install...' -ForegroundColor DarkGray
+    Write-Host "    $reason, running npm install..." -ForegroundColor DarkGray
     # `--prefix` only changes where npm installs to, not where it reads package.json from —
     # that still comes from the process's current directory, which is whatever launched this
     # script (control-panel.bat's own folder, when run that way) and is not necessarily
