@@ -23,6 +23,15 @@ CI is the authority for the SDK and Node, because nothing in the repo pins eithe
 treating a green local build as evidence about CI, check `dotnet --list-sdks` and
 `node --version` against the table.
 
+**Moving to a new LTS.** .NET and Node only move between LTS majors (even-numbered for both), and
+always in one PR: Dependabot is told to ignore their majors (`.github/dependabot.yml`), so it
+never proposes one. For .NET: `DOTNET_VERSION` in both workflows, the four
+`mcr.microsoft.com/dotnet/*` images in `Dockerfile.api`, `TargetFramework` in
+`Directory.Build.props`, every `Microsoft.AspNetCore.*`/`EntityFrameworkCore*`/`Extensions.*`
+package, `dotnet-ef` in `.config/dotnet-tools.json`, and Npgsql's EF provider. For Node:
+`NODE_VERSION` in both workflows, `node:*-alpine` in `Dockerfile.web`, and `@types/node`. Then
+this table.
+
 **Node 24.15.0 is a floor, not a preference.** Below it `npm install` in `frontend/` fails
 outright (npm's own `engines`, jsdom, and a resolver crash:
 `Cannot read properties of null (reading 'edgesOut')`). `scripts/install-prereqs.ps1` checks it.
