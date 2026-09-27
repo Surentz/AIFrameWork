@@ -59,6 +59,20 @@ updates:
       # 8.0 moved FluentAssertions to a paid commercial licence. Staying on 7.x is deliberate.
       - dependency-name: FluentAssertions
         update-types: [version-update:semver-major]
+      # LTS only: .NET moves between even-numbered (LTS) majors by hand, never to an odd
+      # short-term release, and never one pin at a time - see "Moving to a new LTS" in CLAUDE.md.
+      # Patches and minors within the current major still arrive. Microsoft.NET.Test.Sdk is not
+      # listed: its major has nothing to do with the runtime's.
+      - dependency-name: Microsoft.AspNetCore.*
+        update-types: [version-update:semver-major]
+      - dependency-name: Microsoft.EntityFrameworkCore*
+        update-types: [version-update:semver-major]
+      - dependency-name: Microsoft.Extensions.*
+        update-types: [version-update:semver-major]
+      - dependency-name: dotnet-ef
+        update-types: [version-update:semver-major]
+      - dependency-name: Npgsql*
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -71,6 +85,10 @@ updates:
       # Majors stay one PR per package: those are the ones that need reading.
       frontend:
         update-types: [minor, patch]
+    ignore:
+      # LTS only: @types/node follows the Node major CI runs on, which moves by hand.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
@@ -96,6 +114,16 @@ updates:
     groups:
       images:
         patterns: ['*']
+    ignore:
+      # LTS only, for the same reason as the NuGet and npm entries: Node (Dockerfile.web) and .NET
+      # (Dockerfile.api) majors move by hand, together with the versions CI pins. Both spellings
+      # of the .NET images, since Microsoft's registry is not Docker Hub.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+      - dependency-name: mcr.microsoft.com/dotnet/*
+        update-types: [version-update:semver-major]
+      - dependency-name: dotnet/*
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: docker-compose
     directory: /
