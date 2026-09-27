@@ -396,72 +396,6 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
-    readonly "/api/orders/{id}/ship": {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly get?: never;
-        readonly put?: never;
-        /**
-         * Marks one of the caller's own orders as shipped. 409 if it has already shipped or was
-         *     cancelled — an illegal transition is a conflict with existing state, not a malformed
-         *     request.
-         */
-        readonly post: {
-            readonly parameters: {
-                readonly query?: never;
-                readonly header?: never;
-                readonly path: {
-                    readonly id: string;
-                };
-                readonly cookie?: never;
-            };
-            readonly requestBody?: never;
-            readonly responses: {
-                /** @description OK */
-                readonly 200: {
-                    headers: {
-                        readonly [name: string]: unknown;
-                    };
-                    content: {
-                        readonly "text/plain": components["schemas"]["OrderStatusResponse"];
-                        readonly "application/json": components["schemas"]["OrderStatusResponse"];
-                        readonly "text/json": components["schemas"]["OrderStatusResponse"];
-                    };
-                };
-                /** @description Not Found */
-                readonly 404: {
-                    headers: {
-                        readonly [name: string]: unknown;
-                    };
-                    content: {
-                        readonly "text/plain": components["schemas"]["ProblemDetails"];
-                        readonly "application/json": components["schemas"]["ProblemDetails"];
-                        readonly "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                readonly 409: {
-                    headers: {
-                        readonly [name: string]: unknown;
-                    };
-                    content: {
-                        readonly "text/plain": components["schemas"]["ProblemDetails"];
-                        readonly "application/json": components["schemas"]["ProblemDetails"];
-                        readonly "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        readonly delete?: never;
-        readonly options?: never;
-        readonly head?: never;
-        readonly patch?: never;
-        readonly trace?: never;
-    };
     readonly "/api/orders/{id}/cancel": {
         readonly parameters: {
             readonly query?: never;
@@ -1768,6 +1702,146 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/fulfilment/orders": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Every buyer's orders in one status, oldest first, one page at a time. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly status?: components["schemas"]["OrderStatus"];
+                    readonly limit?: number | string;
+                    readonly cursor?: string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["FulfilmentOrderPageResponse"];
+                        readonly "application/json": components["schemas"]["FulfilmentOrderPageResponse"];
+                        readonly "text/json": components["schemas"]["FulfilmentOrderPageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/fulfilment/orders/{id}/ship": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Marks any buyer's order as shipped. 409 if it has already shipped or was cancelled — an
+         *     illegal transition is a conflict with existing state, not a malformed request.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["OrderStatusResponse"];
+                        readonly "application/json": components["schemas"]["OrderStatusResponse"];
+                        readonly "text/json": components["schemas"]["OrderStatusResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/auth/register": {
         readonly parameters: {
             readonly query?: never;
@@ -2230,6 +2304,32 @@ export interface components {
             readonly rate: number | string;
             /** Format: date */
             readonly asOf: string;
+        };
+        readonly FulfilmentOrderPageResponse: {
+            readonly items: readonly components["schemas"]["FulfilmentOrderResponse"][];
+            readonly nextCursor: null | string;
+        };
+        readonly FulfilmentOrderResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            /** Format: uuid */
+            readonly buyerId: string;
+            /** @description Null only if the buyer's account row is missing — see `FulfilmentQueueRow`. */
+            readonly buyerUsername?: null | string;
+            /** @description Serialized as its name — see `NotificationResponse.Kind`. */
+            readonly status: components["schemas"]["OrderStatus"];
+            readonly sku: string;
+            /** Format: int32 */
+            readonly quantity: number | string;
+            /** Format: date-time */
+            readonly placedAt: string;
+            /**
+             * @description The catalogue product as it was when the order was placed. Null on orders that predate the
+             *     catalogue link.
+             */
+            readonly productName?: null | string;
+            /** Format: double */
+            readonly unitPrice?: null | number | string;
         };
         /** @description Counts by outcome over a trailing window, for the overview tiles. */
         readonly JobHealthResponse: {

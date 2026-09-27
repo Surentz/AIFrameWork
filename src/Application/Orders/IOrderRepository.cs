@@ -66,4 +66,58 @@ public interface IOrderRepository
     /// </remarks>
     public Task<IReadOnlyList<Guid>> ListPurchaserIdsAsync(
         string sku, int limit, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Any buyer's order, TRACKED, for the fulfilment path — the operator shipping it. Null only
+    /// when no order has this id.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Deliberately NOT scoped to an owner, and named for its one purpose rather than as an
+    /// overload of <see cref="GetForUpdateAsync"/>: ADR 0007 keeps ownership in these signatures
+    /// so a caller cannot forget to filter, and the way to keep that true while adding a
+    /// cross-owner read is a method whose name says so at the call site. Only a handler behind the
+    /// <c>Orders.Fulfil</c> policy calls it. See ADR 0024.
+    /// </para>
+    /// <para>
+    /// Tracked for the reason <see cref="GetForUpdateAsync"/> gives.
+    /// </para>
+    /// </remarks>
+    public Task<Order?> GetForFulfilmentAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Every buyer's orders in <paramref name="status"/>, OLDEST first, one keyset page at a time,
+    /// with each buyer's username. The fulfilment queue.
+    /// </summary>
+    /// <remarks>
+    /// Oldest first because a fulfilment queue is FIFO: the order that has waited longest is the
+    /// next one to ship. <paramref name="after"/> is therefore the last row of the previous page,
+    /// and the next page is everything strictly LATER than it. Cross-owner for the reason
+    /// <see cref="GetForFulfilmentAsync"/> gives.
+    /// </remarks>
+    public Task<IReadOnlyList<FulfilmentQueueRow>> ListForFulfilmentAsync(
+        OrderStatus status,
+        int limit,
+        (DateTimeOffset PlacedAt, Guid Id)? after,
+        CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// A projection of one order for the fulfilment queue — never the entity, so a read that only
+/// displays cannot accidentally become a write.
+/// </summary>
+/// <remarks>
+/// <c>BuyerUsername</c> is null only if the order's user row does not exist. Nothing deletes users
+/// today and there is no foreign key between the tables, so the read is a LEFT join: a missing
+/// buyer must not make an order vanish from the queue that is supposed to ship it.
+/// </remarks>
+public sealed record FulfilmentQueueRow(
+    Guid Id,
+    Guid BuyerId,
+    string? BuyerUsername,
+    string Sku,
+    int Quantity,
+    DateTimeOffset PlacedAt,
+    string? ProductName,
+    decimal? UnitPrice,
+    OrderStatus Status);

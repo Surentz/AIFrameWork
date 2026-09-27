@@ -16,7 +16,7 @@ namespace AiFramework.Api.Monitoring;
 /// </remarks>
 [ApiController]
 [Route("api/monitoring/traffic")]
-[Authorize(Policy = AuthorizationPolicies.Monitoring)]
+[Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
 public sealed class MonitoringTrafficController(IQueryDispatcher queries) : ControllerBase
 {
     /// <summary>Traffic over a trailing window, whole and per endpoint or handler.</summary>

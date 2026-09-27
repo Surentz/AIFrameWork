@@ -117,6 +117,10 @@ so a buyer who ships their own order also permanently suppresses any later legit
 operator has no transition left to make. `ShipOrder` is the one command whose authorization
 changes when roles land; cancelling stays with the buyer.
 
+> **Superseded by [ADR 0024](0024-capability-policies-and-operator-fulfilment.md) (2026-09-27).**
+> Roles landed, and the operator now ships through `api/fulfilment/orders` behind the
+> `Orders.Fulfil` policy; the buyer's ship route is gone. Cancelling stays with the buyer.
+
 **The e2e gate does not cover it.** `deploy/e2e-k8s.ps1` exercises two replicas, durable
 Wolverine, caching and the rate limit; realtime push is not in that readiness path, for the same
 reason `-WithObservability` is not — see ADR 0012. The cross-replica behaviour this ADR exists to

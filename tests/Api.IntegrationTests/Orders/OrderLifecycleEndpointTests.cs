@@ -5,8 +5,8 @@ using FluentAssertions;
 namespace AiFramework.Api.IntegrationTests.Orders;
 
 /// <summary>
-/// The ship/cancel transitions over HTTP, and the notifications they produce once the outbox
-/// drains.
+/// The buyer's side of the lifecycle over HTTP — cancelling — and the notifications it produces
+/// once the outbox drains. Shipping is the operator's: see <c>FulfilmentEndpointTests</c>.
 /// </summary>
 [Collection(nameof(ApiFactoryCollection))]
 public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
@@ -36,38 +36,13 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task ShipOrder_OnAPlacedOrder_ReportsShipped()
-    {
-        using var client = await factory.CreateAuthenticatedClientAsync();
-        var orderId = await PlaceOrderAsync(client);
-
-        var response = await client.PostAsync($"/api/orders/{orderId}/ship", null);
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var status = await response.Content.ReadFromJsonAsync<StatusResponse>();
-        status!.Status.Should().Be("Shipped");
-    }
-
-    [Fact]
-    public async Task ShipOrder_PersistsTheTransition()
-    {
-        // The handler reads tracked; if it did not, this second call would still see Placed and
-        // succeed instead of conflicting.
-        using var client = await factory.CreateAuthenticatedClientAsync();
-        var orderId = await PlaceOrderAsync(client);
-
-        await client.PostAsync($"/api/orders/{orderId}/ship", null);
-        var second = await client.PostAsync($"/api/orders/{orderId}/ship", null);
-
-        second.StatusCode.Should().Be(HttpStatusCode.Conflict);
-    }
-
-    [Fact]
     public async Task CancelOrder_AfterShipping_IsConflict()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
         var orderId = await PlaceOrderAsync(client);
-        await client.PostAsync($"/api/orders/{orderId}/ship", null);
+        using var operatorClient = await factory.CreateAdminClientAsync();
+        (await operatorClient.PostAsync($"/api/fulfilment/orders/{orderId}/ship", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
         var response = await client.PostAsJsonAsync(
             $"/api/orders/{orderId}/cancel", new { Reason = "Changed my mind." });
@@ -99,31 +74,6 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
             $"/api/orders/{orderId}/cancel", new { Reason = "" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task ShipOrder_ForAnotherUsersOrder_IsNotFound()
-    {
-        using var owner = await factory.CreateAuthenticatedClientAsync();
-        var orderId = await PlaceOrderAsync(owner);
-
-        using var stranger = await factory.CreateAuthenticatedClientAsync();
-        var response = await stranger.PostAsync($"/api/orders/{orderId}/ship", null);
-
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-    }
-
-    [Fact]
-    public async Task ShippingAndDraining_NotifiesTheBuyer()
-    {
-        using var client = await factory.CreateAuthenticatedClientAsync();
-        var orderId = await PlaceOrderAsync(client);
-        await client.PostAsync($"/api/orders/{orderId}/ship", null);
-
-        await factory.DrainOutboxUntilEmptyAsync();
-
-        var notifications = await NotificationsForAsync(client, orderId);
-        notifications.Should().Contain(n => n.Kind == "OrderShipped");
     }
 
     [Fact]

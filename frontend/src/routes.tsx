@@ -5,6 +5,7 @@ import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { RequireRole } from './features/auth/RequireRole';
+import { FulfilmentPage } from './features/fulfilment/FulfilmentPage';
 import { JobsPage } from './features/monitoring/JobsPage';
 import { LoginsPage } from './features/monitoring/LoginsPage';
 import { MonitoringPage } from './features/monitoring/MonitoringPage';
@@ -53,6 +54,7 @@ export function AppRoutes(): React.JSX.Element {
             <Route path="/monitoring/logins" element={<LoginsPage />} />
             <Route path="/monitoring/traffic" element={<TrafficPage />} />
             <Route path="/monitoring/users" element={<UsersPage />} />
+            <Route path="/fulfilment" element={<FulfilmentPage />} />
           </Route>
         </Route>
       </Route>

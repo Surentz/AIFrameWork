@@ -6,15 +6,24 @@ using FluentValidation;
 namespace AiFramework.Application.Orders;
 
 /// <summary>
-/// Moves one of the caller's own orders to Shipped.
+/// Moves ANY buyer's order to Shipped. The operator's command, not the buyer's.
 /// </summary>
 /// <remarks>
-/// Owner-scoped, which is admittedly odd for shipping — in a real system an operator ships,
-/// not the buyer. It is scoped this way because there is no role system yet (the same gap
-/// <c>User.SecurityStamp</c> calls a "plan 2" idea, and the same one ADR 0013 works around for
-/// the catalogue), and owner-scoped is the choice that cannot become a privilege escalation in
-/// the meantime. When roles arrive, this is the command whose authorization changes; cancelling
-/// stays with the buyer.
+/// <para>
+/// Owner-scoped until ADR 0024: without roles, owner-scoped was the one choice that could not
+/// become a privilege escalation, but it let a buyer ship their own order — and since
+/// <c>Order.Ship</c> cannot be undone, that permanently blocked the operator's real one.
+/// Authorization is now the <c>Orders.Fulfil</c> policy on <c>FulfilmentController</c>, the only
+/// caller; this layer has no notion of roles, and the repository read it makes is the explicitly
+/// cross-owner one. Cancelling stays with the buyer (ADR 0019).
+/// </para>
+/// <para>
+/// The tags evict only the CALLER's cache entries — the operator's, not the buyer's. The buyer's
+/// cached <c>GetOrder</c>/<c>GetOrders</c> can therefore show Placed for up to their thirty-second
+/// TTL, the limit ADR 0013 already accepted for the catalogue; HybridCache is L1-only per pod and
+/// eviction is scoped per caller by construction (ADRs 0009, 0010). They stay so that an
+/// administrator shipping their OWN order sees it at once.
+/// </para>
 /// </remarks>
 public sealed record ShipOrder(Guid OrderId) : ICommand<OrderStatusView>, IInvalidatesCache
 {
@@ -42,16 +51,18 @@ public sealed class ShipOrderHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (currentUser.Id is not { } userId)
+        // Still required although the order is not scoped to the caller: the cache eviction this
+        // command declares is composed with the caller's id, and a sessionless dispatch has none.
+        if (currentUser.Id is null)
         {
             return Result.Failure<OrderStatusView>(new Error(
                 ErrorKind.Unauthorized, "auth.failed", "That session is no longer valid."));
         }
 
-        // Tracked: this handler mutates the order, and GetAsync reads untracked — the write
-        // would be lost silently. See IOrderRepository.GetAsync's remarks.
+        // Tracked, and cross-owner: the operator ships someone else's order. See
+        // IOrderRepository.GetForFulfilmentAsync.
         var order = await orders
-            .GetForUpdateAsync(command.OrderId, userId, cancellationToken)
+            .GetForFulfilmentAsync(command.OrderId, cancellationToken)
             .ConfigureAwait(false);
 
         if (order is null)

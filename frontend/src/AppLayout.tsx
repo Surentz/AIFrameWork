@@ -39,6 +39,7 @@ export function AppLayout(): React.JSX.Element {
           {/* Cosmetics, not the control: the API refuses a non-administrator with a 403 whether
               or not this renders. Hiding it keeps a page nobody can open out of everyone's nav.
               See ADR 0020. */}
+          {session?.role === 'Admin' && <NavLink to="/fulfilment">Fulfilment</NavLink>}
           {session?.role === 'Admin' && <NavLink to="/monitoring">Monitoring</NavLink>}
         </nav>
 

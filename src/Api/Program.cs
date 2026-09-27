@@ -164,12 +164,19 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         };
     });
 
+// Every capability maps to the Admin role today, in this one place. The names are what the
+// controllers depend on, so a later permission model changes this loop and nothing else. ADR 0024.
 builder.Services.AddAuthorization(options =>
-    options.AddPolicy(
-        AuthorizationPolicies.Monitoring,
-        policy => policy
-            .RequireAuthenticatedUser()
-            .RequireRole(nameof(UserRole.Admin))));
+{
+    foreach (var name in AuthorizationPolicies.All)
+    {
+        options.AddPolicy(
+            name,
+            policy => policy
+                .RequireAuthenticatedUser()
+                .RequireRole(nameof(UserRole.Admin)));
+    }
+});
 
 // Bound here rather than inside AddAdministratorRoles, for the same reason CacheOptions is bound
 // here: a registration that binds configuration itself cannot be resolved from a bare

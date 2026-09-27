@@ -31,10 +31,18 @@ See ADR 0011.
 
 ## The administrator role
 
-`User.Role` is `Member` or `Admin`. Only the monitoring page (`/api/monitoring/*`,
-`[Authorize(Policy = AuthorizationPolicies.Monitoring)]`) requires `Admin`; everything else is
-still "any authenticated user", because ADR 0007 puts ownership in the query and every other
-endpoint returns only the caller's own data.
+`User.Role` is `Member` or `Admin`. Two areas require `Admin`: the monitoring page
+(`/api/monitoring/*`) and order fulfilment (`/api/fulfilment/orders`, which is also the only
+place an order is shipped). Everything else is still "any authenticated user", because ADR 0007
+puts ownership in the query and every other endpoint returns only the caller's own data.
+
+**Controllers name a capability, never a role.** `AuthorizationPolicies` holds `Orders.Fulfil`,
+`Catalogue.Manage`, `Monitoring.Read`, `Monitoring.Operate` and `Users.Manage`; Program.cs maps
+every one to the `Admin` role in a single loop over `AuthorizationPolicies.All`. A new privileged
+endpoint takes the policy for what it lets someone do — add one if none fits, and list it in
+`All`, or `AuthorizationPolicyTests` fails. Never `[Authorize(Roles = "Admin")]`: the point is that
+a later permission model changes the loop and not the controllers. `Catalogue.Manage` is defined
+but not yet applied. See ADR 0024.
 
 **The role is read from the database on every authenticated request, never carried in the
 cookie.** `SessionValidator` already pays for one projected, uncached, primary-key read per

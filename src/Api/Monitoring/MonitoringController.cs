@@ -20,7 +20,7 @@ namespace AiFramework.Api.Monitoring;
 /// </remarks>
 [ApiController]
 [Route("api/monitoring")]
-[Authorize(Policy = AuthorizationPolicies.Monitoring)]
+[Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
 public sealed class MonitoringController(
     IQueryDispatcher queries, ICurrentUser currentUser) : ControllerBase
 {

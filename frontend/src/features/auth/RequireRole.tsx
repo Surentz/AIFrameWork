@@ -15,10 +15,10 @@ interface RequireRoleProps {
  * Gate for the routes that need a particular role, layered inside `RequireAuth` rather than
  * replacing it: that one answers "is anyone signed in", this one answers "may they be here".
  *
- * Like `RequireAuth`, this is a convenience and NOT the security boundary — that is
- * `[Authorize(Policy = "Monitoring")]` on the API, which reads the role from the database on
- * every request. All this does is explain the refusal instead of letting a page fill with 403s.
- * See ADR 0020.
+ * Like `RequireAuth`, this is a convenience and NOT the security boundary — that is the
+ * capability-named policies on the API (`Monitoring.Read`, `Orders.Fulfil` and the rest, ADR
+ * 0024), which read the role from the database on every request. All this does is explain the
+ * refusal instead of letting a page fill with 403s. See ADR 0020.
  */
 export function RequireRole({ allow }: RequireRoleProps): React.JSX.Element {
   const { data: session, isPending, error } = useSession();

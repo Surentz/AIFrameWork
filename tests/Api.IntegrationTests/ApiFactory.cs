@@ -34,10 +34,16 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // Explicit interface implementation: WebApplicationFactory already exposes a
     // ValueTask DisposeAsync() from IAsyncDisposable, so declaring xUnit's
     // Task DisposeAsync() implicitly would hide it and leak the host.
+    //
+    // The host goes BEFORE the container, the mirror of InitializeAsync. The other way round,
+    // durable Wolverine's DurabilityAgent keeps polling a database that is already gone and logs
+    // each failure; on Windows one of those lands after the EventLog provider is disposed, and the
+    // resulting ObjectDisposedException on a thread-pool thread crashes the test host after every
+    // test has passed ("Test Run Aborted"). Whether it hit was down to scheduling.
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await _container.DisposeAsync();
         await base.DisposeAsync();
+        await _container.DisposeAsync();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
