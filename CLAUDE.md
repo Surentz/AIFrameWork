@@ -183,6 +183,25 @@ so handlers are idempotent, and a domain event handler runs outside the command 
 sits under the port, never around it. With `EnableRetryOnFailure` on, an explicit transaction
 must go through `CreateExecutionStrategy().ExecuteAsync(...)`.
 
+## Pull requests: one type each
+
+Every change is one Conventional Commit type — `feat`, `fix`, `perf`, `refactor`, `test`, `docs`,
+`ci`, `build`, `deps`, `chore` or `revert` — and `main`'s history is read by it.
+
+- **Decide the type before writing code.** When it is clear, say which in the first reply
+  ("Treating this as a `fix`") so the user can correct it. When it is not — a new feature or a
+  refactor, a bug fix or a behaviour change — ask with `AskUserQuestion` before starting.
+- **One type per PR.** A task that turns out to be two (a feature plus an unrelated fix) is two PRs;
+  say so rather than mixing them.
+- **Commit subjects and the PR title are `type(scope): summary`**, scope optional, `!` before the
+  colon for a breaking change: `feat(orders)!: drop the v1 endpoint`. The `claude/*` branch name
+  cannot carry the type; the title does.
+- **Labels are automatic.** `.github/workflows/pr-labels.yml` fails a title without a type and
+  labels the PR — type from the title (`feat` → `feature`, `fix` → `bug`, `deps` →
+  `dependencies`), areas from the files changed (`playwright`, `frontend`, `backend`, `worker`,
+  `database`, `api-contract`, `kubernetes`, `ci`, `docs`). Do not hand-apply them; fix the title and
+  the labels follow. Rules and colours: `.github/scripts/pr-labels.js`.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every push to `main` and every PR, in five jobs: `backend`
@@ -192,9 +211,9 @@ build, because only its *startup* failed), `codegen`,
 diff checks. The `e2e` job is defined in `.github/workflows/e2e.yml`, which `ci.yml` calls; the
 same workflow runs by hand from the Actions tab, with optional `grep` and `repeat_each` inputs.
 
-`main` is protected by a branch ruleset that requires all six checks **by name**: `backend (Debug)`,
-`backend (Release)`, `generated code is current`, `api contract is current`, `frontend` and
-`e2e / e2e`. Renaming a job, or adding a path filter to the `pull_request` trigger, leaves a
+`main` is protected by a branch ruleset that requires seven checks **by name**: `backend (Debug)`,
+`backend (Release)`, `generated code is current`, `api contract is current`, `frontend`,
+`e2e / e2e`, and `pr title and labels` from `.github/workflows/pr-labels.yml`. Renaming a job, or adding a path filter to the `pull_request` trigger, leaves a
 required check that never reports, and every PR blocks — update the ruleset in the same change.
 
 Design rationale for this setup: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`
