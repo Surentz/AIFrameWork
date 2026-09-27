@@ -26,6 +26,10 @@ export default defineConfig({
   // No globalTeardown: it runs BEFORE the webServers stop, so the database went away under a live
   // API and worker. e2e/setup/run.ts tears it down after Playwright exits instead.
 
+  // Signs the operator in once for the run, on every target: see the file. On the stack Playwright
+  // manages it runs after the webServers are up, which is why it is a global setup at all.
+  globalSetup: './e2e/setup/seed-admin.ts',
+
   fullyParallel: true,
 
   // With several people writing tests, a stray `test.only` silently shrinking CI to one test is
@@ -69,8 +73,6 @@ export default defineConfig({
 
   ...(target.managesStack
     ? {
-        // After the webServers start, before any worker: see the file for the race it removes.
-        globalSetup: './e2e/setup/seed-admin.ts',
         webServer: [
           {
             // --no-launch-profile, not --launch-profile http: launchSettings.json hard-codes

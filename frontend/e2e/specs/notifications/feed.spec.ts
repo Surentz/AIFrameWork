@@ -89,12 +89,12 @@ test('tells a past buyer when the price of what they ordered changes', async ({
   workerUser,
 }) => {
   const sku = uniqueSku();
-  const productId = await api.createProduct(workerUser, { sku, name: sku, price: '19.95' });
+  const productId = await api.createProduct({ sku, name: sku, price: '19.95' });
   // Ordering it is what makes this user a past purchaser - the only people
   // ProductPriceChangedNotifier writes to.
   await api.orderProduct(workerUser, { sku, quantity: 1 });
 
-  await api.updateProduct(workerUser, productId, { name: sku, price: '9.95' });
+  await api.updateProduct(productId, { name: sku, price: '9.95' });
   await api.waitForNotification(workerUser, { kind: 'ProductPriceChanged', text: sku });
 
   await notifications.open(signedInPage);

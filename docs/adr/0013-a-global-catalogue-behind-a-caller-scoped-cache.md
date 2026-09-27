@@ -22,6 +22,10 @@ caller, because there is no role system yet (`User.SecurityStamp`'s comment stil
 permissions a "plan 2" idea). So `GetProducts` and `GetProduct` want caching for exactly the
 reason `GetOrders` does, but they do not want the scoping that comes welded to it.
 
+> **Superseded in part by [ADR 0025](0025-the-catalogue-is-managed-by-administrators.md)
+> (2026-09-27).** Writing to the catalogue now needs the `Catalogue.Manage` policy; reading it does
+> not. The caching reasoning below is unchanged, as this ADR predicted it would be.
+
 The collision is in eviction, not in reads. `Behaviors.EvictAsync` removes by
 `CacheScope.Tag(tag, userId)` — the writer's own tag. When user A adds or edits a product:
 

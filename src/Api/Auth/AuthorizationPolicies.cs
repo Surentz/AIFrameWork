@@ -41,8 +41,8 @@ public static class AuthorizationPolicies
     public static class Catalogue
     {
         /// <summary>
-        /// Creating and editing products. Defined but not yet applied: the catalogue is still
-        /// writable by any signed-in caller (ADR 0013) until its own lock-down lands.
+        /// Creating and editing products. Reading the catalogue stays open to every signed-in
+        /// caller. See ADR 0025.
         /// </summary>
         public const string Manage = "Catalogue.Manage";
     }

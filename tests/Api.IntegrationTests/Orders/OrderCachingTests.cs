@@ -20,12 +20,14 @@ namespace AiFramework.Api.IntegrationTests.Orders;
 [Collection(nameof(ApiFactoryCollection))]
 public sealed class OrderCachingTests : IDisposable
 {
+    private readonly ApiFactory _factory;
     private readonly WebApplicationFactory<Program> _cached;
 
     public OrderCachingTests(ApiFactory factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
 
+        _factory = factory;
         _cached = factory.WithWebHostBuilder(
             builder => builder.UseSetting("Cache:Enabled", "true"));
     }
@@ -78,8 +80,8 @@ public sealed class OrderCachingTests : IDisposable
     public async Task PlacingAnOrder_ThenListingImmediately_ReturnsTheNewOrder()
     {
         using var client = await SignedInClientAsync();
-        var skuFirst = await CatalogueSetup.CreateProductAsync(client);
-        var skuSecond = await CatalogueSetup.CreateProductAsync(client);
+        var skuFirst = await CatalogueSetup.CreateProductAsync(_factory);
+        var skuSecond = await CatalogueSetup.CreateProductAsync(_factory);
         await PlaceAsync(client, skuFirst);
         await ListAsync(client);
 
@@ -118,7 +120,7 @@ public sealed class OrderCachingTests : IDisposable
         using var alice = await SignedInClientAsync();
         using var bob = await SignedInClientAsync();
 
-        var aliceSku = await CatalogueSetup.CreateProductAsync(alice);
+        var aliceSku = await CatalogueSetup.CreateProductAsync(_factory);
         await PlaceAsync(alice, aliceSku);
         await ListAsync(alice);
 

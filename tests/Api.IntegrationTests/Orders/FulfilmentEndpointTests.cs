@@ -25,9 +25,9 @@ public sealed class FulfilmentEndpointTests(ApiFactory factory)
 
     private sealed record NotificationPage(IReadOnlyList<NotificationItem> Items, string? NextCursor);
 
-    private static async Task<Guid> PlaceOrderAsync(HttpClient client)
+    private async Task<Guid> PlaceOrderAsync(HttpClient client)
     {
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 2 });
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         return await response.Content.ReadFromJsonAsync<Guid>();

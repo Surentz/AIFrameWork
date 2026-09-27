@@ -8,7 +8,19 @@ import type {
 import { createProduct, getProduct, listProducts, updateProduct } from '../../api/products';
 import type { CreateProductInput, UpdateProductInput } from '../../api/products';
 import type { ApiError } from '../../api/client';
+import { useSession } from '../auth/queries';
 import type { Product, ProductListItem, ProductPage } from './types';
+
+/**
+ * Whether the signed-in user may add or edit products — the SPA's mirror of the API's
+ * `Catalogue.Manage` policy, named for the capability for the same reason (ADR 0025). Cosmetics:
+ * it decides what to offer, and the API refuses a member with a 403 whether or not a link shows.
+ * False while the session is still loading, so nothing is offered and then withdrawn.
+ */
+export function useCanManageCatalogue(): boolean {
+  const { data: session } = useSession();
+  return session?.role === 'Admin';
+}
 
 export const productKeys = {
   all: ['products'] as const,

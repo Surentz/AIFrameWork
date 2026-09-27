@@ -2,12 +2,13 @@ import { useId, useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatPrice } from '../products/types';
-import { useAllProducts } from '../products/queries';
+import { useAllProducts, useCanManageCatalogue } from '../products/queries';
 import { usePlaceOrder } from './queries';
 import './orders.css';
 
 export function PlaceOrderForm(): React.JSX.Element {
   const { data: products, isPending: productsPending, error: productsError } = useAllProducts();
+  const canManageCatalogue = useCanManageCatalogue();
   const [sku, setSku] = useState('');
   const [quantity, setQuantity] = useState(1);
   const navigate = useNavigate();
@@ -75,7 +76,13 @@ export function PlaceOrderForm(): React.JSX.Element {
             {products?.length === 0 && (
               <p className="field__hint">
                 There are no products in the catalogue yet.{' '}
-                <Link to="/products/new">Add a product</Link> first.
+                {canManageCatalogue ? (
+                  <>
+                    <Link to="/products/new">Add a product</Link> first.
+                  </>
+                ) : (
+                  'An administrator has to add one first.'
+                )}
               </p>
             )}
             {/* Rendered unconditionally: a live region inserted together with its text may

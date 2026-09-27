@@ -33,7 +33,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_WithAValidRequest_Returns201()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
 
         var response = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = sku, Quantity = 2 });
@@ -45,7 +45,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_ThenGet_ReturnsTheOrder()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var created = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = sku, Quantity = 7 });
         var id = await created.Content.ReadFromJsonAsync<Guid>();
@@ -61,7 +61,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_WithZeroQuantity_Returns400()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
 
         var response = await client.PostAsJsonAsync(
             "/api/orders", new { Sku = sku, Quantity = 0 });
@@ -157,7 +157,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     {
         using var owner = await factory.CreateAuthenticatedClientAsync();
         using var stranger = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(owner);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var created = await owner.PostAsJsonAsync(
             "/api/orders", new { Sku = sku, Quantity = 1 });
         var id = await created.Content.ReadFromJsonAsync<Guid>();
@@ -173,7 +173,7 @@ public sealed class OrdersEndpointTests(ApiFactory factory)
     public async Task PostOrders_ThenGet_ReturnsTheProductSnapshot()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client, price: 12.50m);
+        var sku = await CatalogueSetup.CreateProductAsync(factory, price: 12.50m);
 
         var created = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 2 });
         var id = await created.Content.ReadFromJsonAsync<Guid>();

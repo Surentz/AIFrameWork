@@ -1,3 +1,4 @@
+using AiFramework.Api.Auth;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Products;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +11,12 @@ namespace AiFramework.Api.Products;
 /// the catalogue is not public data, and both queries are ICacheable — the caching behavior
 /// throws when one is dispatched with no caller to scope its key to.
 /// </summary>
+/// <remarks>
+/// Reading is any signed-in caller's; writing is <see cref="AuthorizationPolicies.Catalogue"/>'s
+/// <c>Manage</c>, per ACTION rather than on the controller, because the reads here are the whole
+/// shop's and must stay open to members. A write action added later therefore has to carry the
+/// policy itself — the opposite default from the admin-only controllers. See ADR 0025.
+/// </remarks>
 [ApiController]
 [Route("api/products")]
 [Authorize]
@@ -18,8 +25,10 @@ public sealed class ProductsController(
 {
     /// <summary>Adds a product to the catalogue and returns its new identifier.</summary>
     [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.Catalogue.Manage)]
     [ProducesResponseType<Guid>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Create(
         CreateProductRequest request, CancellationToken cancellationToken)
@@ -88,8 +97,10 @@ public sealed class ProductsController(
 
     /// <summary>Replaces a product's editable fields. The sku is not among them.</summary>
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.Catalogue.Manage)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Update(
         Guid id, UpdateProductRequest request, CancellationToken cancellationToken)

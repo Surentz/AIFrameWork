@@ -16,7 +16,7 @@ fixture below.
 | `signedInPage` | test | The default for anything needing a session |
 | `page` | test | Anonymous visitors, and sign-in tests |
 | `isolatedPage` / `freshUser` | test | See the rule below — not optional |
-| `adminPage` / `adminUser` | test / worker | The monitoring and fulfilment pages, and `api.shipOrder` — `@local-only`, see below |
+| `adminPage` / `adminUser` | test / worker | The operator's screens — monitoring, fulfilment, the catalogue forms. Loaded from a session signed in once per run; see rule 3 |
 | `api` | test | Arranging data over HTTP |
 | `openSession` | test | A further signed-in page for a given user — e.g. a second browser. Closed at teardown |
 | `workerUser` | worker | The user `signedInPage` is signed in as |
@@ -37,13 +37,15 @@ cluster run at about ten tests a minute, surfacing as navigation timeouts that l
    within a run, and the kind cluster's Postgres is a StatefulSet with a PVC, so it accumulates
    across runs too. A test that genuinely needs an empty list takes `freshUser`.
 3. **`adminUser` is the one fixed username in the suite, and it must stay fixed.** The
-   administrator role is granted solely by the API's `Admin__Usernames` (ADR 0020), which
-   `playwright.config.ts` sets on the stack it starts — a generated name could never appear in a
-   config written before the run. Being fixed, it would collide in ways a generated one cannot, so
-   `e2e/setup/seed-admin.ts` (a `globalSetup`, managed stack only) registers it once before any
-   worker starts, and `registerOrSignIn` signs in on the 409. (Workers racing to create it would
-   also get a 409, but each lost race is a failed insert EF logs at Error — see seed-admin.ts.)
-   Anything needing this fixture carries `@local-only`.
+   administrator role is granted solely by the API's `Admin__Usernames` (ADR 0020):
+   `playwright.config.ts` names it on the stack it starts, and `k8s/overlays/local/config.yaml`
+   on the cluster — a generated name could never appear in a config written before the run.
+   **Nothing but `e2e/setup/seed-admin.ts` signs in as it.** That `globalSetup` runs once per run
+   on every target, signs in (registering only on a fresh database), and saves the session to the
+   git-ignored `e2e/.auth/admin.json`; the fixture loads that file. Workers never sign in as the
+   operator, so it costs the auth budget one call however many workers there are. Writing to the
+   catalogue needs it (ADR 0025), and the `api` fixture routes every catalogue write through it —
+   so an arbitrary URL target has to name `e2e-admin` too, or nearly every spec fails with a 403.
 
 ## Screens
 
@@ -73,13 +75,13 @@ reaching into Postgres. Reaching into the database would not work against the cl
 which is what the target switch exists for.
 
 ```ts
-await api.placeOrder(workerUser, { sku, quantity: 3 });   // creates the product too
+await api.placeOrder(workerUser, { sku, quantity: 3 });   // the operator creates the product
 await api.placeOrders(workerUser, 25);
-const id = await api.createProduct(workerUser, { sku, name: sku, price: '19.95' });
+const id = await api.createProduct({ sku, name: sku, price: '19.95' });  // always the operator
 await api.orderProduct(workerUser, { sku, quantity: 1 });  // a product that already exists
 await api.shipOrder(adminUser, orderId);                  // the operator ships: @local-only
 await api.cancelOrder(workerUser, orderId, 'reason');
-await api.updateProduct(workerUser, id, { name: sku, price: '9.95' });
+await api.updateProduct(id, { name: sku, price: '9.95' });                // always the operator
 await api.failSignIn(freshUser.username);                  // never workerUser: see rule 1
 ```
 
@@ -118,15 +120,19 @@ says otherwise. Add the tag when a test needs any of these:
 It is carried for two reasons, and the arithmetic behind the first is worth spelling out.
 
 **The auth budget.** Only `register` and `login` spend permits, and the cluster allows 10 per 60
-seconds for the whole suite. The untagged tests spend **seven**: two `workerUser` registrations
-(one per worker), three `freshUser` registrations (`sign-out-everywhere`, the bell test in
-`feed.spec.ts`, `order-list.spec.ts`), and two sign-ins (`sign-in.spec.ts`'s sign-out-and-back-in
-and wrong-password tests). Anything that would push that past seven is tagged instead:
+seconds for the whole suite. A run spends **eight**: the operator's one sign-in in
+`seed-admin.ts` (two on a cluster that has never seen it — a refused sign-in, then the
+registration), two `workerUser` registrations (one per worker), three `freshUser` registrations
+(`sign-out-everywhere`, the bell test in `feed.spec.ts`, `order-list.spec.ts`), and two sign-ins
+(`sign-in.spec.ts`'s sign-out-and-back-in and wrong-password tests). That leaves one permit of
+headroom, none on a cluster's first run. Anything that would push it further is tagged instead:
 `registration.spec.ts`, `change-password.spec.ts`, `lockout.spec.ts` (six permits on its own),
 and the remember-me test. **Recount before adding an untagged test that registers or signs in.**
 
 **The administrator, and the worker.** `monitoring.spec.ts`, `users.spec.ts`, `jobs.spec.ts` and
-`logins.spec.ts` need `Admin__Usernames` to name the e2e operator, and nothing off-target does.
+`logins.spec.ts` were tagged because only the managed stack named the e2e operator. The kind
+overlay names it too since ADR 0025, so that reason no longer holds for the cluster; they stay
+tagged until someone decides to run them there, which is its own change.
 `jobs.spec.ts` also needs the worker, which an arbitrary URL target cannot be assumed to run.
 `monitoring.spec.ts`'s two *access* tests are untagged deliberately — refusing a member is the
 security-relevant half and needs no administrator, so it runs everywhere.
@@ -137,7 +143,11 @@ tagged. The feed's cancellation test was split out of the shipped one to stay un
 cancels for themselves — and `fulfilment.spec.ts`'s member refusal is untagged for the reason the
 monitoring access tests are. Neither spends an auth permit: both run as `workerUser`.
 
-**A `kind` run therefore executes 27 of the 55 tests** — `npm run e2e` runs all of them, where
+**The catalogue is not tagged.** Its forms are the operator's (ADR 0025), and `catalogue.spec.ts`
+drives them as `adminPage` — on the cluster too, because the kind overlay names the operator. Its
+member refusal and paging tests run as `workerUser`.
+
+**A `kind` run therefore executes 28 of the 56 tests** — `npm run e2e` runs all of them, where
 the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
@@ -180,7 +190,7 @@ the first two are also the dev loop's. Stop it first, or set `API_PORT` / `WORKE
 |---|---|
 | Auth | sign-in, remember me, reveal password, navigation, registration (+ validation), change password (+ validation), sign out everywhere, lockout |
 | Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation) |
-| Products | create, edit, edit-from-detail, duplicate sku, field validation, paging |
+| Products | create, edit, edit-from-detail, duplicate sku, field validation (all as the operator), member refused the form, paging |
 | Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
 | Monitoring | access, overview, drill-downs, traffic window, jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
 
