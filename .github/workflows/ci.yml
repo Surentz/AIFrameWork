@@ -1,4 +1,4 @@
-# What /verify does locally, run on every push and pull request.
+# What /verify does locally, run on every push to main and every pull request.
 #
 # The one thing this adds beyond /verify is the Release dimension. Release was broken in this
 # repo for the whole life of the Wolverine spike and nothing noticed, because `dotnet build`
@@ -9,12 +9,22 @@
 name: CI
 
 on:
-  # No branch filter on push: every branch gets backend + frontend build/test coverage, not
-  # just main. pull_request has no branch filter either, so a PR against any base branch is
-  # covered too - the two together mean a push to a feature branch is checked whether or not a
-  # PR is open yet, and again once one is.
+  # push is limited to main to save Actions minutes: a feature branch is checked through its PR
+  # instead, so a push to a branch with an open PR no longer runs the whole pipeline twice. A
+  # branch with no PR yet gets no CI until one is opened - run /verify locally before that.
+  #
+  # Docs-only changes skip CI entirely: nothing under docs/ and no Markdown file (CLAUDE.md,
+  # skills, ADRs, READMEs) feeds the build, tests or generated artifacts. A change that touches
+  # any other file still runs everything.
   push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
 
 # A newer push to the same branch makes the older run's answer irrelevant.
 concurrency:
