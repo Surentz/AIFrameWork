@@ -26,11 +26,17 @@ spec:
       # Same reasoning as api.yaml's: two replicas on one node is one failure domain wearing a
       # replica count. ScheduleAnyway here rather than DoNotSchedule, because the SPA is a
       # static bundle behind nginx - if the scheduler can only fit it alongside its sibling,
-      # serving the bundle from a co-located pod beats not serving it at all.
+      # serving the bundle from a co-located pod beats not serving it at all. nodeTaintsPolicy and
+      # matchLabelKeys for api.yaml's reasons: ScheduleAnyway never deadlocks, but without them the
+      # tainted control plane and the old revision's pods skew the count, so a rollout co-locates
+      # replicas that had room to spread.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
+          nodeTaintsPolicy: Honor
+          matchLabelKeys:
+            - pod-template-hash
           labelSelector:
             matchLabels:
               app: web
