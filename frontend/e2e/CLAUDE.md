@@ -115,9 +115,10 @@ says otherwise. Add the tag when a test needs any of these:
 - the cache off (`Cache__Enabled=false`) — the cluster runs with it on;
 - the raised rate limit — the cluster allows 10 auth calls per 60 seconds;
 - a database with nothing in it;
-- a single API replica — the cluster runs two.
+- a single API replica — the cluster runs two;
+- the host-exposed broker — the kind cluster exposes no RabbitMQ port to the host.
 
-It is carried for two reasons, and the arithmetic behind the first is worth spelling out.
+It is carried for three reasons, and the arithmetic behind the first is worth spelling out.
 
 **The auth budget.** Only `register` and `login` spend permits, and the cluster allows 10 per 60
 seconds for the whole suite. A run spends **eight**: the operator's one sign-in in
@@ -147,7 +148,12 @@ monitoring access tests are. Neither spends an auth permit: both run as `workerU
 drives them as `adminPage` — on the cluster too, because the kind overlay names the operator. Its
 member refusal and paging tests run as `workerUser`.
 
-**A `kind` run therefore executes 28 of the 56 tests** — `npm run e2e` runs all of them, where
+**The broker, for a third reason.** `shipment-inbound.spec.ts` is tagged for neither the auth
+budget nor the administrator: it publishes `shipment.confirmed.v1` through the broker's
+management HTTP API directly from the host (`support/broker.ts`), and only the stack
+`playwright.config.ts` starts exposes that port — the kind cluster does not.
+
+**A `kind` run therefore executes 28 of the 57 tests** — `npm run e2e` runs all of them, where
 the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
@@ -189,7 +195,7 @@ the first two are also the dev loop's. Stop it first, or set `API_PORT` / `WORKE
 | Area | Specs |
 |---|---|
 | Auth | sign-in, remember me, reveal password, navigation, registration (+ validation), change password (+ validation), sign out everywhere, lockout |
-| Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation) |
+| Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation), shipment confirmed via the broker |
 | Products | create, edit, edit-from-detail, duplicate sku, field validation (all as the operator), member refused the form, paging |
 | Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
 | Monitoring | access, overview, drill-downs, traffic window, jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
