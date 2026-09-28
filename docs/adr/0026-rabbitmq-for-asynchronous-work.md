@@ -134,9 +134,11 @@ Worker replicas are competing consumers on quorum queues, so scaling them is a r
   `aiframework.events.unrouted`, and past 100,000 the oldest are dropped. That is a debugging aid,
   not an archive.
 - **The broker credential is the access control for inbound.** Anyone who can publish to
-  `aiframework.shipments` can ship any order. The dev and kind credential can do everything; **a
-  real deployment needs a producer-only RabbitMQ user for the warehouse**, allowed to write to that
-  queue and nothing else.
+  `aiframework.shipments` can ship any order. The dev and kind credential is the
+  `RABBITMQ_DEFAULT_USER` user, which RabbitMQ creates with the `administrator` tag and full
+  configure/write/read permissions (`.*`) on the default vhost `/` (verified with
+  `rabbitmqctl list_users` and `list_permissions`); **a real deployment needs a producer-only
+  RabbitMQ user for the warehouse**, allowed to write to that queue and nothing else.
 - **An outage grows `wolverine_outgoing_envelopes`**, bounded by the outage's length and drained
   automatically. Nothing surfaces the count yet; that is a follow-up.
 - **Jobs waiting in the old Postgres queues at upgrade time are not migrated.** The

@@ -632,12 +632,6 @@ All accepted, in [`docs/adr/`](docs/adr/).
 | [0017](docs/adr/0017-quartz-as-the-job-clock.md) | Quartz.NET as the job clock |
 | [0018](docs/adr/0018-load-balancing-within-the-affinity-constraint.md) | Load balancing within the affinity constraint |
 | [0019](docs/adr/0019-realtime-notifications-over-signalr.md) | Realtime notifications over SignalR, with a Redis backplane |
-| [0020](docs/adr/0020-an-administrator-role.md) | An administrator role |
-| [0021](docs/adr/0021-operational-telemetry-in-postgres.md) | Operational telemetry in Postgres |
-| [0022](docs/adr/0022-configuration-seeds-the-administrator-list.md) | Configuration seeds the administrator list, rather than mirroring it |
-| [0023](docs/adr/0023-the-e2e-stack-starts-the-job-worker.md) | The e2e stack starts the job worker |
-| [0024](docs/adr/0024-capability-policies-and-operator-fulfilment.md) | Capability-named policies, and the operator ships |
-| [0025](docs/adr/0025-the-catalogue-is-managed-by-administrators.md) | The catalogue is managed by administrators |
 | [0026](docs/adr/0026-rabbitmq-for-asynchronous-work.md) | RabbitMQ is the broker for all asynchronous work |
 
 Record a new one with `/adr <title>`. **Check the open branches as well as `docs/adr/` before

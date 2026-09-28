@@ -120,7 +120,8 @@ re-runs it about 20 s later, with the same envelope id
 (`ShipmentInboundTests.ADeadLetteredShipment_IsRedeliveredByRetry`; tests allow 60 s).
 
 **Security: the broker credential is the access control.** Anyone who can publish to
-`aiframework.shipments` can ship any order. The dev and kind credential is an administrator; a
+`aiframework.shipments` can ship any order. The dev and kind credential is `RABBITMQ_DEFAULT_USER`: the
+`administrator` tag and `.*` configure/write/read on vhost `/`. A
 real deployment needs a **producer-only RabbitMQ user** for the warehouse, with write permission on
 that queue and nothing else.
 
