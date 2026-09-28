@@ -31,6 +31,13 @@ in `InfrastructureRegistration.cs` is the entry point.
   Queries get exactly one behavior — the cache — and no transaction and no validation: a query
   that needs a transaction is a command, and a query that needs validation validates its own
   inputs inside its handler (`GetOrdersHandler` is the example).
+- The commit can turn a success into a failure. `CommitAsync` maps `DbUpdateConcurrencyException`
+  — and only that — to a `Conflict` with `ErrorCodes.ConcurrencyConflict` (409), and `AddCommand`
+  carries that result on, so eviction skips it. An entity opts in with a concurrency token in its
+  configuration; `Order` maps Postgres's `xmin` (`OrderConfiguration.ConfigureConcurrency`), which
+  adds no column. Handlers never catch it themselves. A domain event handler's own
+  `SaveChangesAsync` is outside this pipeline: a race there is an ordinary exception, retried by
+  the outbox like any other, never a `ConcurrencyConflict`.
 
 ## Caching
 

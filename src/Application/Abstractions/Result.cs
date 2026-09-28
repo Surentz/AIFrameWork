@@ -49,6 +49,22 @@ public sealed record Error(
     IReadOnlyDictionary<string, string[]>? Details = null,
     TimeSpan? RetryAfter = null);
 
+/// <summary>
+/// Error codes that something other than the API boundary branches on. Every other code stays a
+/// literal at the one place that produces it; a code lands here only when a second component has
+/// to recognise it, so a rename is a compile error there rather than a match that quietly stops.
+/// </summary>
+public static class ErrorCodes
+{
+    /// <summary>
+    /// The commit lost a race: a row the command read was changed by someone else before it saved,
+    /// so nothing was written. Kind <see cref="ErrorKind.Conflict"/>, so 409 at the API. Unlike the
+    /// other conflicts it is not a rule the command broke — the same command may well succeed once
+    /// re-read, so a machine caller retries it rather than treating it as a rejection.
+    /// </summary>
+    public const string ConcurrencyConflict = "concurrency.conflict";
+}
+
 /// <summary>Factories for <see cref="Result{T}"/>. Non-generic so call sites infer T.</summary>
 public static class Result
 {

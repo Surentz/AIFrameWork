@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Caching;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -185,16 +186,36 @@ internal static class Behaviors
     /// Unlike the validator, IUnitOfWork is not absence-tolerant: a missing registration
     /// would otherwise mean the handler reports success while nothing is written, silently.
     /// </summary>
-    internal static async Task CommitAsync<TResponse>(
+    /// <remarks>
+    /// A lost optimistic-concurrency race — a row the handler read was changed by another request
+    /// before this one saved, caught by a concurrency token such as Order's xmin — is an expected
+    /// outcome, not a bug, so it becomes a Conflict result (409) here, once, for every command,
+    /// instead of reaching GlobalExceptionHandler as a 500. SaveChanges is one transaction, so
+    /// nothing of the command was written. Only DbUpdateConcurrencyException is caught; every
+    /// other DbUpdateException stays an exception.
+    /// </remarks>
+    internal static async Task<Result<TResponse>> CommitAsync<TResponse>(
         IServiceProvider sp, Result<TResponse> result, CancellationToken ct)
     {
         if (!result.IsSuccess)
         {
-            return;
+            return result;
         }
 
         var unitOfWork = sp.GetRequiredService<IUnitOfWork>();
-        await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Failure<TResponse>(new Error(
+                ErrorKind.Conflict,
+                ErrorCodes.ConcurrencyConflict,
+                "Someone else changed this at the same time. Reload it and try again."));
+        }
+
+        return result;
     }
 
     /// <summary>
