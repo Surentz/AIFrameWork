@@ -81,6 +81,18 @@ its own `aiframework-api` Ingress and must stay there — annotations apply to a
 so putting the SPA's `/` path back alongside `/api` issues a *second* `aiframework.route`
 cookie, which silently disables affinity rather than erroring. See ADR 0010.
 
+RabbitMQ (`k8s/base/rabbitmq.yaml`) runs as a StatefulSet for the same reason Postgres does: its
+PVC is bound to whichever node it first scheduled on, by kind's node-local storage class, so a
+drain of that node will not reschedule it either — target a different node for a drain test, as
+the Postgres note above already says. `deploy.ps1` waits on `rollout status statefulset/rabbitmq`
+immediately after the Postgres wait and before Phase B's migrations, because both hosts refuse to
+start without a broker connection (ADR 0026) and letting the rollout race ahead would only buy
+CrashLoopBackOff. The management UI is reachable with `kubectl port-forward svc/rabbitmq 15672`
+and deliberately not exposed on the ingress — it is an operator tool for this local cluster, not
+something the application depends on. Neither host's `/health/ready` checks RabbitMQ: readiness
+still only calls `AddDbContextCheck`'s Postgres probe, so a broker outage does not flip a pod's
+readiness the way a Postgres outage does.
+
 `./deploy/e2e-k8s.ps1` runs the Playwright suite against this cluster — a gate that exercises
 durable Wolverine, caching on, two replicas, and the real rate limit, none of which the compose
 stack does. It gates readiness on `/api/auth/me`, not `/health`: the ingress routes `/health` to

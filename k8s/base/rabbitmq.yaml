@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+spec:
+  clusterIP: None
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          # Matches docker-compose.yml, so the cluster and the dev loop agree on the broker.
+          image: rabbitmq:4.3-management-alpine
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+          # AMQP accepting, not merely "node up" - both hosts refuse to start if they connect first.
+          readinessProbe:
+            exec:
+              command: ['rabbitmq-diagnostics', '-q', 'check_port_connectivity']
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            # RabbitMQ derives its memory high-watermark from this cgroup limit and blocks
+            # publishers at it; sized like Postgres.
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: rabbitmqdata
+              mountPath: /var/lib/rabbitmq
+  # The StatefulSet's stable hostname (rabbitmq-0) is what keeps the node name - and therefore
+  # the data directory - the same across restarts.
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmqdata
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests:
+            storage: 1Gi
+---
+# maxUnavailable, not minAvailable: on a one-replica StatefulSet minAvailable: 1 blocks every node
+# drain forever, as the worker's budget in autoscaling.yaml already records.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rabbitmq
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
