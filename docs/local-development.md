@@ -60,6 +60,11 @@ one.
 `launchSettings.json` entirely — it is read by `dotnet run` and by IDE launch configurations, not
 baked into the executable. This surprises people; it is not a bug.
 
+**Before either IDE's F5: `docker compose up -d --wait`.** Neither `dotnet run` nor an IDE launch
+configuration starts the dev stack's containers — both the API and the worker refuse to start
+without Postgres and the message broker (ADR 0026), so the "command line" steps above (or just
+the compose line) need to have been run at least once first.
+
 ## JetBrains Rider — one keystroke for both
 
 Rider launches several configurations together with a **Compound**.

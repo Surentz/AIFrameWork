@@ -30,6 +30,10 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # string below has to agree with it or the migration step silently targets the wrong database.
 $pgPort = if ($env:DEV_PG_PORT) { $env:DEV_PG_PORT } else { '55433' }
 
+# Same defaults docker-compose.yml's RABBITMQ_PORT / RABBITMQ_UI_PORT fall back to.
+$rabbitPort = if ($env:RABBITMQ_PORT) { $env:RABBITMQ_PORT } else { '55672' }
+$rabbitUiPort = if ($env:RABBITMQ_UI_PORT) { $env:RABBITMQ_UI_PORT } else { '55673' }
+
 # Same default docker-compose.yml's SEQ_PORT falls back to. Only read when -WithSeq is set.
 $seqPort = if ($env:SEQ_PORT) { $env:SEQ_PORT } else { '55341' }
 
@@ -79,9 +83,9 @@ Invoke-Step 'Checking the ports are free' {
     $global:LASTEXITCODE = 0
 }
 
-# --wait blocks on the healthcheck in docker-compose.yml, so Postgres (and Seq, with -WithSeq)
-# is genuinely accepting connections when this returns — no polling of our own required.
-Invoke-Step 'Starting the dev database' {
+# --wait blocks on the healthcheck in docker-compose.yml, so Postgres, the broker (and Seq, with
+# -WithSeq) are genuinely accepting connections when this returns — no polling of our own required.
+Invoke-Step 'Starting the dev database and message broker' {
     if ($WithSeq) {
         docker compose --project-directory $repoRoot --profile observability up -d --wait
     }
@@ -126,6 +130,7 @@ else {
 # started. The env var is removed again immediately after spawning, same as ConnectionStrings__
 # Default's own cleanup above, so it does not leak into commands run later in this same window.
 Invoke-Step 'Launching the API' {
+    $env:ConnectionStrings__RabbitMq = "amqp://aiframework:aiframework@localhost:$rabbitPort/"
     if ($WithSeq) {
         $env:Observability__Otlp__Enabled = 'true'
         $env:Observability__Otlp__Endpoint = "http://localhost:$seqPort/ingest/otlp"
@@ -136,6 +141,7 @@ Invoke-Step 'Launching the API' {
         )
     }
     finally {
+        Remove-Item Env:\ConnectionStrings__RabbitMq -ErrorAction SilentlyContinue
         if ($WithSeq) {
             Remove-Item Env:\Observability__Otlp__Enabled -ErrorAction SilentlyContinue
             Remove-Item Env:\Observability__Otlp__Endpoint -ErrorAction SilentlyContinue
@@ -153,6 +159,7 @@ Invoke-Step 'Launching the API' {
 # a worker exporting to a different place than the API would defeat the point of having one log
 # store to correlate a job against the request that enqueued it.
 Invoke-Step 'Launching the job worker' {
+    $env:ConnectionStrings__RabbitMq = "amqp://aiframework:aiframework@localhost:$rabbitPort/"
     if ($WithSeq) {
         $env:Observability__Otlp__Enabled = 'true'
         $env:Observability__Otlp__Endpoint = "http://localhost:$seqPort/ingest/otlp"
@@ -163,6 +170,7 @@ Invoke-Step 'Launching the job worker' {
         )
     }
     finally {
+        Remove-Item Env:\ConnectionStrings__RabbitMq -ErrorAction SilentlyContinue
         if ($WithSeq) {
             Remove-Item Env:\Observability__Otlp__Enabled -ErrorAction SilentlyContinue
             Remove-Item Env:\Observability__Otlp__Endpoint -ErrorAction SilentlyContinue
@@ -241,9 +249,10 @@ Write-Host ''
 Write-Host "  App              http://localhost:$webPort" -ForegroundColor Green
 Write-Host "  API reference    http://localhost:$apiPort/scalar/v1" -ForegroundColor Green
 Write-Host "  Postgres         localhost:$pgPort" -ForegroundColor Green
+Write-Host "  RabbitMQ         amqp://localhost:$rabbitPort   UI http://localhost:$rabbitUiPort  (aiframework / aiframework)" -ForegroundColor Green
 if ($WithSeq) {
     Write-Host "  Seq              http://localhost:$seqPort" -ForegroundColor Green
 }
 Write-Host ''
 Write-Host '  Both tabs open by themselves. Ctrl-C in a window stops that process;' -ForegroundColor DarkGray
-Write-Host '  scripts\stop-dev.ps1 stops the database (and Seq, if it was started).' -ForegroundColor DarkGray
+Write-Host '  scripts\stop-dev.ps1 stops the database and broker (and Seq, if it was started).' -ForegroundColor DarkGray

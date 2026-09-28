@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Starts the job worker on its own, against the dev database.
+  Starts the job worker on its own, against the dev database and message broker.
 .DESCRIPTION
   scripts\dev.ps1 already launches this alongside the API and Vite, so this is not how you start
   the stack. It is for the case that comes up on its own: restarting JUST the worker, without
@@ -46,10 +46,18 @@ if (-not $SkipDatabase) {
         }
     }
 
-    # --wait blocks on docker-compose.yml's healthcheck, so Postgres is genuinely accepting
-    # connections when this returns. Idempotent: harmless when dev.ps1 already started it.
-    Invoke-Step 'Starting the dev database' {
+    # --wait blocks on docker-compose.yml's healthcheck, so Postgres and the broker are genuinely
+    # accepting connections when this returns. Idempotent: harmless when dev.ps1 already started it.
+    Invoke-Step 'Starting the dev database and message broker' {
         docker compose --project-directory $repoRoot up -d --wait
+    }
+}
+
+if ($SkipDatabase) {
+    $rabbitPort = if ($env:RABBITMQ_PORT) { [int]$env:RABBITMQ_PORT } else { 55672 }
+    if (-not (Get-NetTCPConnection -LocalPort $rabbitPort -State Listen -ErrorAction SilentlyContinue)) {
+        # Plain ASCII, as dev.ps1's messages: PowerShell 5.1 mangles an em dash.
+        throw "Nothing is listening on the message broker port ($rabbitPort). The worker refuses to start without it - run without -SkipDatabase, or start the dev loop first."
     }
 }
 

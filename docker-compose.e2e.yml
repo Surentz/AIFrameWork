@@ -12,3 +12,21 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # Throwaway, like the e2e Postgres: no volume, its own ports, so it can run beside the dev one.
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: e2e
+      RABBITMQ_DEFAULT_PASS: e2e
+    ports:
+      - '${E2E_RABBITMQ_PORT:-55682}:5672'
+      # The management API is how e2e/support/broker.ts publishes a shipment - no AMQP client
+      # dependency in the frontend workspace.
+      - '${E2E_RABBITMQ_UI_PORT:-55683}:15672'
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_port_connectivity']
+      interval: 2s
+      timeout: 5s
+      retries: 60

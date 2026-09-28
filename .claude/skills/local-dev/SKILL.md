@@ -40,6 +40,12 @@ Two databases, two ports, and they are meant to coexist: **55433** is the dev da
 `docker-compose.yml` (named volume, data persists); **55432** is the e2e one from
 `docker-compose.e2e.yml` (throwaway). Override either with `DEV_PG_PORT` / `PG_PORT`.
 
+The message broker follows the same split: the dev one is in `docker-compose.yml` too, on
+**55672** (AMQP) and **55673** (management UI); the e2e one is in `docker-compose.e2e.yml`, on
+**55682** and **55683**. Unlike Seq and Redis, both the API and the worker refuse to start
+without a broker (ADR 0026) — so `dotnet run` on its own, or an IDE's F5 (Rider, Visual Studio),
+needs `docker compose up -d` run first. `dev.ps1` and `worker.ps1` already do this.
+
 The dev connection string is committed in `src/Api/appsettings.Development.json` — throwaway
 credentials against a localhost-only container that is never deployed, the same judgement
 already applied to `docker-compose.e2e.yml`. The no-secrets-in-`appsettings*.json` rule still
@@ -74,7 +80,7 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Menu option | Runs |
 |---|---|
 | Install/check prerequisites | `scripts/install-prereqs.ps1` — see below |
-| Start dev loop | `scripts/dev.ps1` — the plain local dev loop: Postgres, API, **job worker**, Vite |
+| Start dev loop | `scripts/dev.ps1` — the plain local dev loop: Postgres, **RabbitMQ**, API, **job worker**, Vite |
 | Start dev loop + Seq | `scripts/dev.ps1 -WithSeq` — same, plus Seq at `localhost:55341` |
 | Start job worker only | `scripts/worker.ps1` — restarts just the worker, leaving a working API and Vite alone. Runs in the foreground, so you watch its log; `codegen write` needs a worker restart to take effect |
 | Stop dev loop | `scripts/stop-dev.ps1` — kills the API/worker/Vite ports, tears down the database (and Seq, if it was started) |
