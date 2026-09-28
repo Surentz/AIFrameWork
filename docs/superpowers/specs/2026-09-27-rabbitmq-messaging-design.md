@@ -135,8 +135,10 @@ command commits ─► hand-built outbox row (unchanged)
   and one per other event) map the domain event to its contract and call
   `IIntegrationEventPublisher.PublishAsync(contract, context.MessageId, ct)`.
 - **Infrastructure:** `WolverineIntegrationEventPublisher` calls `IMessageBus.PublishAsync` and
-  passes the `eventId` as an envelope header. A custom `IRabbitMqEnvelopeMapper` on the events
-  endpoint writes the AMQP properties.
+  passes the `eventId` and the versioned type name as envelope headers. A custom
+  `IRabbitMqEnvelopeMapper` on the events endpoint writes the AMQP properties **from those
+  headers**, never from the message object: an envelope recovered from Postgres after a restart
+  reaches the mapper with no deserialized message, only its headers (verified, plan Task 1 V4d).
 - **Routing:** one rule per contract type to `aiframework.events` with its routing key, and
   `UseDurableOutbox()` on that endpoint.
 
