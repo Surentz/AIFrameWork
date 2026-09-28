@@ -37,6 +37,24 @@ internal sealed class BrokerProbe : IAsyncDisposable
     }
 
     /// <summary>
+    /// A named, durable, non-exclusive queue bound to <paramref name="exchange"/>. Unlike
+    /// <see cref="BindTemporaryQueueAsync"/>'s server-named exclusive queue, this one survives a
+    /// broker restart: an exclusive queue dies with the connection that declared it, and
+    /// BrokerOutageTests' own probe connection is exactly what a <c>rabbitmqctl stop_app</c> closes.
+    /// The caller passes a unique <paramref name="queueName"/> per run (a test that left one behind
+    /// would otherwise collide with, or silently reuse, another run's).
+    /// </summary>
+    public async Task<string> BindDurableQueueAsync(string queueName, string exchange, string routingKey)
+    {
+        await _channel.QueueDeclareAsync(queue: queueName, durable: true, exclusive: false, autoDelete: false);
+        await _channel.QueueBindAsync(queueName, exchange, routingKey);
+        return queueName;
+    }
+
+    /// <summary>Removes a queue created by <see cref="BindDurableQueueAsync"/>, so a test leaves nothing behind.</summary>
+    public Task DeleteQueueAsync(string queueName) => _channel.QueueDeleteAsync(queueName);
+
+    /// <summary>
     /// The next message on <paramref name="queue"/>, waiting up to <paramref name="timeout"/>.
     /// </summary>
     /// <remarks>

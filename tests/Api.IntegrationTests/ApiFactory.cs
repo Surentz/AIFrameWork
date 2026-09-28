@@ -27,6 +27,41 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>For tests that inspect or publish to the broker directly (BrokerProbe).</summary>
     public string RabbitMqConnectionString => _rabbit.GetConnectionString();
 
+    /// <summary>
+    /// Simulates a broker outage: stops the RabbitMQ application inside the container (not the
+    /// container itself), which closes every AMQP connection but keeps the container and its
+    /// mapped port. BrokerOutageTests only.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not Testcontainers' own <c>PauseAsync</c>/<c>UnpauseAsync</c>: pausing the
+    /// container is a TCP black hole, and the plan's V4c/V4e findings measured that
+    /// <c>IMessageBus.PublishAsync</c> does not return while the broker is paused — it blocks until
+    /// unpause. That would hang <c>DrainOutboxUntilEmptyAsync</c> and test a network partition, not
+    /// an outage. <c>rabbitmqctl stop_app</c> instead: <c>PublishAsync</c> returns at once, the
+    /// envelope waits in the durable outbox, and delivery resumes roughly 5s after
+    /// <see cref="StartBrokerAppAsync"/> (V4e).
+    /// </remarks>
+    public async Task StopBrokerAppAsync()
+    {
+        var result = await _rabbit.ExecAsync(["rabbitmqctl", "stop_app"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl stop_app failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+    }
+
+    /// <summary>Reverses <see cref="StopBrokerAppAsync"/>, restarting the RabbitMQ application.</summary>
+    public async Task StartBrokerAppAsync()
+    {
+        var result = await _rabbit.ExecAsync(["rabbitmqctl", "start_app"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl start_app failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+    }
+
     // The containers must start BEFORE anything touches Services: the first access to
     // Services builds the host, which runs ConfigureWebHost, which reads the containers'
     // connection strings. Reversing these two lines fails with a connection error.

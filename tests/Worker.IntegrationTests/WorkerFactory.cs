@@ -26,6 +26,33 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
     /// <summary>For tests that inspect or publish to the broker directly (BrokerProbe).</summary>
     public string RabbitMqConnectionString => _rabbit.GetConnectionString();
 
+    /// <summary>
+    /// Simulates a broker outage: stops the RabbitMQ application inside the container (not the
+    /// container itself), which closes every AMQP connection but keeps the container and its
+    /// mapped port. Mirrors <c>ApiFactory.StopBrokerAppAsync</c> — see its remarks for why this is
+    /// <c>rabbitmqctl stop_app</c> rather than Testcontainers' <c>PauseAsync</c>.
+    /// </summary>
+    public async Task StopBrokerAppAsync()
+    {
+        var result = await _rabbit.ExecAsync(["rabbitmqctl", "stop_app"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl stop_app failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+    }
+
+    /// <summary>Reverses <see cref="StopBrokerAppAsync"/>, restarting the RabbitMQ application.</summary>
+    public async Task StartBrokerAppAsync()
+    {
+        var result = await _rabbit.ExecAsync(["rabbitmqctl", "start_app"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl start_app failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+    }
+
     // The containers must start BEFORE anything touches Services: the first access builds AND
     // STARTS the host, which reads the containers' connection strings. Reversing these two fails
     // to connect.
