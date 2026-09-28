@@ -37,7 +37,9 @@ public static class MessagingRegistration
                     var handler = sp.GetRequiredService<ICommandHandler<TCommand, TResponse>>();
                     var result = await handler.HandleAsync(typed, ct).ConfigureAwait(false);
 
-                    await Behaviors.CommitAsync(sp, result, ct).ConfigureAwait(false);
+                    // Reassigned: a commit that loses a concurrency race turns a successful
+                    // result into a Conflict, and eviction must then see the failure and skip.
+                    result = await Behaviors.CommitAsync(sp, result, ct).ConfigureAwait(false);
                     await Behaviors.EvictAsync(sp, typed, result, ct).ConfigureAwait(false);
 
                     return result;
