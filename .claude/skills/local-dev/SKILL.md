@@ -26,7 +26,7 @@ profile-started container even when it is currently running. See the `observabil
 Or by hand:
 
 ```bash
-docker compose up -d --wait                                  # dev Postgres on 55433
+docker compose up -d --wait                                  # dev Postgres on 55433, RabbitMQ on 55672
 dotnet ef database update --project src/Infrastructure --startup-project src/Infrastructure
 dotnet run --project src/Api                                 # then `npm start` in frontend/
 ```
@@ -83,7 +83,7 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Start dev loop | `scripts/dev.ps1` — the plain local dev loop: Postgres, **RabbitMQ**, API, **job worker**, Vite |
 | Start dev loop + Seq | `scripts/dev.ps1 -WithSeq` — same, plus Seq at `localhost:55341` |
 | Start job worker only | `scripts/worker.ps1` — restarts just the worker, leaving a working API and Vite alone. Runs in the foreground, so you watch its log; `codegen write` needs a worker restart to take effect |
-| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/worker/Vite ports, tears down the database (and Seq, if it was started) |
+| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/worker/Vite ports, tears down the database and the broker (and Seq, if it was started). Messages waiting on a queue survive in the `rabbitmqdata` volume, as rows do in `pgdata` |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
 | Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses ports 5234 and 5235 |

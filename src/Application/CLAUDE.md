@@ -97,10 +97,19 @@ or query for that feature.
 **Handlers must be idempotent.** Delivery off the outbox is at-least-once, and retry granularity
 is the message rather than the handler: if one handler in a fan-out throws, the whole message is
 retried, re-running handlers that already succeeded on the first attempt. `DomainEventContext`
-(same file) carries `MessageId` and `Attempt`; `MessageId` is stable across every redelivery of
-the same event, so it is the dedupe key a handler checks before doing anything with a side
-effect — `OrderPlacedAuditHandler` is the existing example, keyed on `MessageId` via a database
-uniqueness constraint rather than an in-memory check.
+(same file) carries `MessageId`, `Attempt` and `OccurredAt`; `MessageId` is stable across every
+redelivery of the same event, so it is the dedupe key a handler checks before doing anything with
+a side effect — `OrderPlacedAuditHandler` is the existing example, keyed on `MessageId` via a
+database uniqueness constraint rather than an in-memory check. `OccurredAt` is the outbox row's own
+timestamp — when the aggregate changed, not when this delivery attempt started — so it, not `IClock`, is what says when
+the event happened (the integration contracts' `occurredAt` is this value).
+
+The fan-out has several kinds of handler for one event: the audit, the notifiers (the
+`notifications` skill), the job enqueuers, and the **integration publishers**
+(`IntegrationEvents/IntegrationPublishers.cs`), which map a domain event to its versioned contract
+and hand it to `IIntegrationEventPublisher`. Those write nothing of their own and republish with
+the same `EventId` (= `MessageId`) on redelivery, so a re-run duplicates a message the consumer
+dedupes rather than a row. See the `messaging` skill.
 
 ## Error handling
 

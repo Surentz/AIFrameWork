@@ -7,7 +7,7 @@ description: Use when editing or debugging a background job in this repo - lanes
 
 **Jobs run in the worker. The API listens to nothing.** That is the whole rule, and it is
 enforced rather than intended: `ApiPublishesOnlyTests` asserts against the runtime's own endpoint
-list that no `jobs_*` queue has a listener on the API host, and `JobDeliveryTests` asserts the
+list that no `aiframework.jobs.*` queue has a listener on the API host, and `JobDeliveryTests` asserts the
 mirror image on the worker. The API registers *routing* for every lane — publishing is how a job
 starts — and never `ListenToRabbitQueue`.
 
@@ -182,4 +182,6 @@ session — never wait for a cron to come round.
 
 ## Jobs ride RabbitMQ
 
-Jobs ride RabbitMQ (ADR 0026); Postgres still holds the envelope storage.
+Jobs ride RabbitMQ (ADR 0026); Postgres still holds the envelope storage. The `messaging` skill
+has the broker topology, outage behaviour, and the check to run before upgrading a database that
+still has jobs in the old Postgres queues.

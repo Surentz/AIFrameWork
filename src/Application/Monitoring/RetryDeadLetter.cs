@@ -6,11 +6,13 @@ namespace AiFramework.Application.Monitoring;
 /// Puts one dead-lettered message back in play.
 /// </summary>
 /// <remarks>
-/// <b>This is a write from the API into the worker's world, and it works because the transport is
-/// PostgreSQL.</b> Marking the stored envelope replayable is all the API does; the worker picks it
-/// up from the shared store on its own, and the two never talk. That property is what makes the
-/// monitoring page possible without exposing the worker through the ingress — and it is the first
-/// thing to re-examine if the transport ever becomes RabbitMQ. See ADR 0021 and ADR 0016.
+/// <b>This is a write from the API into the worker's world, and it works because the dead letters
+/// live in PostgreSQL.</b> Marking the stored envelope replayable is all the API does; the worker's
+/// durability agent picks it up from the shared store on its own, and the two never talk. That
+/// property is what makes the monitoring page possible without exposing the worker through the
+/// ingress. Verified with RabbitMQ listeners (ShipmentInboundTests.
+/// ADeadLetteredShipment_IsRedeliveredByRetry): dead letters stay in Postgres, so replay is
+/// transport-independent. See ADR 0021, ADR 0016 and ADR 0026.
 /// </remarks>
 public sealed record RetryDeadLetter(Guid MessageId) : ICommand<bool>;
 

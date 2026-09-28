@@ -129,6 +129,12 @@ else {
 # `dotnet run` — no Seq, no -WithSeq — quietly attempting exports to a collector that was never
 # started. The env var is removed again immediately after spawning, same as ConnectionStrings__
 # Default's own cleanup above, so it does not leak into commands run later in this same window.
+#
+# ConnectionStrings__RabbitMq is set the same way, and always, not only with -WithSeq: both hosts
+# refuse to start without a broker (ADR 0026), and appsettings.Development.json names port 55672.
+# Setting it from $rabbitPort is what makes a RABBITMQ_PORT override reach the API and the worker,
+# exactly as DEV_PG_PORT reaches the migrations through ConnectionStrings__Default above. It is
+# removed after spawning for the same reason as the OTLP pair.
 Invoke-Step 'Launching the API' {
     $env:ConnectionStrings__RabbitMq = "amqp://aiframework:aiframework@localhost:$rabbitPort/"
     if ($WithSeq) {
@@ -152,7 +158,7 @@ Invoke-Step 'Launching the API' {
 
 # The job worker, in a window of its own. The compose loop runs the same host split the cluster
 # does (ADR 0016) rather than a convenient approximation: the API here listens on no job queue, so
-# without this window an enqueued job simply sits in Postgres and nothing says so.
+# without this window an enqueued job simply sits on its RabbitMQ queue and nothing says so.
 #
 # It inherits the same environment as the API above — including -WithSeq's OTLP settings, which is
 # why this block sits inside the same try/finally-guarded region rather than after the cleanup:
