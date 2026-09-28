@@ -111,6 +111,24 @@ public sealed class RecordShipmentHandlerTests
     }
 
     [Fact]
+    public void Validator_WithAShipmentIdOverTheLimit_Fails()
+    {
+        var result = new RecordShipmentValidator(_clock).TestValidate(
+            new RecordShipment(Guid.NewGuid(), new string('x', RecordShipmentValidator.MaximumShipmentIdLength + 1), Now));
+
+        result.ShouldHaveValidationErrorFor(c => c.ShipmentId);
+    }
+
+    [Fact]
+    public void Validator_WithAShipmentIdAtTheLimit_Passes()
+    {
+        var result = new RecordShipmentValidator(_clock).TestValidate(
+            new RecordShipment(Guid.NewGuid(), new string('x', RecordShipmentValidator.MaximumShipmentIdLength), Now));
+
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
     public void Validator_WithAnEmptyOrderId_Fails()
     {
         var result = new RecordShipmentValidator(_clock).TestValidate(

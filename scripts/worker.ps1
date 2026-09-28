@@ -29,6 +29,9 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # run at once. Nothing routes traffic here; the port exists for the health probes.
 $workerPort = 5235
 
+# Same default docker-compose.yml's RABBITMQ_PORT falls back to, and dev.ps1 reads.
+$rabbitPort = if ($env:RABBITMQ_PORT) { $env:RABBITMQ_PORT } else { '55672' }
+
 function Invoke-Step {
     param([string]$Name, [scriptblock]$Action)
     Write-Host "==> $Name" -ForegroundColor Cyan
@@ -54,8 +57,7 @@ if (-not $SkipDatabase) {
 }
 
 if ($SkipDatabase) {
-    $rabbitPort = if ($env:RABBITMQ_PORT) { [int]$env:RABBITMQ_PORT } else { 55672 }
-    if (-not (Get-NetTCPConnection -LocalPort $rabbitPort -State Listen -ErrorAction SilentlyContinue)) {
+    if (-not (Get-NetTCPConnection -LocalPort ([int]$rabbitPort) -State Listen -ErrorAction SilentlyContinue)) {
         # Plain ASCII, as dev.ps1's messages: PowerShell 5.1 mangles an em dash.
         throw "Nothing is listening on the message broker port ($rabbitPort). The worker refuses to start without it - run without -SkipDatabase, or start the dev loop first."
     }
@@ -81,4 +83,16 @@ Write-Host ''
 # Foreground, so its logs are right here. ASPNETCORE_ENVIRONMENT comes from the project's
 # launchSettings.json; without Development, appsettings.Development.json never loads and the
 # startup guard throws on an empty connection string.
-dotnet run --project (Join-Path $repoRoot 'src/Worker')
+#
+# ConnectionStrings__RabbitMq is set exactly as dev.ps1 sets it for the worker it spawns:
+# appsettings.Development.json names port 55672, so without this a RABBITMQ_PORT override never
+# reaches the worker - which would then fail to connect to a broker compose started elsewhere.
+# Removed again afterwards (a finally runs on Ctrl+C too) so it does not leak into later commands
+# in this window.
+$env:ConnectionStrings__RabbitMq = "amqp://aiframework:aiframework@localhost:$rabbitPort/"
+try {
+    dotnet run --project (Join-Path $repoRoot 'src/Worker')
+}
+finally {
+    Remove-Item Env:\ConnectionStrings__RabbitMq -ErrorAction SilentlyContinue
+}

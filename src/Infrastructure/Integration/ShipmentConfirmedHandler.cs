@@ -25,6 +25,12 @@ public sealed class IntegrationMessageRejectedException(string message) : Except
 public sealed class ShipmentConfirmedHandler(ICommandDispatcher commands)
 {
     /// <summary>
+    /// The longest shipment id quoted in a rejection: the validator's own limit. The id is the
+    /// producer's, unbounded on the wire, and the message reaches the logs, wolverine_dead_letters
+    /// and the monitoring page - the over-long id is one of the things being rejected.
+    /// </summary>
+    public const int MaximumQuotedShipmentIdLength = RecordShipmentValidator.MaximumShipmentIdLength;
+    /// <summary>
     /// Rejections go straight to the dead letters - retrying cannot change "not found". Anything
     /// else (the database unreachable) falls to the worker's global policy: ScheduleRetry 1/5/30
     /// minutes, then dead letters, the job lanes' shape.
@@ -46,8 +52,14 @@ public sealed class ShipmentConfirmedHandler(ICommandDispatcher commands)
         if (!result.IsSuccess)
         {
             throw new IntegrationMessageRejectedException(
-                $"shipment {message.ShipmentId} for order {message.OrderId} rejected: " +
+                $"shipment {Quote(message.ShipmentId)} for order {message.OrderId} rejected: " +
                 $"{result.Error.Code} - {result.Error.Message}");
         }
     }
+
+    // Null-tolerant: a body with no shipmentId still deserializes, and the validator rejects it.
+    private static string Quote(string? shipmentId) =>
+        shipmentId is { Length: > MaximumQuotedShipmentIdLength }
+            ? string.Concat(shipmentId.AsSpan(0, MaximumQuotedShipmentIdLength), "...")
+            : shipmentId ?? string.Empty;
 }

@@ -48,7 +48,7 @@ names in `RabbitMqTopology`: two quorum queues for the job lanes (`aiframework.j
 by the domain event's registered name (`order.placed`, …); an alternate exchange and quorum queue
 `aiframework.events.unrouted`, capped at 100,000 messages with `drop-head`, so an event no consumer
 has bound for is kept rather than silently dropped; and a quorum queue `aiframework.shipments` for
-inbound confirmations. Consumers declare and bind their own queues, so adding one never touches
+inbound confirmations, declared with `x-single-active-consumer=true`. Consumers declare and bind their own queues, so adding one never touches
 this application. Both hosts call `DisableSystemRequestReplyQueueDeclaration()`: without it
 Wolverine declares a classic `wolverine.response.<guid>` queue and **listens** on it even on a
 sender-only connection (verified), which would break both "quorum everywhere" and "the API listens
@@ -81,6 +81,15 @@ idempotent by order state: a placed order ships; an already-shipped one is a suc
 cancelled or unknown order, or an invalid message, is rejected straight to dead letters; a
 transient failure retries on the job lanes' schedule first. A body that is not JSON dead-letters
 at once and the queue keeps moving (verified).
+
+The state check is in memory and `Order` has no concurrency token, so the queue is consumed
+**serially across every worker replica**: the single-active-consumer argument makes the broker
+deliver to one consumer at a time, and the listener is `Sequential()`, so that consumer's process
+handles one message at a time. Handled in parallel, two confirmations for one order both shipped it
+— `ShipmentInboundTests` found three `OrderShipped` rows for three confirmations — which meant a
+second buyer notification and a second `order.shipped.v1` under a different `eventId`, breaking
+consumer dedupe. Serial consumption fixes that with configuration alone, where a concurrency token
+would have needed a migration and a retry path.
 
 **Jobs on RabbitMQ.** `JobRegistration` routes with `ToRabbitQueue` and listens with
 `ListenToRabbitQueue` instead of the Postgres queue transport; parallelism, the error policy,
@@ -115,7 +124,8 @@ the dev Postgres string.
 **What this makes easy.** Another system can consume every event this application raises by
 binding a queue, with no change here. An inbound integration is a contract, a handler and a
 listener. Job delivery is push rather than poll, and queue load leaves the primary database.
-Worker replicas are competing consumers on quorum queues, so scaling them is a replica count.
+Worker replicas are competing consumers on the job lanes' quorum queues, so scaling them is a
+replica count.
 
 **What this costs, concretely.**
 
@@ -139,6 +149,16 @@ Worker replicas are competing consumers on quorum queues, so scaling them is a r
   configure/write/read permissions (`.*`) on the default vhost `/` (verified with
   `rabbitmqctl list_users` and `list_permissions`); **a real deployment needs a producer-only
   RabbitMQ user for the warehouse**, allowed to write to that queue and nothing else.
+- **Shipment confirmations do not scale out.** One consumer on one replica handles them one at a
+  time; more replicas add only standbys, which take over when the active consumer disconnects.
+  Ample for confirmations, which each cost one order read and one save.
+- **A broker that already holds `aiframework.shipments` without the argument stops the worker at
+  startup.** RabbitMQ refuses to redeclare a queue with different arguments (`PRECONDITION_FAILED -
+  inequivalent arg 'x-single-active-consumer'`, verified). Only a broker that ran an earlier build
+  of this branch can have one — a dev `rabbitmqdata` volume or a kind PVC. Delete the queue once
+  with `rabbitmqctl delete_queue aiframework.shipments` inside the broker (not `docker compose
+  down -v`, which drops `pgdata` too); the `messaging` skill has the commands. Nothing migrates it
+  in code: the branch is unreleased.
 - **An outage grows `wolverine_outgoing_envelopes`**, bounded by the outage's length and drained
   automatically. Nothing surfaces the count yet; that is a follow-up.
 - **Jobs waiting in the old Postgres queues at upgrade time are not migrated.** The

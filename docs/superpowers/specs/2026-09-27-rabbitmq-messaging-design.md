@@ -79,7 +79,7 @@ All objects are durable and declared by Wolverine at startup (`AutoProvision()`)
 | `aiframework.jobs.heavy` | quorum queue | yes | The heavy job lane (today `jobs_heavy`) |
 | `aiframework.events` | topic exchange, `alternate-exchange=aiframework.events.unrouted` | yes | Everything we publish. Routing key = the event name already registered with `AddDomainEvent`: `order.placed`, `order.shipped`, `order.cancelled`, `product.price_changed` |
 | `aiframework.events.unrouted` | fanout exchange + quorum queue of the same name, `x-max-length=100000`, `x-overflow=drop-head` | yes | Catches every event no consumer has bound for, so nothing is silently dropped. Capped so it cannot fill a disk when nobody reads it |
-| `aiframework.shipments` | quorum queue | yes | Inbound shipment confirmations. Producers publish to it by name through the default exchange |
+| `aiframework.shipments` | quorum queue, `x-single-active-consumer=true` | yes | Inbound shipment confirmations. Producers publish to it by name through the default exchange. Consumed one at a time across all worker replicas (section 4) |
 
 Consumers of our events declare and bind **their own** queues (`order.*`, `#`, …). Adding a
 consumer never touches this application. Once one binds a key, those events stop reaching
@@ -177,6 +177,15 @@ and the buyer's 30-second staleness is the limit ADR 0024 accepted.
 | Not found | Rejected |
 | Empty ids, or `shippedAt` more than 5 minutes in the future | Rejected by the validator |
 
+**Serial consumption.** The state check is in memory and `Order` has no concurrency token, so two
+confirmations for one order handled at once would both ship it: two `OrderShipped` rows, two buyer
+notifications, and two `order.shipped.v1` under different `eventId`s that no consumer can dedupe.
+The queue is therefore declared with `x-single-active-consumer=true` (competing worker replicas take
+turns; the broker delivers to one consumer at a time) and the listener is `Sequential()` (that
+consumer's process handles one message at a time). Added after the final branch review; RabbitMQ
+refuses to redeclare an existing queue with different arguments, so a broker that already has the
+queue without it needs it deleted once (the messaging skill's upgrade section).
+
 **Failures:**
 
 - Rejections go straight to dead letters; retrying cannot change the answer.
@@ -254,7 +263,7 @@ A `rabbitmq` service in the default profile, so a plain `docker compose up` star
 
 | Script (menu) | Change |
 |---|---|
-| `scripts/dev.ps1` (2, 3) | `docker compose up -d --wait` now waits on RabbitMQ too, **before** the API and worker start (both refuse to start without it). Sets `ConnectionStrings__RabbitMq` from `RABBITMQ_PORT`, like the Postgres string from `DEV_PG_PORT`. The port pre-check covers 55672/55673. The Ready summary prints the UI URL and login. |
+| `scripts/dev.ps1` (2, 3) | `docker compose up -d --wait` now waits on RabbitMQ too, **before** the API and worker start (both refuse to start without it). Sets `ConnectionStrings__RabbitMq` from `RABBITMQ_PORT`, like the Postgres string from `DEV_PG_PORT`. The port pre-check covers only the API, worker and Vite ports (5234/5235/5173), not 55672/55673: when the broker is already up, compose itself holds those, and `up -d` is idempotent. The Ready summary prints the UI URL and login. |
 | `scripts/worker.ps1` (4) | Checks the AMQP port first and says "start the dev loop first" rather than letting the worker die on a connection error |
 | `scripts/stop-dev.ps1` (5) | No change; `docker compose down` already stops default-profile services, and messages stay in the volume |
 | `scripts/e2e.ps1` (8) | `docker-compose.e2e.yml` gains a throwaway RabbitMQ (no volume, port `${E2E_RABBITMQ_PORT:-55682}`). `playwright.config.ts` passes the connection string to both web servers. CI's e2e job gets it through the same compose file. |
@@ -269,7 +278,7 @@ A `rabbitmq` service in the default profile, so a plain `docker compose up` star
 | Identity across restarts | The StatefulSet gives `rabbitmq-0` a stable hostname; data on a PVC |
 | Node drains | The PVC pins it to one node, like Postgres. PDB `maxUnavailable: 1` (a one-replica `minAvailable: 1` blocks drains forever) |
 | Memory | Requests 256Mi, limit 512Mi. RabbitMQ derives its memory watermark from the cgroup limit |
-| Replicas | API: two replicas publishing only. Worker: any count, as competing consumers on quorum queues |
+| Replicas | API: two replicas publishing only. Worker: any count, as competing consumers on the job queues; `aiframework.shipments` has a single active consumer, the other replicas standing by (section 4) |
 | Credentials | `secret.yaml`: `RABBITMQ_DEFAULT_USER/PASS` and `ConnectionStrings__RabbitMq=amqp://…@rabbitmq:5672/` |
 | Management UI | Not on the ingress. `kubectl port-forward svc/rabbitmq 15672` is documented in the kubernetes skill |
 | e2e against the cluster | The shipment e2e test publishes to AMQP from the host, which the cluster doesn't expose, so it is `@local-only`. Everything else runs, and exercises outbound publishing and the job lanes implicitly |

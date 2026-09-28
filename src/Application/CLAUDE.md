@@ -55,8 +55,10 @@ Unlike caching, `Microsoft.Extensions.Logging.Abstractions` is not banned here �
 interfaces only, ships with the shared framework, and is the canonical port shape, so a handler
 with something genuinely worth saying that the behavior cannot know (a business-meaningful
 event mid-handler, not a dispatch outcome) may inject `ILogger<T>` directly rather than
-inventing a bespoke port for it. No handler does today; keep it that way unless one truly needs
-to. What may **never** be referenced here is a logging *implementation* or *sink* package —
+inventing a bespoke port for it. One does: `OrderPlacedIntegrationPublisher` warns when the order
+it must describe is missing, so `order.placed.v1` silently not going out leaves a trace (the
+project references the package explicitly for it). Keep it that rare, and never log the event
+or request instance. What may **never** be referenced here is a logging *implementation* or *sink* package —
 `Microsoft.Extensions.Logging`, `Serilog`, an exporter, anything that chooses where a log record
 goes. That choice belongs to `Infrastructure`/`Api`, same as the store for caching.
 
@@ -64,7 +66,7 @@ This is not hook-enforced — `Microsoft.Extensions.Logging.Abstractions` is not
 hook's banned list for this layer either, the same gap the caching restriction above already
 has. It is carried by review and by `dotnet-reviewer`, not by a test: an architecture test
 proving "no *implementation* package is referenced" would be checking a hypothetical against a
-layer that references no logging package at all today, same as the caching case, so no such
+layer that references only the abstractions package, same as the caching case, so no such
 test exists for the same reason `CachingRegistrationTests` never grew a matching one for
 `Microsoft.Extensions.Caching.Hybrid`.
 

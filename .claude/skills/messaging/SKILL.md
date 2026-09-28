@@ -1,6 +1,6 @@
 ---
 name: messaging
-description: Use when touching RabbitMQ, integration events, the shipments listener, or anything that publishes or consumes a broker message - the topology, versioned contracts, at-least-once delivery and eventId dedupe, outage behaviour, inbound rejection vs retry, where dead letters go, adding an outbound event, and draining the old Postgres job queues on upgrade.
+description: Use when touching RabbitMQ, integration events, the shipments listener, or anything that publishes or consumes a broker message - the topology, versioned contracts, at-least-once delivery and eventId dedupe, outage behaviour, inbound rejection vs retry, where dead letters go, adding an outbound event, why the shipments listener is serial, and upgrading (draining the old Postgres job queues; a PRECONDITION_FAILED on aiframework.shipments).
 ---
 
 # Messaging
@@ -26,7 +26,7 @@ Declared by Wolverine at startup (`AutoProvision()`); every name is a constant i
 | `aiframework.jobs.light` / `.heavy` | quorum queue | The job lanes (the `jobs` skill). Declared by their routes and listeners |
 | `aiframework.events` | topic exchange, `alternate-exchange=aiframework.events.unrouted` | Everything we publish. Routing key = the domain event's `AddDomainEvent` name: `order.placed`, `order.shipped`, `order.cancelled`, `product.price_changed` |
 | `aiframework.events.unrouted` | fanout exchange + quorum queue, `x-max-length=100000`, `x-overflow=drop-head` | Every event no consumer has bound for. Without it RabbitMQ silently drops them — with no consumer yet, that is every event. Capped, so the oldest go first |
-| `aiframework.shipments` | quorum queue | Inbound `shipment.confirmed.v1`. Producers publish to it by name, through the default exchange |
+| `aiframework.shipments` | quorum queue, `x-single-active-consumer=true` | Inbound `shipment.confirmed.v1`. Producers publish to it by name, through the default exchange. Consumed one at a time across all replicas (below). Declared by its listener |
 
 - **Consumers declare and bind their own queues** (`order.*`, `#`, …). Adding one never touches
   this application; once one binds a key, those events stop reaching `unrouted`.
@@ -112,6 +112,24 @@ used as the envelope id; anything else gets a new one). `ShipmentConfirmedHandle
 | Transient (database unreachable) | The worker's global policy: `ScheduleRetry` 1/5/30 min, then dead letters |
 | Body is not JSON | `JsonException` → dead letters **at once**, even under the retry policy; the queue behind it keeps moving |
 
+**Serial, across every worker replica — do not "fix" it for throughput.** "Already shipped" is an
+in-memory check and `Order` has no concurrency token, so two confirmations for one order handled
+at once both ship it: two `OrderShipped` rows, a second buyer notification, and a second
+`order.shipped.v1` under a *different* `eventId` that consumers cannot dedupe. Two settings in
+`IntegrationEventRegistration.ListenForShipments` prevent it, and both are needed:
+
+- `ConfigureQueue(q => q.Arguments["x-single-active-consumer"] = true)` — the broker delivers to
+  one consumer at a time, so replicas take turns instead of splitting the queue; the others stand
+  by. Set on the **listener's** queue: AutoProvision applies it there (verified with
+  `rabbitmqctl list_queues name arguments`).
+- `.Sequential()` — that consumer's process handles one message at a time (the listener is durable,
+  the mode this applies to). Without it one replica still runs its prefetched messages in parallel.
+
+`ShipmentInboundTests.DuplicateShipmentsArrivingTogether_ShipTheOrderOnce` found three rows for
+three confirmations before this, and `Startup_DeclaresTheShipmentsQueueWithASingleActiveConsumer`
+reads the argument back from the broker. A new inbound listener whose handler is idempotent only
+by an in-memory state check needs the same two settings.
+
 **Dead letters live in Postgres, never on the broker.** RabbitMQ-native dead-lettering is off
 (`DisableDeadLetterQueueing()`); every failure — job or inbound — lands in
 `wolverine.wolverine_dead_letters` (`received_at = rabbitmq://queue/…`), which the monitoring page
@@ -172,6 +190,30 @@ union all select 'heavy scheduled', count(*) from wolverine_queues.wolverine_que
 If any count is not 0, let the old worker drain them first. A scheduled retry can be up to 30
 minutes out (the last `ScheduleRetry` step). A fresh database has no `wolverine_queues` tables at
 all, and there is nothing to do.
+
+## Upgrading a broker that already has `aiframework.shipments`
+
+The queue gained `x-single-active-consumer=true` late in this branch. RabbitMQ refuses to
+redeclare an existing queue with different arguments, so a broker that ran an earlier build — a
+dev `rabbitmqdata` volume, a kind PVC — stops the worker at startup with:
+
+```
+PRECONDITION_FAILED - inequivalent arg 'x-single-active-consumer' for queue 'aiframework.shipments'
+in vhost '/': received the value 'true' of type 'bool' but current is none
+```
+
+Stop the worker, delete the queue once, start the worker, which declares it afresh. Any
+confirmations still on the queue go with it, so let it empty first (management UI, or
+`rabbitmqctl list_queues name messages`):
+
+```powershell
+docker compose exec rabbitmq rabbitmqctl delete_queue aiframework.shipments        # dev
+kubectl -n aiframework exec rabbitmq-0 -- rabbitmqctl delete_queue aiframework.shipments   # kind
+```
+
+**Not `docker compose down -v`**: it deletes every named volume, `pgdata` — the dev database —
+included. A fresh broker has no queue and needs nothing. Nothing migrates this in code: the branch
+was never released.
 
 ## Testing
 

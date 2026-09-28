@@ -54,7 +54,11 @@ public sealed class ShipmentInboundTests(WorkerFactory factory)
         return order.Id;
     }
 
-    private async Task PublishShipmentAsync(Guid orderId, string shipmentId)
+    private Task PublishShipmentAsync(Guid orderId, string shipmentId) =>
+        PublishShipmentsAsync(orderId, shipmentId);
+
+    /// <summary>One confirmation per shipment id, back to back over one connection.</summary>
+    private async Task PublishShipmentsAsync(Guid orderId, params string[] shipmentIds)
     {
         // The first access to Services starts the worker, and its listener is what declares the
         // queue. Published before that, to a queue that does not exist yet, the message is dropped
@@ -62,10 +66,26 @@ public sealed class ShipmentInboundTests(WorkerFactory factory)
         _ = factory.Services;
 
         await using var probe = await BrokerProbe.ConnectAsync(factory.RabbitMqConnectionString);
-        var json = JsonSerializer.Serialize(
-            new ShipmentConfirmedV1(shipmentId, orderId, DateTimeOffset.UtcNow),
-            IntegrationJson.Options);
-        await probe.PublishToQueueAsync(RabbitMqTopology.ShipmentsQueue, json);
+        foreach (var shipmentId in shipmentIds)
+        {
+            var json = JsonSerializer.Serialize(
+                new ShipmentConfirmedV1(shipmentId, orderId, DateTimeOffset.UtcNow),
+                IntegrationJson.Options);
+            await probe.PublishToQueueAsync(RabbitMqTopology.ShipmentsQueue, json);
+        }
+    }
+
+    /// <summary>
+    /// The OrderShipped rows the hand-built outbox holds for one order. Each is one buyer
+    /// notification and one order.shipped.v1 with its own eventId, so more than one is the bug.
+    /// </summary>
+    private async Task<int> OrderShippedRowsAsync(Guid orderId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+        var id = orderId.ToString();
+        return await context.Outbox.AsNoTracking()
+            .CountAsync(m => m.EventName == "order.shipped" && m.Payload.Contains(id));
     }
 
     private async Task<OrderStatus?> StatusAsync(Guid orderId)
@@ -111,12 +131,22 @@ public sealed class ShipmentInboundTests(WorkerFactory factory)
         CountAsync(sql, new NpgsqlParameter("text", $"%{orderId}%"));
 
     /// <summary>Bounded, for the reason <see cref="WaitForStatusAsync"/> gives.</summary>
-    private async Task<bool> WaitForDeadLetterAsync(Guid orderId, TimeSpan timeout, string sql = DeadLettersForOrder)
+    private Task<bool> WaitForDeadLetterAsync(Guid orderId, TimeSpan timeout, string sql = DeadLettersForOrder) =>
+        WaitForAnyAsync(() => DeadLettersForAsync(orderId, sql), timeout);
+
+    // For a message that never deserialized, so no exception names an order: match the stored body.
+    private Task<long> DeadLettersWithBodyAsync(string body) =>
+        CountAsync(
+            "select count(*) from wolverine.wolverine_dead_letters where position(@body in body) > 0",
+            new NpgsqlParameter("body", NpgsqlDbType.Bytea) { Value = Encoding.UTF8.GetBytes(body) });
+
+    /// <summary>Bounded, for the reason <see cref="WaitForStatusAsync"/> gives.</summary>
+    private static async Task<bool> WaitForAnyAsync(Func<Task<long>> count, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            if (await DeadLettersForAsync(orderId, sql) > 0)
+            if (await count() > 0)
             {
                 return true;
             }
@@ -125,6 +155,26 @@ public sealed class ShipmentInboundTests(WorkerFactory factory)
         }
 
         return false;
+    }
+
+    // What the broker actually declared, not what the configuration asked for: the argument is set
+    // through the listener's ConfigureQueue, and only AutoProvision decides whether it lands.
+    [Fact]
+    public async Task Startup_DeclaresTheShipmentsQueueWithASingleActiveConsumer()
+    {
+        _ = factory.Services; // see PublishShipmentAsync
+
+        // [{"name": "...", "arguments": [["x-queue-type", "longstr", "quorum"], ...]}, ...]
+        using var queues = JsonDocument.Parse(await factory.ListQueuesWithArgumentsAsync());
+        var shipments = queues.RootElement.EnumerateArray()
+            .Single(q => string.Equals(
+                q.GetProperty("name").GetString(), RabbitMqTopology.ShipmentsQueue, StringComparison.Ordinal));
+        var arguments = shipments.GetProperty("arguments").EnumerateArray()
+            .ToDictionary(a => a[0].GetString()!, a => a[2].ToString(), StringComparer.Ordinal);
+
+        arguments.Should().Contain(RabbitMqTopology.SingleActiveConsumerArgument, "True",
+            "competing worker replicas must take turns on this queue, never split it");
+        arguments.Should().Contain("x-queue-type", "quorum");
     }
 
     [Fact]
@@ -174,11 +224,36 @@ public sealed class ShipmentInboundTests(WorkerFactory factory)
         await PublishShipmentAsync(orderId, "WH-DUP");
         await PublishShipmentAsync(orderId, "WH-DUP-2");
 
-        // A marker message after the duplicates: once it is handled, the duplicates were too.
+        // A marker message after the duplicates: once it is handled, the duplicates were too. That
+        // holds because the listener is serial - one consumer across replicas (single active
+        // consumer), one message at a time within it (Sequential) - so the queue is handled in order.
         var marker = await PlaceOrderAsync();
         await PublishShipmentAsync(marker, "WH-MARKER");
         (await WaitForStatusAsync(marker, OrderStatus.Shipped, Delivery)).Should().BeTrue();
 
+        (await DeadLettersForAsync(orderId)).Should().Be(0);
+    }
+
+    // Final review, Important 1. Duplicates that arrive TOGETHER, before either is handled: in
+    // parallel, both handlers read a Placed order, both ship it, and the order has no concurrency
+    // token to stop the second save - two OrderShipped rows, a second buyer notification, and a
+    // second order.shipped.v1 under a different eventId that no consumer can dedupe. The shipments
+    // listener is serial across every worker replica instead (single active consumer + Sequential).
+    [Fact]
+    public async Task DuplicateShipmentsArrivingTogether_ShipTheOrderOnce()
+    {
+        var orderId = await PlaceOrderAsync();
+
+        await PublishShipmentsAsync(orderId, "WH-RACE", "WH-RACE", "WH-RACE-2");
+
+        // Handled after all three: the listener takes one message at a time, in queue order.
+        var marker = await PlaceOrderAsync();
+        await PublishShipmentAsync(marker, "WH-RACE-MARKER");
+        (await WaitForStatusAsync(marker, OrderStatus.Shipped, Delivery)).Should().BeTrue();
+
+        (await StatusAsync(orderId)).Should().Be(OrderStatus.Shipped);
+        (await OrderShippedRowsAsync(orderId)).Should().Be(1,
+            "three confirmations for one order must ship it, notify the buyer and publish order.shipped.v1 once");
         (await DeadLettersForAsync(orderId)).Should().Be(0);
     }
 
@@ -256,11 +331,11 @@ public sealed class ShipmentInboundTests(WorkerFactory factory)
         (await WaitForStatusAsync(next, OrderStatus.Shipped, Delivery)).Should().BeTrue(
             "a poison message must not block the queue behind it");
 
-        // It never deserialized, so no exception names an order: match the stored body instead.
-        (await CountAsync(
-            "select count(*) from wolverine.wolverine_dead_letters where position(@body in body) > 0",
-            new NpgsqlParameter("body", NpgsqlDbType.Bytea) { Value = Encoding.UTF8.GetBytes(garbage) }))
-            .Should().Be(1, "the poison message is parked where the monitoring page can show it");
+        // Waited for, not read once: nothing orders the poison message's dead-letter write before
+        // the next message ships, so a single read straight after could race it.
+        (await WaitForAnyAsync(() => DeadLettersWithBodyAsync(garbage), Delivery)).Should().BeTrue(
+            "the poison message is parked where the monitoring page can show it");
+        (await DeadLettersWithBodyAsync(garbage)).Should().Be(1, "it is parked once, not once per attempt");
     }
 
     // Review Focus 5. stop_app/start_app rather than pausing the container: a real broker restart

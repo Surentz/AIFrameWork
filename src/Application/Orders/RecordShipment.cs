@@ -28,12 +28,15 @@ public sealed class RecordShipmentValidator : AbstractValidator<RecordShipment>
     /// <summary>Clock skew we tolerate from a warehouse's clock.</summary>
     public static readonly TimeSpan MaximumFutureSkew = TimeSpan.FromMinutes(5);
 
+    /// <summary>The longest shipment id accepted - and the most a rejection message quotes.</summary>
+    public const int MaximumShipmentIdLength = 128;
+
     public RecordShipmentValidator(IClock clock)
     {
         ArgumentNullException.ThrowIfNull(clock);
 
         RuleFor(c => c.OrderId).NotEmpty();
-        RuleFor(c => c.ShipmentId).NotEmpty().MaximumLength(128);
+        RuleFor(c => c.ShipmentId).NotEmpty().MaximumLength(MaximumShipmentIdLength);
         RuleFor(c => c.ShippedAt)
             .Must(shippedAt => shippedAt <= clock.UtcNow + MaximumFutureSkew)
             .WithMessage("A shipment cannot be dated more than five minutes in the future.");

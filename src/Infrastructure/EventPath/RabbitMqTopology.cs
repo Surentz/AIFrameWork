@@ -28,8 +28,14 @@ public static class RabbitMqTopology
 
     public const int UnroutedMaxLength = 100_000;
 
-    /// <summary>Inbound shipment confirmations. Producers publish to it by name (default exchange).</summary>
+    /// <summary>
+    /// Inbound shipment confirmations. Producers publish to it by name (default exchange). Declared
+    /// by its listener with <see cref="SingleActiveConsumerArgument"/>: consumed one at a time.
+    /// </summary>
     public const string ShipmentsQueue = "aiframework.shipments";
+
+    /// <summary>The queue argument that makes the broker deliver to one consumer at a time.</summary>
+    public const string SingleActiveConsumerArgument = "x-single-active-consumer";
 
     /// <summary>Declares the exchanges and the unrouted queue. Job and shipment queues are
     /// declared by their own routes and listeners.</summary>

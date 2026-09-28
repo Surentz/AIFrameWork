@@ -5,6 +5,7 @@ using AiFramework.Application.Tests.Orders;
 using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace AiFramework.Application.Tests.IntegrationEvents;
@@ -17,6 +18,31 @@ public sealed class IntegrationPublisherTests
 
     private readonly IIntegrationEventPublisher _publisher = Substitute.For<IIntegrationEventPublisher>();
     private readonly IOrderRepository _orders = Substitute.For<IOrderRepository>();
+    private readonly RecordingLogger<OrderPlacedIntegrationPublisher> _logger = new();
+
+    private OrderPlacedIntegrationPublisher OrderPlacedPublisher() => new(_orders, _publisher, _logger);
+
+    /// <summary>
+    /// Records what was logged, as the formatted text an operator would read. A hand-written fake
+    /// rather than a substitute: ILogger is not ours to mock (tests/CLAUDE.md).
+    /// </summary>
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            ArgumentNullException.ThrowIfNull(formatter);
+            Entries.Add((logLevel, formatter(state, exception)));
+        }
+    }
 
     [Fact]
     public async Task HandleAsync_OrderPlaced_PublishesTheSnapshotWithTheOutboxMessageIdAsEventId()
@@ -25,7 +51,7 @@ public sealed class IntegrationPublisherTests
         var order = Order.Place(Guid.NewGuid(), buyer, 2, OccurredAt, AnOrderedProduct.Any(), "SKU-1");
         _orders.GetForPublishingAsync(order.Id, Arg.Any<CancellationToken>()).Returns(order);
 
-        await new OrderPlacedIntegrationPublisher(_orders, _publisher).HandleAsync(
+        await OrderPlacedPublisher().HandleAsync(
             new OrderPlaced(order.Id, "SKU-1", 2), Context, CancellationToken.None);
 
         await _publisher.Received(1).PublishAsync(
@@ -39,10 +65,23 @@ public sealed class IntegrationPublisherTests
     {
         _orders.GetForPublishingAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Order?)null);
 
-        await new OrderPlacedIntegrationPublisher(_orders, _publisher).HandleAsync(
+        await OrderPlacedPublisher().HandleAsync(
             new OrderPlaced(Guid.NewGuid(), "SKU", 1), Context, CancellationToken.None);
 
         await _publisher.DidNotReceiveWithAnyArgs().PublishAsync<OrderPlacedV1>(default!, default);
+    }
+
+    // Publishing nothing must not be silent: an order.placed.v1 that never goes out leaves a trace.
+    [Fact]
+    public async Task HandleAsync_OrderPlacedForAnOrderThatNoLongerExists_WarnsWithTheOrderId()
+    {
+        var orderId = Guid.NewGuid();
+        _orders.GetForPublishingAsync(orderId, Arg.Any<CancellationToken>()).Returns((Order?)null);
+
+        await OrderPlacedPublisher().HandleAsync(new OrderPlaced(orderId, "SKU", 1), Context, CancellationToken.None);
+
+        _logger.Entries.Should().ContainSingle().Which.Should().Be(
+            (LogLevel.Warning, $"Order {orderId} was not found, so no order.placed.v1 was published for it."));
     }
 
     [Fact]

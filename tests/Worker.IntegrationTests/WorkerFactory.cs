@@ -53,6 +53,24 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
         }
     }
 
+    /// <summary>
+    /// Every queue on the broker with its declared arguments, as <c>rabbitmqctl list_queues</c>
+    /// prints them in JSON. Arguments are invisible over AMQP (a passive declare returns only the
+    /// counts), and this reads them without the management API.
+    /// </summary>
+    public async Task<string> ListQueuesWithArgumentsAsync()
+    {
+        var result = await _rabbit.ExecAsync(
+            ["rabbitmqctl", "--quiet", "list_queues", "name", "arguments", "--formatter", "json"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl list_queues failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+
+        return result.Stdout;
+    }
+
     // The containers must start BEFORE anything touches Services: the first access builds AND
     // STARTS the host, which reads the containers' connection strings. Reversing these two fails
     // to connect.

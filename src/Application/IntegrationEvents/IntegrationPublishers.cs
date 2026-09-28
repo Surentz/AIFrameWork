@@ -2,6 +2,7 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
+using Microsoft.Extensions.Logging;
 
 namespace AiFramework.Application.IntegrationEvents;
 
@@ -9,8 +10,9 @@ namespace AiFramework.Application.IntegrationEvents;
 // write nothing of their own, and a redelivery republishes with the SAME EventId, which is what
 // consumers deduplicate on. Delivery is at least once - see the messaging skill.
 
-public sealed class OrderPlacedIntegrationPublisher(
-    IOrderRepository orders, IIntegrationEventPublisher publisher) : IDomainEventHandler<OrderPlaced>
+public sealed partial class OrderPlacedIntegrationPublisher(
+    IOrderRepository orders, IIntegrationEventPublisher publisher, ILogger<OrderPlacedIntegrationPublisher> logger)
+    : IDomainEventHandler<OrderPlaced>
 {
     public async Task HandleAsync(OrderPlaced domainEvent, DomainEventContext context, CancellationToken cancellationToken)
     {
@@ -21,7 +23,11 @@ public sealed class OrderPlacedIntegrationPublisher(
         var order = await orders.GetForPublishingAsync(domainEvent.OrderId, cancellationToken).ConfigureAwait(false);
         if (order is null)
         {
-            return; // Nothing to describe. The order was placed in this same transaction, so this is not expected.
+            // Nothing to describe. The order was placed in this same transaction, so this is not
+            // expected - and returning quietly would make order.placed.v1 vanish without a trace.
+            // The id only: never the event instance (root CLAUDE.md, Logging).
+            LogOrderMissing(logger, domainEvent.OrderId);
+            return;
         }
 
         await publisher.PublishAsync(
@@ -30,6 +36,10 @@ public sealed class OrderPlacedIntegrationPublisher(
                 order.Product?.Name, order.Product?.UnitPrice),
             cancellationToken).ConfigureAwait(false);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Order {OrderId} was not found, so no order.placed.v1 was published for it.")]
+    private static partial void LogOrderMissing(ILogger logger, Guid orderId);
 }
 
 public sealed class OrderShippedIntegrationPublisher(IIntegrationEventPublisher publisher)

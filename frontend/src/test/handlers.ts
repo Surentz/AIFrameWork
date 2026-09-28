@@ -107,7 +107,7 @@ export const handlers = [
           exceptionType: 'InvalidOperationException',
           exceptionMessage: 'the handler gave up',
           sentAt: '2026-09-20T10:00:00+00:00',
-          receivedAt: 'postgresql://jobs_heavy/',
+          receivedAt: 'rabbitmq://queue/aiframework.jobs.heavy',
           replayable: false,
         },
       ],
