@@ -36,6 +36,8 @@ public sealed class WorkerCodegenTests
             .ConfigureServices(services => services.AddInfrastructure(PlaceholderConnectionString))
             .AddWolverineEventPath(
                 PlaceholderConnectionString,
+                // No broker: durable is false, which never reaches the RabbitMQ configuration.
+                rabbitMqConnectionString: null,
                 // The Worker assembly, because that is where this project's codegen writes and
                 // where the generated files are compiled in — the same assembly Program.cs passes.
                 typeof(Program).Assembly,

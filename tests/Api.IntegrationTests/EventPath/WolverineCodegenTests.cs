@@ -28,6 +28,8 @@ public sealed class WolverineCodegenTests
             .ConfigureServices(services => services.AddWolverineEventPathServices())
             .AddWolverineEventPath(
                 PlaceholderConnectionString,
+                // No broker: durable is false, which never reaches the RabbitMQ configuration.
+                rabbitMqConnectionString: null,
                 // The Api assembly, because that is where codegen writes and where the
                 // generated files are compiled in — the same assembly Program.cs passes.
                 typeof(Program).Assembly,

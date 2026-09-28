@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Wolverine;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.Postgresql;
+using Wolverine.RabbitMQ;
 
 namespace AiFramework.Infrastructure.EventPath;
 
@@ -56,6 +57,12 @@ public static class WolverineEventPath
     /// </summary>
     /// <param name="host">The host builder to attach Wolverine to.</param>
     /// <param name="connectionString">The same PostgreSQL connection string the DbContext uses.</param>
+    /// <param name="rabbitMqConnectionString">
+    /// The broker's AMQP URI. Required whenever <paramref name="durable"/> is true - RabbitMQ is
+    /// configured inside the durable branch, so <c>Wolverine__Durable=false</c> (codegen, the
+    /// OpenAPI contract, HealthTests) turns it off with the Postgres transport and needs no switch
+    /// of its own. ADR 0026.
+    /// </param>
     /// <param name="applicationAssembly">
     /// The assembly Wolverine treats as "the application", and therefore the one it loads
     /// pre-generated handler adapters from in Release. Passed in rather than inferred: left to
@@ -101,6 +108,7 @@ public static class WolverineEventPath
     public static IHostBuilder AddWolverineEventPath(
         this IHostBuilder host,
         string connectionString,
+        string? rabbitMqConnectionString,
         Assembly applicationAssembly,
         WolverineHostRole role,
         JobOptions? jobOptions = null,
@@ -134,7 +142,7 @@ public static class WolverineEventPath
                 JobRegistration.IncludeJobHandlers(opts);
             }
 
-            ConfigureTransport(opts, connectionString, role, jobOptions, durable);
+            ConfigureTransport(opts, connectionString, rabbitMqConnectionString, role, jobOptions, durable);
 
             // Static rather than Auto deliberately: Auto silently falls back to generating code
             // at runtime, which in Release means failing later and less clearly. Static throws
@@ -169,6 +177,7 @@ public static class WolverineEventPath
     private static void ConfigureTransport(
         WolverineOptions opts,
         string connectionString,
+        string? rabbitMqConnectionString,
         WolverineHostRole role,
         JobOptions? jobOptions,
         bool durable)
@@ -180,6 +189,10 @@ public static class WolverineEventPath
         }
 
         ConfigureDurability(opts, connectionString);
+
+        // Before ConfigureJobs, for the same ordering reason given below: a route to a broker
+        // queue needs the transport it names to be registered already.
+        ConfigureRabbitMq(opts, rabbitMqConnectionString, role);
 
         // AFTER ConfigureDurability, and only when durable. Both halves matter, and both were
         // found by failing tests rather than reasoned out:
@@ -273,6 +286,56 @@ public static class WolverineEventPath
         //   local://...orderplacednotification/  mode=BufferedInMemory
         // and Durable after. WolverineLocalQueueDurabilityTests pins it.
         opts.Policies.UseDurableLocalQueues();
+    }
+
+    /// <summary>The broker, per ADR 0026. Only ever reached when durable.</summary>
+    private static void ConfigureRabbitMq(
+        WolverineOptions opts, string? rabbitMqConnectionString, WolverineHostRole role)
+    {
+        // Loud, like Program.cs's ConnectionStrings:Default guard. A durable host with no broker
+        // configured is a misconfiguration, and starting "healthy" with no transport would queue
+        // every job into nowhere.
+        if (string.IsNullOrWhiteSpace(rabbitMqConnectionString))
+        {
+            throw new InvalidOperationException(
+                "ConnectionStrings:RabbitMq is required when Wolverine is durable. Set " +
+                "ConnectionStrings__RabbitMq (double underscores), or Wolverine__Durable=false for a " +
+                "host that must start without infrastructure.");
+        }
+
+        var rabbit = opts.UseRabbitMq(new Uri(rabbitMqConnectionString))
+            // Declares what the routes and listeners name, at startup. Needs the broker reachable,
+            // which is the fail-fast contract: an unreachable broker stops the host (spec section 6).
+            .AutoProvision()
+            // Failures go to Wolverine's Postgres dead-letter storage, which the monitoring page
+            // lists and retries - never to a RabbitMQ-native DLQ nobody would look at.
+            .DisableDeadLetterQueueing()
+            .UseQuorumQueues()
+            // On both hosts. Left on, EVERY host - even a sender-only one - declares a classic,
+            // auto-delete wolverine.response.<guid> queue and listens on it for request/reply,
+            // which nothing here uses: the API would consume from the broker after all (ADR 0016),
+            // and the queue would break "quorum everywhere". TopologyTests caught the listener.
+            .DisableSystemRequestReplyQueueDeclaration()
+            .ConfigureChannelCreation(channel =>
+            {
+                channel.PublisherConfirmationsEnabled = true;
+                channel.PublisherConfirmationTrackingEnabled = true;
+            });
+
+        // The API only sends. A sender-only connection is the transport-level half of
+        // ApiPublishesOnlyTests: there is no listening connection to attach a listener to. Not
+        // sufficient on its own - see the reply queue above - and TopologyTests pins the result.
+        if (role is WolverineHostRole.PublishesJobs)
+        {
+            rabbit.UseSenderConnectionOnly();
+        }
+
+        RabbitMqTopology.Declare(rabbit);
+
+        // Every sending endpoint durable: a job or an event is written to Postgres before the broker
+        // sees it, and a broker outage only delays it.
+        opts.Policies.UseDurableOutboxOnAllSendingEndpoints();
+        opts.Policies.UseDurableInboxOnAllListeners();
     }
 
     /// <summary>Registers what the spike's handler needs. Called from AddInfrastructure.</summary>

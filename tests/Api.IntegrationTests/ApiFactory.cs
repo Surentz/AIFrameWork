@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Testcontainers.PostgreSql;
+using Testcontainers.RabbitMq;
 
 namespace AiFramework.Api.IntegrationTests;
 
@@ -20,12 +21,18 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
         .Build();
 
-    // The container must start BEFORE anything touches Services: the first access to
-    // Services builds the host, which runs ConfigureWebHost, which reads the container's
-    // connection string. Reversing these two lines fails with a connection error.
+    private readonly RabbitMqContainer _rabbit =
+        new RabbitMqBuilder("rabbitmq:4.3-management-alpine").Build();
+
+    /// <summary>For tests that inspect or publish to the broker directly (BrokerProbe).</summary>
+    public string RabbitMqConnectionString => _rabbit.GetConnectionString();
+
+    // The containers must start BEFORE anything touches Services: the first access to
+    // Services builds the host, which runs ConfigureWebHost, which reads the containers'
+    // connection strings. Reversing these two lines fails with a connection error.
     async Task IAsyncLifetime.InitializeAsync()
     {
-        await _container.StartAsync();
+        await Task.WhenAll(_container.StartAsync(), _rabbit.StartAsync());
         using var scope = Services.CreateScope();
         await scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>()
             .Database.MigrateAsync();
@@ -35,15 +42,17 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // ValueTask DisposeAsync() from IAsyncDisposable, so declaring xUnit's
     // Task DisposeAsync() implicitly would hide it and leak the host.
     //
-    // The host goes BEFORE the container, the mirror of InitializeAsync. The other way round,
+    // The host goes BEFORE the containers, the mirror of InitializeAsync. The other way round,
     // durable Wolverine's DurabilityAgent keeps polling a database that is already gone and logs
     // each failure; on Windows one of those lands after the EventLog provider is disposed, and the
     // resulting ObjectDisposedException on a thread-pool thread crashes the test host after every
-    // test has passed ("Test Run Aborted"). Whether it hit was down to scheduling.
+    // test has passed ("Test Run Aborted"). Whether it hit was down to scheduling. The broker
+    // follows the same rule: a host outliving it would sit in its reconnect loop while stopping.
     async Task IAsyncLifetime.DisposeAsync()
     {
         await base.DisposeAsync();
         await _container.DisposeAsync();
+        await _rabbit.DisposeAsync();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -55,6 +64,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // setting must be supplied before the host is built, not swapped in afterward via
         // ConfigureServices below — otherwise the stricter guard throws first.
         builder.UseSetting("ConnectionStrings:Default", _container.GetConnectionString());
+
+        // Durable Wolverine now also connects to RabbitMQ while the host starts (ADR 0026), so the
+        // broker, like the database, must be supplied before the host is built.
+        builder.UseSetting("ConnectionStrings:RabbitMq", _rabbit.GetConnectionString());
 
         // CreateAuthenticatedClientAsync registers a fresh user for nearly every test in this
         // project, all from one address. The production limit would exhaust itself partway

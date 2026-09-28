@@ -83,6 +83,9 @@ var jobOptions = builder.Configuration.GetSection("Jobs").Get<JobOptions>() ?? n
 
 builder.Host.AddWolverineEventPath(
     connectionString,
+    // The broker (ADR 0026). Null is allowed here and refused inside the durable branch, so a host
+    // started with Wolverine__Durable=false needs no broker at all.
+    builder.Configuration.GetConnectionString("RabbitMq"),
     // This project's own assembly: Release resolves pre-generated adapters from it, and
     // `codegen write` run against this project writes them into src/Worker/Internal/Generated.
     // It cannot be the Api's — that would need a Worker -> Api reference the dependency rule
