@@ -85,6 +85,11 @@ Consumers of our events declare and bind **their own** queues (`order.*`, `#`, â
 consumer never touches this application. Once one binds a key, those events stop reaching
 `unrouted`.
 
+**No reply queue.** By default Wolverine declares a classic `wolverine.response.<guid>` queue per
+host and listens on it for request/reply, even on a sender-only connection (verified, plan Task 1
+V1). Nothing here uses request/reply, and that listener would break both "quorum everywhere" and
+"the API listens to no queue", so both hosts call `DisableSystemRequestReplyQueueDeclaration()`.
+
 ## 2. Contracts
 
 Plain JSON, System.Text.Json, camelCase properties, enums as names (matching the HTTP API). The
@@ -112,6 +117,9 @@ event can change shape without breaking anyone outside.
   published alongside v1 until consumers have moved.
 - Inbound needs a JSON body only: `DefaultIncomingMessage<ShipmentConfirmedV1>()` treats anything on
   `aiframework.shipments` as that type, with no Wolverine headers required.
+- One `JsonSerializerOptions` defines the shape, but each Wolverine endpoint gets a **copy** of it:
+  Wolverine's `SystemTextJsonSerializer` adds a converter to the options it is given, so it cannot
+  share a read-only instance (verified, plan Task 1 V2).
 
 ## 3. Outbound flow
 
@@ -213,7 +221,7 @@ the job handlers, so the worker's generated tree includes it.
 | Situation | Behaviour |
 |---|---|
 | Durable, connection string missing | Refuse to start, naming the key (like the `ConnectionStrings:Default` guard) |
-| Broker unreachable at startup | Refuse to start: deterministic, and misconfiguration is loud |
+| Broker unreachable at startup | Refuse to start: deterministic, and misconfiguration is loud. Wolverine retries the connection for `BrokerInitializationTimeout` (2 minutes by default) before `BrokerInitializationException` stops the host, so a misconfigured host takes about two minutes to fail (verified, plan Task 1 V4) |
 | Broker down while running | Keep serving. Outbound envelopes wait in Postgres, and listeners reconnect |
 
 **Readiness does not include the broker.** Probing it would pull every API pod out of the load
