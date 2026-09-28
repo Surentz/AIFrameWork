@@ -28,7 +28,8 @@ public enum WolverineHostRole
     PublishesJobs,
 
     /// <summary>
-    /// Listens on the lanes named in <c>Jobs:Queues</c>, and runs the job handlers. The worker.
+    /// Listens on the job lanes named in <c>Jobs:Queues</c> and the inbound integration queue,
+    /// and runs their handlers. The worker.
     /// </summary>
     ProcessesJobs,
 }
@@ -141,6 +142,10 @@ public static class WolverineEventPath
             if (role is WolverineHostRole.ProcessesJobs)
             {
                 JobRegistration.IncludeJobHandlers(opts);
+
+                // The inbound integration handler, for the same reason as the job handlers: here,
+                // not beside its listener in the durable branch, or `codegen write` never sees it.
+                opts.Discovery.IncludeType<ShipmentConfirmedHandler>();
             }
 
             ConfigureTransport(opts, connectionString, rabbitMqConnectionString, role, jobOptions, durable);
@@ -251,6 +256,10 @@ public static class WolverineEventPath
             jobOptions ?? throw new ArgumentNullException(
                 nameof(jobOptions),
                 $"A host in the {nameof(WolverineHostRole.ProcessesJobs)} role must be given JobOptions."));
+
+        // Inbound integration messages ride the same side of the split: the worker consumes
+        // shipment.confirmed.v1, the API never does. ADR 0026.
+        IntegrationEventRegistration.ListenForShipments(opts);
     }
 
     /// <summary>

@@ -23,7 +23,10 @@ public sealed record IntegrationEventDescriptor(
                 .DefaultSerializer(new SystemTextJsonSerializer(new JsonSerializerOptions(IntegrationJson.Options))));
 }
 
-/// <summary>Every outbound contract, explicitly. IntegrationEventRegistrationTests enforces completeness.</summary>
+/// <summary>
+/// Every outbound contract, explicitly, and the one inbound listener. IntegrationEventRegistrationTests
+/// enforces outbound completeness.
+/// </summary>
 public static class IntegrationEventRegistration
 {
     public static IReadOnlyList<IntegrationEventDescriptor> Outbound { get; } =
@@ -42,5 +45,18 @@ public static class IntegrationEventRegistration
         {
             descriptor.Route(opts);
         }
+    }
+
+    /// <summary>The inbound listener. Worker only - never called for the API.</summary>
+    public static void ListenForShipments(WolverineOptions opts)
+    {
+        ArgumentNullException.ThrowIfNull(opts);
+
+        opts.ListenToRabbitQueue(RabbitMqTopology.ShipmentsQueue)
+            // Plain JSON from a producer with no Wolverine: no type header to route on, so every
+            // message on this queue is this type.
+            .DefaultIncomingMessage<ShipmentConfirmedV1>()
+            // A private copy, for the reason the outbound routes above give (V2b).
+            .DefaultSerializer(new SystemTextJsonSerializer(new JsonSerializerOptions(IntegrationJson.Options)));
     }
 }

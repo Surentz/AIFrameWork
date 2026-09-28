@@ -50,12 +50,7 @@ public static class InfrastructureRegistration
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
 
-        services.AddCommand<PlaceOrder, Guid, PlaceOrderHandler>();
-        services.AddCommand<ShipOrder, OrderStatusView, ShipOrderHandler>();
-        services.AddCommand<CancelOrder, OrderStatusView, CancelOrderHandler>();
-        services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
-        services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
-        services.AddQuery<GetOrdersToFulfil, FulfilmentQueuePage, GetOrdersToFulfilHandler>();
+        RegisterOrders(services);
 
         services.AddCommand<MarkNotificationRead, NotificationReadResult, MarkNotificationReadHandler>();
         services.AddCommand<MarkAllNotificationsRead, NotificationReadResult, MarkAllNotificationsReadHandler>();
@@ -99,6 +94,23 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedConfirmationHandler>();
 
         return services;
+    }
+
+    /// <summary>
+    /// The order use cases. Split out of <see cref="AddMessaging"/> for the same MA0051 reason as
+    /// <see cref="RegisterMonitoring"/>, and grouped because they share one aggregate.
+    /// </summary>
+    private static void RegisterOrders(IServiceCollection services)
+    {
+        services.AddCommand<PlaceOrder, Guid, PlaceOrderHandler>();
+        services.AddCommand<ShipOrder, OrderStatusView, ShipOrderHandler>();
+
+        // The worker's ship, from shipment.confirmed.v1. ADR 0026.
+        services.AddCommand<RecordShipment, ShipmentOutcome, RecordShipmentHandler>();
+        services.AddCommand<CancelOrder, OrderStatusView, CancelOrderHandler>();
+        services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
+        services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
+        services.AddQuery<GetOrdersToFulfil, FulfilmentQueuePage, GetOrdersToFulfilHandler>();
     }
 
     /// <summary>
@@ -149,6 +161,7 @@ public static class InfrastructureRegistration
     {
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
         services.AddScoped<IValidator<ShipOrder>, ShipOrderValidator>();
+        services.AddScoped<IValidator<RecordShipment>, RecordShipmentValidator>();
         services.AddScoped<IValidator<CancelOrder>, CancelOrderValidator>();
         services.AddScoped<IValidator<MarkNotificationRead>, MarkNotificationReadValidator>();
         services.AddScoped<IValidator<CreateProduct>, CreateProductValidator>();
