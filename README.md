@@ -119,13 +119,13 @@ Four mechanisms are worth knowing about before reading the code:
   failures return a failed `Result<T>` rather than throwing. See ADR 0003.
 - **A transactional outbox.** Domain events raised by an aggregate are captured by an EF Core
   interceptor and written in the same transaction as the aggregate itself, then pumped out by a
-  background service. A durable Wolverine event path runs alongside it on PostgreSQL, with no
-  message broker. See ADR 0005.
+  background service. A durable Wolverine event path runs alongside it on PostgreSQL, and
+  publishes integration events for other systems to RabbitMQ. See ADR 0005 and ADR 0026.
 - **Opt-in query caching, scoped to the caller.** A query implements `ICacheable`, a command
   implements `IInvalidatesCache`, and the behavior composes the cache key from the query type
   and the current user's id. Nothing on the authentication path is cached. See ADR 0009.
 - **Background jobs in a worker host of their own.** A job is a message with a lane
-  (`Light`/`Heavy`, one PostgreSQL queue each), enqueued through `IJobScheduler`. **The API
+  (`Light`/`Heavy`, one RabbitMQ quorum queue each), enqueued through `IJobScheduler`. **The API
   publishes and listens to nothing**; the worker is the only host with listeners, which is
   asserted from the runtime's own endpoint list rather than intended. Scheduled jobs use Quartz
   as the clock and fire on exactly one worker. See ADR 0016 and ADR 0017.
@@ -139,8 +139,8 @@ Four mechanisms are worth knowing about before reading the code:
 | Runtime | .NET 10 (`net10.0`), C# 14, SDK 10.0.400 |
 | Web | ASP.NET Core, controller-based |
 | Persistence | PostgreSQL 17 via EF Core 10 and Npgsql |
-| Messaging | Hand-rolled dispatchers; WolverineFx 6 for the durable event path and the job queues |
-| Jobs | Worker host over the PostgreSQL transport; Quartz.NET 4 as the scheduler clock |
+| Messaging | Hand-rolled dispatchers; WolverineFx 6 for the durable event path, jobs and integration events; RabbitMQ 4 as the broker |
+| Jobs | Worker host over RabbitMQ quorum queues; Quartz.NET 4 as the scheduler clock |
 | Caching | `HybridCache` (L1 only today) |
 | Realtime | SignalR, opt-in, with a Redis backplane above one replica |
 | Validation | FluentValidation |
@@ -251,7 +251,7 @@ first run needs no separate step.
 
 ### Running locally
 
-One command starts PostgreSQL, applies migrations, and launches the API, the **job worker**, and
+One command starts PostgreSQL and RabbitMQ, applies migrations, and launches the API, the **job worker**, and
 the Vite dev server in windows of their own:
 
 ```powershell
@@ -267,7 +267,7 @@ To stop all of it:
 ```
 
 The worker is not optional scenery: jobs run there and **the API listens to nothing**, so
-without that window an enqueued job simply sits in PostgreSQL and nothing says so.
+without that window an enqueued job simply sits on its RabbitMQ queue and nothing says so.
 `worker.ps1` exists because `codegen write` requires a worker restart before new adapters take
 effect, and restarting it otherwise means stopping everything.
 
@@ -349,6 +349,8 @@ so draining that node will not reschedule it. Target a different node for a drai
 | 4173 | Vite preview, used by the e2e suite | `frontend/vite.config.ts` |
 | 55433 | Development PostgreSQL, data persists | `docker-compose.yml` |
 | 55432 | End-to-end PostgreSQL, throwaway | `docker-compose.e2e.yml` |
+| 55672/55673 | Development RabbitMQ: AMQP / management UI (`aiframework`/`aiframework`) | `docker-compose.yml` |
+| 55682/55683 | End-to-end RabbitMQ, throwaway | `docker-compose.e2e.yml` |
 | 55341 | Seq, only with `dev.ps1 -WithSeq` | `docker-compose.yml` (`observability` profile) |
 | 8080/8443 | kind ingress | `deploy/kind-cluster.yaml` |
 
@@ -549,7 +551,7 @@ of backoff delay — in tests that are not about them.
 
 Several suites exist specifically to catch a class of regression that review alone would miss:
 `JobRegistrationTests` fails the build on an unregistered job, `ApiPublishesOnlyTests` asserts
-against the runtime's own endpoint list that no `jobs_*` queue has a listener on the API host,
+against the runtime's own endpoint list that no `aiframework.jobs.*` queue has a listener on the API host,
 `SensitiveCommandLoggingTests` catches a logging change that would write plaintext passwords to
 the log store, and `WolverineCodegenTests`/`WorkerCodegenTests` catch stale adapters in Debug —
 where they would otherwise stay invisible until Release.
@@ -626,10 +628,11 @@ All accepted, in [`docs/adr/`](docs/adr/).
 | [0013](docs/adr/0013-a-global-catalogue-behind-a-caller-scoped-cache.md) | A global catalogue behind a caller-scoped cache |
 | [0014](docs/adr/0014-retry-and-resilience-policies.md) | Retry and resilience policies on the request path |
 | [0015](docs/adr/0015-centralized-logging-with-opentelemetry.md) | Centralized logging with MEL and OpenTelemetry |
-| [0016](docs/adr/0016-jobs-in-a-worker-host.md) | Jobs run in a worker host, with lanes as queues, on the PostgreSQL transport |
+| [0016](docs/adr/0016-jobs-in-a-worker-host.md) | Jobs run in a worker host, with lanes as queues (the transport superseded by 0026) |
 | [0017](docs/adr/0017-quartz-as-the-job-clock.md) | Quartz.NET as the job clock |
 | [0018](docs/adr/0018-load-balancing-within-the-affinity-constraint.md) | Load balancing within the affinity constraint |
 | [0019](docs/adr/0019-realtime-notifications-over-signalr.md) | Realtime notifications over SignalR, with a Redis backplane |
+| [0026](docs/adr/0026-rabbitmq-for-asynchronous-work.md) | RabbitMQ is the broker for all asynchronous work |
 
 Record a new one with `/adr <title>`. **Check the open branches as well as `docs/adr/` before
 taking a number** — two branches that each take "the next one" produce a duplicate, which has

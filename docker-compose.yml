@@ -21,6 +21,35 @@ services:
       # Named, unlike the e2e stack's throwaway container: dev data survives a `down`.
       - pgdata:/var/lib/postgresql/data
 
+  # The message broker for all asynchronous work: job lanes, events for other systems, and
+  # messages from them (ADR 0026). In the DEFAULT profile, unlike Seq and Redis: the API and the
+  # worker refuse to start without it, so it must come up with a bare `docker compose up`.
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    # Load-bearing. RabbitMQ keys its data directory on the node name (rabbit@<hostname>), and
+    # compose's default hostname is the container id - a new one on every recreate, which would
+    # orphan every message in the named volume below.
+    hostname: rabbitmq
+    environment:
+      # Not "guest": the guest user may only connect from localhost INSIDE the container, and a
+      # connection arriving through the port mapping does not count. Throwaway credentials for a
+      # localhost-only container, the same judgement as the dev Postgres password above.
+      RABBITMQ_DEFAULT_USER: aiframework
+      RABBITMQ_DEFAULT_PASS: aiframework
+    ports:
+      - '${RABBITMQ_PORT:-55672}:5672'
+      - '${RABBITMQ_UI_PORT:-55673}:15672'
+    healthcheck:
+      # check_port_connectivity, not ping: ping answers as soon as the node is up, before the AMQP
+      # listener accepts connections - and the API refuses to start if it connects too early.
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_port_connectivity']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    volumes:
+      # Named, like pgdata: queued messages survive a `down`. `down -v` is the reset.
+      - rabbitmqdata:/var/lib/rabbitmq
+
   # Dev-only structured log UI, for the centralized logging framework
   # (docs/superpowers/plans/2026-09-13-centralized-logging.md). Behind a profile so a bare
   # `docker compose up` — what dev.ps1 runs by default — never starts it: a developer who has
@@ -87,3 +116,4 @@ services:
 volumes:
   pgdata:
   seqdata:
+  rabbitmqdata:

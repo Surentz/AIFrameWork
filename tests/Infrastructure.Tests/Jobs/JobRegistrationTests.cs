@@ -120,12 +120,6 @@ public sealed class JobRegistrationTests
         names.Should().OnlyHaveUniqueItems(
             "two lanes sharing a queue name silently merges them, so the heavy lane's work would " +
             "run at the light lane's parallelism");
-
-        names.Should().AllSatisfy(
-            name => name.Should().NotContain(
-                "-",
-                "the Postgres transport sanitises a queue name into an identifier, so a hyphen " +
-                "here would not match the endpoint it actually creates (postgresql://jobs_light/)"));
     }
 
     [Fact]

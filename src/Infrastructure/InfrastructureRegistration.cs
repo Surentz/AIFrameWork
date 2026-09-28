@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.IntegrationEvents;
 using AiFramework.Application.Monitoring;
 using AiFramework.Application.Notifications;
 using AiFramework.Application.Orders;
@@ -10,6 +11,7 @@ using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.Integration;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Messaging;
@@ -48,12 +50,7 @@ public static class InfrastructureRegistration
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
 
-        services.AddCommand<PlaceOrder, Guid, PlaceOrderHandler>();
-        services.AddCommand<ShipOrder, OrderStatusView, ShipOrderHandler>();
-        services.AddCommand<CancelOrder, OrderStatusView, CancelOrderHandler>();
-        services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
-        services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
-        services.AddQuery<GetOrdersToFulfil, FulfilmentQueuePage, GetOrdersToFulfilHandler>();
+        RegisterOrders(services);
 
         services.AddCommand<MarkNotificationRead, NotificationReadResult, MarkNotificationReadHandler>();
         services.AddCommand<MarkAllNotificationsRead, NotificationReadResult, MarkAllNotificationsReadHandler>();
@@ -97,6 +94,23 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedConfirmationHandler>();
 
         return services;
+    }
+
+    /// <summary>
+    /// The order use cases. Split out of <see cref="AddMessaging"/> for the same MA0051 reason as
+    /// <see cref="RegisterMonitoring"/>, and grouped because they share one aggregate.
+    /// </summary>
+    private static void RegisterOrders(IServiceCollection services)
+    {
+        services.AddCommand<PlaceOrder, Guid, PlaceOrderHandler>();
+        services.AddCommand<ShipOrder, OrderStatusView, ShipOrderHandler>();
+
+        // The worker's ship, from shipment.confirmed.v1. ADR 0026.
+        services.AddCommand<RecordShipment, ShipmentOutcome, RecordShipmentHandler>();
+        services.AddCommand<CancelOrder, OrderStatusView, CancelOrderHandler>();
+        services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
+        services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
+        services.AddQuery<GetOrdersToFulfil, FulfilmentQueuePage, GetOrdersToFulfilHandler>();
     }
 
     /// <summary>
@@ -147,6 +161,7 @@ public static class InfrastructureRegistration
     {
         services.AddScoped<IValidator<PlaceOrder>, PlaceOrderValidator>();
         services.AddScoped<IValidator<ShipOrder>, ShipOrderValidator>();
+        services.AddScoped<IValidator<RecordShipment>, RecordShipmentValidator>();
         services.AddScoped<IValidator<CancelOrder>, CancelOrderValidator>();
         services.AddScoped<IValidator<MarkNotificationRead>, MarkNotificationReadValidator>();
         services.AddScoped<IValidator<CreateProduct>, CreateProductValidator>();
@@ -177,6 +192,14 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderShipped>, OrderShippedNotifier>();
         services.AddScoped<IDomainEventHandler<OrderCancelled>, OrderCancelledNotifier>();
         services.AddScoped<IDomainEventHandler<ProductPriceChanged>, ProductPriceChangedNotifier>();
+
+        // Integration events to other systems (ADR 0026) - a fan-out beside the notifiers, so a
+        // broker outage never disturbs them: publishing only writes an envelope row.
+        services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedIntegrationPublisher>();
+        services.AddScoped<IDomainEventHandler<OrderShipped>, OrderShippedIntegrationPublisher>();
+        services.AddScoped<IDomainEventHandler<OrderCancelled>, OrderCancelledIntegrationPublisher>();
+        services.AddScoped<IDomainEventHandler<ProductPriceChanged>, ProductPriceChangedIntegrationPublisher>();
+        services.AddScoped<IIntegrationEventPublisher, WolverineIntegrationEventPublisher>();
     }
 
     /// <summary>The single entry point Api calls. Api must not reach past this into Infrastructure.</summary>

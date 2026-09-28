@@ -360,6 +360,9 @@ builder.Services.Configure<ResilienceOptions>(builder.Configuration.GetSection("
 // replacing it. UseWolverine hooks the host builder, so this cannot go through AddInfrastructure.
 builder.Host.AddWolverineEventPath(
     connectionString,
+    // The broker (ADR 0026). Null is allowed here and refused inside the durable branch, so a host
+    // started with Wolverine__Durable=false needs no broker at all.
+    builder.Configuration.GetConnectionString("RabbitMq"),
     // Wolverine loads its pre-generated Release adapters from this assembly, and codegen
     // writes them into this project. typeof(Program) rather than GetEntryAssembly() so that
     // WebApplicationFactory tests resolve the Api assembly and not the test host.

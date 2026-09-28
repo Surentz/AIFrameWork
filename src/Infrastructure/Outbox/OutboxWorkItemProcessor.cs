@@ -68,7 +68,8 @@ public sealed partial class OutboxWorkItemProcessor(
         try
         {
             await descriptor.Dispatch(
-                services, item.Payload, new DomainEventContext(item.Id, item.Attempt), cancellationToken)
+                services, item.Payload, new DomainEventContext(item.Id, item.Attempt, item.OccurredAt),
+                cancellationToken)
                 .ConfigureAwait(false);
         }
         // OperationCanceledException is deliberately NOT caught here — it propagates, leaving

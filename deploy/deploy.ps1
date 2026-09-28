@@ -193,6 +193,13 @@ Invoke-Step 'Waiting for postgres' {
     kubectl --context $context -n $namespace rollout status statefulset/postgres --timeout=180s
 }
 
+# 2b. The broker too: both hosts refuse to start without it (ADR 0026), so letting phase C roll out
+#     first would only buy CrashLoopBackOff and its growing restart delays. Named, not labelled, for
+#     the reason the postgres wait above gives.
+Invoke-Step 'Waiting for rabbitmq' {
+    kubectl --context $context -n $namespace rollout status statefulset/rabbitmq --timeout=180s
+}
+
 # 3. Every Job, deleted then reapplied — a completed Job has immutable fields, so a plain
 #    re-apply fails on the second deployment, for migrate and for -WithObservability's
 #    opensearch-ism-policy alike. Only migrate is actually waited on below: nothing in Phase C

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wolverine;
 using Wolverine.ErrorHandling;
-using Wolverine.Postgresql;
+using Wolverine.RabbitMQ;
 
 namespace AiFramework.Infrastructure.Jobs;
 
@@ -59,7 +59,7 @@ public sealed record JobDescriptor(
     private static Action<WolverineOptions> RouteFor<TJob>()
         where TJob : IJob =>
         static opts => opts.PublishMessage<TJob>()
-            .ToPostgresqlQueue(JobRegistration.QueueFor(TJob.Lane));
+            .ToRabbitQueue(JobRegistration.QueueFor(TJob.Lane));
 }
 
 /// <summary>
@@ -128,16 +128,12 @@ public static class JobRegistration
     /// silently, with no exception and no failing test.
     /// </summary>
     /// <remarks>
-    /// <b>Underscores, not hyphens.</b> The Postgres transport sanitises a queue name into an
-    /// identifier, so "jobs-light" becomes the endpoint <c>postgresql://jobs_light/</c> — measured,
-    /// not assumed: <c>ApiPublishesOnlyTests</c> was written against hyphens and failed with the
-    /// real names in its message. Naming them the way they actually exist keeps what is written
-    /// here matching what shows up in the database, in the endpoint list, and in a log line.
+    /// Dotted, RabbitMQ's naming convention; RabbitMQ keeps a queue name exactly as given.
     /// </remarks>
     public static string QueueFor(JobLane lane) => lane switch
     {
-        JobLane.Light => "jobs_light",
-        JobLane.Heavy => "jobs_heavy",
+        JobLane.Light => "aiframework.jobs.light",
+        JobLane.Heavy => "aiframework.jobs.heavy",
         _ => throw new ArgumentOutOfRangeException(nameof(lane), lane, "Unknown job lane."),
     };
 
@@ -231,7 +227,7 @@ public static class JobRegistration
 
         foreach (var lane in options.ParseQueues())
         {
-            opts.ListenToPostgresqlQueue(QueueFor(lane))
+            opts.ListenToRabbitQueue(QueueFor(lane))
                 .MaximumParallelMessages(options.ParallelismFor(lane));
         }
     }

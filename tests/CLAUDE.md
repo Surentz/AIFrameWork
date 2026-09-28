@@ -41,6 +41,27 @@ joins that same collection — it does not declare its own `IClassFixture<ApiFac
 `IClassFixture<WebApplicationFactory<Program>>` because `/health` needs a host but never
 touches the database, so it does not need the shared container.
 
+**Both integration factories also start a RabbitMQ container** (`rabbitmq:4.3-management-alpine`,
+`Testcontainers.RabbitMq`), beside Postgres and on the same terms: one per collection, started
+with it in `InitializeAsync`. Durable Wolverine connects to the broker while the host starts (ADR
+0026), so the host cannot be built without one. `Infrastructure.Tests` needs none.
+
+- **`Messaging/BrokerProbe`** (one per project) is how a test reads or writes the broker directly,
+  the way an external system would: RabbitMQ.Client, no Wolverine, server-named exclusive queues,
+  so tests in one collection never see each other's messages. Connect it with the factory's
+  `RabbitMqConnectionString`.
+- **Simulate a broker outage with `StopBrokerAppAsync()`/`StartBrokerAppAsync()`**
+  (`rabbitmqctl stop_app`/`start_app` inside the container), **never** Testcontainers'
+  `PauseAsync`. A paused container is a TCP black hole — a network partition, not an outage — and
+  `IMessageBus.PublishAsync` blocks on it until the broker returns, so the test hangs inside the
+  outbox drain. `stop_app` closes every connection but keeps the container and its mapped port,
+  which is a real outage: publishes return at once and drain within seconds of `start_app`.
+  Allow up to 60 s for that delivery; it is a real-time wait on the broker, not a poll interval.
+- Docker Desktop occasionally fails a container start with
+  `System.IO.IOException : Invalid chunk header encountered`. That is the Docker API, not the
+  test: re-run once before treating it as real. Two containers per collection make it twice as
+  likely to show up.
+
 ## Outbox tests
 
 Two projects cover the outbox, joining different collections for a reason:
@@ -92,15 +113,17 @@ listeners are the thing under test, so both lanes stay on.
 Two rules specific to this project, both learned from failing tests rather than reasoned out:
 
 - **`IncludeExternalTransports()` is required on a tracking session.** A job goes out to a
-  Postgres queue and comes back in through the host's own listener, and a tracking session ignores
+  RabbitMQ queue and comes back in through the host's own listener, and a tracking session ignores
   external transports by default — without it the session sees the message "Sent", stops waiting,
   and every delivery assertion fails with "No messages of type … were received".
 - **Never use a tracking session to prove something did *not* happen.** `ExecuteAndWaitAsync`
   waits for a message to be handled, so a message that must never be handled only ever produces a
   timeout — an absence of evidence, bought at the price of the full timeout. Assert on the stored
-  envelope instead. A scheduled job waits in `wolverine_queues.wolverine_queue_<lane>_scheduled` —
-  the queue transport's **own** schema, not the `wolverine` one, whose tables are all empty at
-  that point.
+  envelope instead. A scheduled job waits in `wolverine.wolverine_incoming_envelopes` with status
+  `Scheduled` until due; RabbitMQ has no delayed delivery. Its `message_type` is
+  `scheduled-envelope`, not the job's type, so match the job by its body
+  (`position('SendOrderConfirmation'::bytea in body) > 0`); a *retry* waiting in the same table
+  does carry the job's type.
 
 `ApiPublishesOnlyTests` (in `Api.IntegrationTests`) and `JobDeliveryTests` are two halves of one
 rule: the API listens on no job queue, the worker listens on every lane. Neither is decoration —
