@@ -44,13 +44,13 @@ public sealed class JobDeliveryTests(WorkerFactory factory)
 
     /// <summary>
     /// <b>IncludeExternalTransports is required, not a tuning knob.</b> A tracking session ignores
-    /// external transports by default, and a job goes OUT to a Postgres queue and comes back IN
+    /// external transports by default, and a job goes OUT to a RabbitMQ queue and comes back IN
     /// through this host's listener — so without it the session sees the message "Sent" and stops
     /// waiting, and every assertion below fails with "No messages of type ... were received".
     /// That is exactly how this was found.
     /// <para>
-    /// The timeout is generous because the Postgres transport polls; it is a condition wait, not a
-    /// sleep, so it returns the moment the handler finishes and only the failure path pays it.
+    /// The timeout is generous headroom, not a target — it is a condition wait, not a sleep, so it
+    /// returns the moment the handler finishes and only the failure path pays the full 30s.
     /// </para>
     /// </summary>
     private static TrackedSessionConfiguration TrackJobs(IHost host) =>

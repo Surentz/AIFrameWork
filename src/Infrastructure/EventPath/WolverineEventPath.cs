@@ -14,7 +14,7 @@ namespace AiFramework.Infrastructure.EventPath;
 
 /// <summary>
 /// What a host does with jobs. <b>This one value is the entire API/worker split</b> — same
-/// assembly, same handlers, same AddInfrastructure; only whether <c>ListenToPostgresqlQueue</c>
+/// assembly, same handlers, same AddInfrastructure; only whether <c>ListenToRabbitQueue</c>
 /// is ever called differs. See ADR 0016.
 /// </summary>
 public enum WolverineHostRole
@@ -197,9 +197,9 @@ public static class WolverineEventPath
         // AFTER ConfigureDurability, and only when durable. Both halves matter, and both were
         // found by failing tests rather than reasoned out:
         //
-        //  - Order: job routing is expressed as ToPostgresqlQueue, which needs the Postgres
-        //    transport that PersistMessagesWithPostgresql registers. Configured first, it has
-        //    nothing to attach to.
+        //  - Order: job routing is expressed as ToRabbitQueue, which needs the RabbitMQ
+        //    transport that ConfigureRabbitMq registers, immediately above. Configured first,
+        //    it has nothing to attach to.
         //  - Condition: MediatorOnly has no transport at all, by definition — that mode exists
         //    precisely so a host can start with no reachable database. Registering a
         //    database-backed route there reintroduces the startup connection the mode is for

@@ -11,7 +11,7 @@ namespace AiFramework.Worker.IntegrationTests;
 /// The real worker host against a real Postgres, mirroring <c>Api.IntegrationTests/ApiFactory</c>.
 /// </summary>
 /// <remarks>
-/// The worker listens on real Postgres queues, so unlike the Api factory this one does NOT strip
+/// The worker listens on real RabbitMQ queues, so unlike the Api factory this one does NOT strip
 /// its background machinery out — the listeners are the thing under test. What it does instead is
 /// keep both lanes on, so a test can assert which queue a job actually landed on.
 /// </remarks>
@@ -78,7 +78,8 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // broker, like the database, must be supplied before the host is built.
         builder.UseSetting("ConnectionStrings:RabbitMq", _rabbit.GetConnectionString());
 
-        // Both lanes, so a test can prove a Heavy job went to jobs_heavy and not jobs_light.
+        // Both lanes, so a test can prove a Heavy job went to the Heavy lane's queue and not the
+        // Light lane's.
         builder.UseSetting("Jobs:Queues", "light,heavy");
 
         // Matches the deployed worker (k8s/base/worker.yaml sets Cache__Enabled=false) rather than
