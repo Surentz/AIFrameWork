@@ -120,59 +120,36 @@ public sealed class JobDeliveryTests(WorkerFactory factory)
     }
 
     /// <summary>
-    /// A scheduled job is held DURABLY, not run now. This is what makes the recurring-job pattern
-    /// work at all: a handler schedules its own next occurrence, so if ScheduleAsync ran the job
-    /// immediately, every recurring job would become a tight loop.
+    /// A scheduled job is held DURABLY, not run now - the recurring-job pattern depends on it.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <b>Where a scheduled job actually lives was discovered, not assumed.</b> It is NOT in
-    /// <c>wolverine.wolverine_incoming_envelopes</c> — every table in the <c>wolverine</c> schema
-    /// is empty at this point. The Postgres QUEUE transport provisions a schema of its own,
-    /// <c>wolverine_queues</c>, holding one table per queue plus a <c>_scheduled</c> companion:
-    /// <c>wolverine_queue_jobs_light</c> and <c>wolverine_queue_jobs_light_scheduled</c>. That
-    /// second table is where a delayed job waits. Found by dumping every table in every schema
-    /// after a schedule; the first version of this test asserted against the envelope table and
-    /// failed against a correct implementation.
-    /// </para>
-    /// <para>
-    /// Deliberately NOT written with a tracking session: <c>ExecuteAndWaitAsync</c> waits for the
-    /// message to be handled, and this message must never be handled, so the session would simply
-    /// time out — an absence of evidence rather than evidence of absence, bought at the price of
-    /// the full timeout. Reading the row back asserts the stronger thing directly, and never waits.
-    /// </para>
+    /// RabbitMQ has no delayed delivery; Wolverine holds the envelope in its own Postgres storage
+    /// until it is due and only then sends it to the lane's queue. Verified in the plan's Task 1
+    /// (V6). Read directly rather than through a tracking session, which would only time out.
     /// </remarks>
     [Fact]
-    public async Task AScheduledJob_IsHeldInTheLanesScheduledTable()
+    public async Task AScheduledJob_IsHeldInWolverinesStorageUntilDue()
     {
-        await ScheduleAsync(
-            new SendOrderConfirmation(Guid.NewGuid(), "SKU-JOB-LATER", 1),
-            TimeSpan.FromHours(1));
+        var job = new SendOrderConfirmation(Guid.NewGuid(), "SKU-JOB-LATER", 1);
+        await ScheduleAsync(job, TimeSpan.FromHours(1));
 
         await using var scope = factory.Services.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
-
         await using var connection = new NpgsqlConnection(context.Database.GetConnectionString());
         await connection.OpenAsync(CancellationToken.None);
 
-        // SendOrderConfirmation is a Light job, so it must be waiting on the LIGHT lane's
-        // scheduled table — which also proves lane routing survives scheduling.
-        var lightQueue = JobRegistration.QueueFor(JobLane.Light);
-
         await using var command = new NpgsqlCommand(
-            $"select count(*) from wolverine_queues.wolverine_queue_{lightQueue}_scheduled",
+            "select count(*) from wolverine.wolverine_incoming_envelopes " +
+            "where status = 'Scheduled' and message_type = 'scheduled-envelope' " +
+            "and position('SendOrderConfirmation'::bytea in body) > 0",
             connection);
 
-        // Convert rather than a null-forgiving cast: count(*) cannot return null, but an
-        // unexplained NRE here would read as a test bug rather than as what it is.
         var scheduled = Convert.ToInt64(
             await command.ExecuteScalarAsync(CancellationToken.None),
             System.Globalization.CultureInfo.InvariantCulture);
 
-        scheduled.Should().BeGreaterThan(
-            0,
-            "a job scheduled an hour out must be persisted in its lane's scheduled table — if it " +
-            "is missing, ScheduleAsync either ran it immediately or dropped it, and a recurring " +
-            "job would either spin or stop");
+        scheduled.Should().BeGreaterThan(0,
+            "a job scheduled an hour out must wait in Wolverine's storage - missing means it ran " +
+            "immediately or was dropped, and a recurring job would spin or stop");
     }
 }
