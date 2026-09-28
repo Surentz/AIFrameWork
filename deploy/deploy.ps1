@@ -86,9 +86,24 @@ if ($CreateCluster) {
         # metrics-server does not trust, so out of the box it never becomes ready and every HPA
         # stays on "unknown" forever. --kubelet-insecure-tls is the documented answer for local
         # clusters; it is not a pattern to copy into an overlay that targets a real environment.
-        kubectl --context $context -n kube-system patch deployment metrics-server --type=json `
-            -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
-        Assert-LastExitCode 'kubectl patch (metrics-server)'
+        #
+        # From a file, never inline with -p. This script supports Windows PowerShell 5.1 (#requires
+        # -Version 5.1), and local-run/control-panel.bat reaches it through start-cluster.ps1 under
+        # powershell.exe. 5.1 strips the embedded double quotes from an argument passed to a native
+        # program: kubectl received [{op:add,...}] and rejected it as "The request is invalid",
+        # failing every -CreateCluster. PowerShell 7.3+ passes the quotes through, which is why it
+        # worked there. A file is read by kubectl itself, so no shell quoting rule reaches the JSON.
+        $patchFile = Join-Path ([System.IO.Path]::GetTempPath()) 'aiframework-metrics-server-patch.json'
+        Set-Content -Path $patchFile -Encoding ascii -Value `
+            '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+        try {
+            kubectl --context $context -n kube-system patch deployment metrics-server --type=json `
+                --patch-file $patchFile
+            Assert-LastExitCode 'kubectl patch (metrics-server)'
+        }
+        finally {
+            Remove-Item -Path $patchFile -ErrorAction SilentlyContinue
+        }
 
         kubectl --context $context -n kube-system rollout status deployment/metrics-server --timeout=180s
         Assert-LastExitCode 'kubectl rollout status (metrics-server)'
