@@ -227,7 +227,7 @@ the job handlers, so the worker's generated tree includes it.
 | Situation | Behaviour |
 |---|---|
 | Durable, connection string missing | Refuse to start, naming the key (like the `ConnectionStrings:Default` guard) |
-| Broker unreachable at startup | Refuse to start: deterministic, and misconfiguration is loud. Wolverine retries the connection for `BrokerInitializationTimeout` (2 minutes by default) before `BrokerInitializationException` stops the host, so a misconfigured host takes about two minutes to fail (verified, plan Task 1 V4) |
+| Broker unreachable at startup | Refuse to start: deterministic, and misconfiguration is loud. Wolverine retries the connection for `BrokerInitializationTimeout` (2 minutes by default) before `BrokerInitializationException` stops the host, so a misconfigured host takes about two minutes to fail (verified, plan Task 1 V4b). **Known limitation:** against a broker that accepts the TCP connection and then never answers (a network partition; a paused container in V4a) startup hangs instead of failing — the host simply never becomes ready |
 | Broker down while running | Keep serving. Outbound envelopes wait in Postgres, and listeners reconnect |
 
 **Readiness does not include the broker.** Probing it would pull every API pod out of the load
