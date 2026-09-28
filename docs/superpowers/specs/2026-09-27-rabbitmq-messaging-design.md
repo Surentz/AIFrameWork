@@ -145,7 +145,11 @@ command commits ─► hand-built outbox row (unchanged)
 - **At least once.** A crash between the two stores, or a redelivered domain event, can publish
   twice. Consumers deduplicate on `eventId`.
 - **Broker outage.** Envelopes wait in Postgres and drain on recovery. The audit, notifier and job
-  handlers never notice, because writing an envelope row is local.
+  handlers never notice, because writing an envelope row is local. Verified (plan Task 1 V4e): with
+  the broker stopped, the publish returns at once and the event is delivered within seconds of the
+  broker coming back. **A network partition is different:** when packets to the broker are
+  silently dropped (a paused container, V4c) the publishing call waits on the dead connection
+  until it recovers or times out (~60 s), holding that outbox worker; the event is still not lost.
 - **No ordering between different events.** Independent handlers publish `order.placed` and
   `order.shipped`. Consumers use `occurredAt`.
 
