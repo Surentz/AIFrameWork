@@ -130,6 +130,18 @@ three confirmations before this, and `Startup_DeclaresTheShipmentsQueueWithASing
 reads the argument back from the broker. A new inbound listener whose handler is idempotent only
 by an in-memory state check needs the same two settings.
 
+Two things this does and does not do:
+
+- **It does not stall on a transient failure.** A database blip fails one confirmation, and the
+  worker's `ScheduleRetry` policy puts that envelope back into durable storage and frees the one
+  consumer immediately (the reason `JobRegistration` uses `ScheduleRetry`, not `RetryWithCooldown`),
+  so the queue keeps moving while it waits for its retry.
+- **It does not stop an operator racing the warehouse.** It serializes broker messages against
+  each other only. An admin shipping through `/api/fulfilment` while the worker handles a
+  confirmation for the same order can still ship it twice, because `Order` has no concurrency token.
+  Accepted in ADR 0026, not fixed; the fix is an `xmin` concurrency token on `Order`, in its own
+  change.
+
 **Dead letters live in Postgres, never on the broker.** RabbitMQ-native dead-lettering is off
 (`DisableDeadLetterQueueing()`); every failure — job or inbound — lands in
 `wolverine.wolverine_dead_letters` (`received_at = rabbitmq://queue/…`), which the monitoring page

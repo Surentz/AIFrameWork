@@ -151,7 +151,18 @@ replica count.
   RabbitMQ user for the warehouse**, allowed to write to that queue and nothing else.
 - **Shipment confirmations do not scale out.** One consumer on one replica handles them one at a
   time; more replicas add only standbys, which take over when the active consumer disconnects.
-  Ample for confirmations, which each cost one order read and one save.
+  Ample for confirmations, which each cost one order read and one save. Serial consumption does not
+  turn a transient failure into a stalled queue: the worker's `ScheduleRetry` policy puts the failed
+  envelope back into durable storage and frees the consumer at once (see `JobRegistration`'s
+  remarks), so the confirmations behind it keep flowing while it waits for its retry.
+- **Serial consumption closes the duplicate-shipment race only between broker messages.** An
+  operator shipping through `/api/fulfilment` at the same instant the worker handles a warehouse
+  confirmation for the same order — or two operators shipping it at once — still both pass the
+  in-memory "not already shipped" check, because `Order` has no concurrency token: two
+  `OrderShipped` rows, two buyer notifications, two `order.shipped.v1` under different `eventId`s.
+  That race predates this ADR (two operators could always hit it) and is accepted here, not fixed:
+  the fix is an optimistic concurrency token on `Order` (Postgres `xmin`), a migration and a
+  conflict path in both ship commands, and belongs in its own change.
 - **A broker that already holds `aiframework.shipments` without the argument stops the worker at
   startup.** RabbitMQ refuses to redeclare a queue with different arguments (`PRECONDITION_FAILED -
   inequivalent arg 'x-single-active-consumer'`, verified). Only a broker that ran an earlier build
