@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using AiFramework.Infrastructure.Integration;
 using AiFramework.Infrastructure.Jobs;
 using JasperFx;
 using JasperFx.CodeGeneration;
@@ -193,6 +194,10 @@ public static class WolverineEventPath
         // Before ConfigureJobs, for the same ordering reason given below: a route to a broker
         // queue needs the transport it names to be registered already.
         ConfigureRabbitMq(opts, rabbitMqConnectionString, role);
+
+        // Both hosts publish integration events: the outbox pump runs in both. After
+        // ConfigureRabbitMq for the same reason as the jobs below - the routes name its exchange.
+        IntegrationEventRegistration.MapOutbound(opts);
 
         // AFTER ConfigureDurability, and only when durable. Both halves matter, and both were
         // found by failing tests rather than reasoned out:

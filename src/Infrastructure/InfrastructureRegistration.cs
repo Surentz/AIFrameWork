@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.IntegrationEvents;
 using AiFramework.Application.Monitoring;
 using AiFramework.Application.Notifications;
 using AiFramework.Application.Orders;
@@ -10,6 +11,7 @@ using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.Integration;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Messaging;
@@ -177,6 +179,14 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderShipped>, OrderShippedNotifier>();
         services.AddScoped<IDomainEventHandler<OrderCancelled>, OrderCancelledNotifier>();
         services.AddScoped<IDomainEventHandler<ProductPriceChanged>, ProductPriceChangedNotifier>();
+
+        // Integration events to other systems (ADR 0026) - a fan-out beside the notifiers, so a
+        // broker outage never disturbs them: publishing only writes an envelope row.
+        services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedIntegrationPublisher>();
+        services.AddScoped<IDomainEventHandler<OrderShipped>, OrderShippedIntegrationPublisher>();
+        services.AddScoped<IDomainEventHandler<OrderCancelled>, OrderCancelledIntegrationPublisher>();
+        services.AddScoped<IDomainEventHandler<ProductPriceChanged>, ProductPriceChangedIntegrationPublisher>();
+        services.AddScoped<IIntegrationEventPublisher, WolverineIntegrationEventPublisher>();
     }
 
     /// <summary>The single entry point Api calls. Api must not reach past this into Infrastructure.</summary>

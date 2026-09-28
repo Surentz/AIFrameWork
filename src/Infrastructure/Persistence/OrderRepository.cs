@@ -24,6 +24,10 @@ public sealed class OrderRepository(AiFrameworkDbContext context) : IOrderReposi
     public Task<Order?> GetForFulfilmentAsync(Guid id, CancellationToken cancellationToken) =>
         context.Orders.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
 
+    // Untracked: the publisher only reads. See the port.
+    public Task<Order?> GetForPublishingAsync(Guid id, CancellationToken cancellationToken) =>
+        context.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+
     public async Task<IReadOnlyList<FulfilmentQueueRow>> ListForFulfilmentAsync(
         OrderStatus status,
         int limit,

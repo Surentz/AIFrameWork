@@ -72,6 +72,18 @@ public sealed class OutboxPollerTests(PostgresFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ClaimAsync_ReturnsTheRowsOwnOccurredAt()
+    {
+        var id = await SeedAsync(OutboxStatus.Pending);
+        // A claim time well after the row's OccurredAt, so the two cannot be confused.
+        var poller = CreatePoller(new TestClock(Now.AddHours(3)));
+
+        var claimed = await poller.ClaimAsync(CancellationToken.None);
+
+        claimed.Should().ContainSingle(i => i.Id == id).Which.OccurredAt.Should().Be(Now);
+    }
+
+    [Fact]
     public async Task ClaimAsync_SkipsARowWhoseBackoffHasNotElapsed()
     {
         var id = await SeedAsync(OutboxStatus.Pending, nextAttemptAt: Now.AddMinutes(5));

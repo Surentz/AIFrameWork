@@ -86,6 +86,13 @@ public interface IOrderRepository
     public Task<Order?> GetForFulfilmentAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Any buyer's order, UNTRACKED, for publishing <c>order.placed.v1</c>: the event itself does
+    /// not carry the buyer or the product snapshot. Cross-owner and named for its one purpose, for
+    /// the reason <see cref="GetForFulfilmentAsync"/> gives. ADR 0026.
+    /// </summary>
+    public Task<Order?> GetForPublishingAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Every buyer's orders in <paramref name="status"/>, OLDEST first, one keyset page at a time,
     /// with each buyer's username. The fulfilment queue.
     /// </summary>
