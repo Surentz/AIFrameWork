@@ -16,6 +16,14 @@ data:
   # ingress is the only route to the api Service, so X-Forwarded-For cannot be attacker-chosen.
   # Do not copy this into an overlay whose API is reachable directly - see ADR 0012.
   ForwardedHeaders__Enabled: 'true'
+  # The e2e suite's operator. Writing to the catalogue needs Catalogue.Manage (ADR 0025), so most
+  # of the kind run arranges its products as this account; the name is fixed in
+  # frontend/e2e/support/identity.ts because configuration is the only grant (ADR 0020).
+  # A SECURITY-RELEVANT line, and safe only here: whoever registers this name first on a cluster
+  # becomes its administrator. That is acceptable on a throwaway localhost cluster the e2e run
+  # itself seeds; never copy it into an overlay other people can reach. DOUBLE underscores, and
+  # the index is the list position.
+  Admin__Usernames__0: 'e2e-admin'
   # Realtime notification push, and the backplane that makes it correct above one replica.
   # DOUBLE underscores, like every key here. The Redis host is the in-cluster Service name from
   # k8s/base/redis.yaml. See ADR 0019.

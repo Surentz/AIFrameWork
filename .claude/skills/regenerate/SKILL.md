@@ -18,7 +18,7 @@ tests and lints clean can still be rejected.
 |---|---|
 | A controller, a DTO, a `[ProducesResponseType]`, an enum crossing the wire | The API contract |
 | A Wolverine handler on the event path (`IDomainEventHandler<T>`) | `src/Api`'s tree |
-| A job handler, or `JobUserMiddleware` | `src/Worker`'s tree |
+| A job handler, `JobUserMiddleware`, or an inbound broker handler (`ShipmentConfirmedHandler`) | `src/Worker`'s tree |
 | A handler both hosts see, or you are unsure | **Both** trees |
 
 When in doubt, regenerate everything and let `git diff` decide — the commands are idempotent and
@@ -54,6 +54,9 @@ Three things about that incantation, each of which cost someone an afternoon:
   to be non-empty. No database needs to be running. **Any new startup path that would open it
   needs its own switch here**, and `HealthTests` is the canary that catches one.
 
+RabbitMQ is configured only when Wolverine is durable, so `Wolverine__Durable=false` covers it:
+no broker variable is needed, and no broker need be running, for `codegen write` or the contract.
+
 Generation is an explicit MSBuild target and deliberately **not** part of `dotnet build`. Running
 it on every build was tried and reverted: it made a plain `dotnet build` of `src/Api` fail
 without those variables even with the database up, breaking every developer's build.
@@ -65,7 +68,7 @@ costs 33MB. Release instead loads adapters generated ahead of time.
 
 ```bash
 dotnet run --project src/Api -- codegen write      # event-path handlers
-dotnet run --project src/Worker -- codegen write   # job handlers, and JobUserMiddleware
+dotnet run --project src/Worker -- codegen write   # job handlers, JobUserMiddleware, ShipmentConfirmedHandler
 ```
 
 Then commit the result.

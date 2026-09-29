@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
+using Testcontainers.RabbitMq;
 
 namespace AiFramework.Worker.IntegrationTests;
 
@@ -10,7 +11,7 @@ namespace AiFramework.Worker.IntegrationTests;
 /// The real worker host against a real Postgres, mirroring <c>Api.IntegrationTests/ApiFactory</c>.
 /// </summary>
 /// <remarks>
-/// The worker listens on real Postgres queues, so unlike the Api factory this one does NOT strip
+/// The worker listens on real RabbitMQ queues, so unlike the Api factory this one does NOT strip
 /// its background machinery out — the listeners are the thing under test. What it does instead is
 /// keep both lanes on, so a test can assert which queue a job actually landed on.
 /// </remarks>
@@ -19,9 +20,60 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
         .Build();
 
-    // The container must start BEFORE anything touches Services: the first access builds AND
-    // STARTS the host, which reads the container's connection string. Reversing these two fails to
-    // connect.
+    private readonly RabbitMqContainer _rabbit =
+        new RabbitMqBuilder("rabbitmq:4.3-management-alpine").Build();
+
+    /// <summary>For tests that inspect or publish to the broker directly (BrokerProbe).</summary>
+    public string RabbitMqConnectionString => _rabbit.GetConnectionString();
+
+    /// <summary>
+    /// Simulates a broker outage: stops the RabbitMQ application inside the container (not the
+    /// container itself), which closes every AMQP connection but keeps the container and its
+    /// mapped port. Mirrors <c>ApiFactory.StopBrokerAppAsync</c> — see its remarks for why this is
+    /// <c>rabbitmqctl stop_app</c> rather than Testcontainers' <c>PauseAsync</c>.
+    /// </summary>
+    public async Task StopBrokerAppAsync()
+    {
+        var result = await _rabbit.ExecAsync(["rabbitmqctl", "stop_app"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl stop_app failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+    }
+
+    /// <summary>Reverses <see cref="StopBrokerAppAsync"/>, restarting the RabbitMQ application.</summary>
+    public async Task StartBrokerAppAsync()
+    {
+        var result = await _rabbit.ExecAsync(["rabbitmqctl", "start_app"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl start_app failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+    }
+
+    /// <summary>
+    /// Every queue on the broker with its declared arguments, as <c>rabbitmqctl list_queues</c>
+    /// prints them in JSON. Arguments are invisible over AMQP (a passive declare returns only the
+    /// counts), and this reads them without the management API.
+    /// </summary>
+    public async Task<string> ListQueuesWithArgumentsAsync()
+    {
+        var result = await _rabbit.ExecAsync(
+            ["rabbitmqctl", "--quiet", "list_queues", "name", "arguments", "--formatter", "json"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl list_queues failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+
+        return result.Stdout;
+    }
+
+    // The containers must start BEFORE anything touches Services: the first access builds AND
+    // STARTS the host, which reads the containers' connection strings. Reversing these two fails
+    // to connect.
     //
     // Migration now happens against a STANDALONE DbContext, built directly off the container's
     // connection string, rather than by touching `Services` first and migrating from inside it —
@@ -34,7 +86,7 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
     // lets the migration run with no host and therefore no Quartz in the picture at all.
     async Task IAsyncLifetime.InitializeAsync()
     {
-        await _container.StartAsync();
+        await Task.WhenAll(_container.StartAsync(), _rabbit.StartAsync());
 
         var options = new DbContextOptionsBuilder<AiFrameworkDbContext>()
             .UseNpgsql(_container.GetConnectionString())
@@ -47,10 +99,15 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
     // Explicit interface implementation: WebApplicationFactory already exposes a
     // ValueTask DisposeAsync() from IAsyncDisposable, so declaring xUnit's Task DisposeAsync()
     // implicitly would hide it and leak the host.
+    //
+    // The host goes BEFORE the containers, as in ApiFactory, whose comment has the reason: a host
+    // that outlives its database (or now its broker) keeps polling or reconnecting to it while it
+    // stops, and on Windows that can crash the test host after every test has passed.
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await _container.DisposeAsync();
         await base.DisposeAsync();
+        await _container.DisposeAsync();
+        await _rabbit.DisposeAsync();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -62,7 +119,12 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // afterwards — the same ordering constraint ApiFactory documents.
         builder.UseSetting("ConnectionStrings:Default", _container.GetConnectionString());
 
-        // Both lanes, so a test can prove a Heavy job went to jobs_heavy and not jobs_light.
+        // Durable Wolverine now also connects to RabbitMQ while the host starts (ADR 0026), so the
+        // broker, like the database, must be supplied before the host is built.
+        builder.UseSetting("ConnectionStrings:RabbitMq", _rabbit.GetConnectionString());
+
+        // Both lanes, so a test can prove a Heavy job went to the Heavy lane's queue and not the
+        // Light lane's.
         builder.UseSetting("Jobs:Queues", "light,heavy");
 
         // Matches the deployed worker (k8s/base/worker.yaml sets Cache__Enabled=false) rather than

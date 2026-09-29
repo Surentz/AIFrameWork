@@ -11,7 +11,7 @@ namespace AiFramework.Api.Monitoring;
 /// </summary>
 [ApiController]
 [Route("api/monitoring/jobs/dead-letters")]
-[Authorize(Policy = AuthorizationPolicies.Monitoring)]
+[Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
 // S6960: the rule sees the read and the retry as disjoint groups. Declined on the same grounds
 // NotificationsController records — api/monitoring/jobs/dead-letters is one REST resource, and
 // its read and its one write belong together rather than in two files organised by verb.
@@ -62,6 +62,7 @@ public sealed class MonitoringDeadLettersController(
     /// page possible without exposing the worker through the ingress. See ADR 0016.
     /// </remarks>
     [HttpPost("{messageId:guid}/retry")]
+    [Authorize(Policy = AuthorizationPolicies.Monitoring.Operate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

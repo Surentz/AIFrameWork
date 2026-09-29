@@ -76,6 +76,13 @@ sustained above four, Postgres queue polling visible in database load, a job nee
 transport cannot express, or a consumer outside this solution. The swap was confirmed to be a
 registration change — `UseRabbitMq()` plus `ToRabbitQueue` — against the installed package.
 
+> **Superseded by [ADR 0026](0026-rabbitmq-for-asynchronous-work.md) (2026-09-28).** Trigger 4 now
+> holds: other systems consume this application's events, and a warehouse sends it shipment
+> confirmations. Jobs ride RabbitMQ quorum queues (`aiframework.jobs.light`/`.heavy`) instead of
+> `jobs_light`/`jobs_heavy`; Postgres still holds the envelope storage — the outbox, inbox,
+> schedules and dead letters. Everything else in this ADR stands: the worker, the lanes, the
+> retry policy, and an API that listens to no queue.
+
 **The worker runs with `Cache__Enabled=false`,** and a job's cache eviction is documented as a
 no-op for API callers.
 

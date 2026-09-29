@@ -17,7 +17,7 @@ namespace AiFramework.Api.Monitoring;
 /// </remarks>
 [ApiController]
 [Route("api/monitoring/jobs")]
-[Authorize(Policy = AuthorizationPolicies.Monitoring)]
+[Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
 // S6960: the rule reads "counts by outcome" and "start a job now" as disjoint groups and
 // proposes a controller each. Declined for the reason NotificationsController already records:
 // api/monitoring/jobs is ONE REST resource, and one endpoint per controller would organise this
@@ -57,6 +57,7 @@ public sealed class MonitoringJobsController(
 
     /// <summary>Runs a scheduled job now, without waiting for its cron.</summary>
     [HttpPost("trigger")]
+    [Authorize(Policy = AuthorizationPolicies.Monitoring.Operate)]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

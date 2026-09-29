@@ -7,12 +7,19 @@ using Npgsql;
 namespace AiFramework.Infrastructure.Outbox;
 
 /// <summary>
-/// A claimed row on its way to a worker. A record struct, never a tracked entity. TraceParent
-/// defaults to null so every existing positional construction (tests included) keeps compiling
-/// unchanged; ClaimAsync below is the only caller that passes a real value.
+/// A claimed row on its way to a worker. A record struct, never a tracked entity. TraceParent and
+/// OccurredAt default so every existing positional construction (tests included) keeps compiling
+/// unchanged; ClaimAsync below is the only caller that passes real values. OccurredAt is the
+/// row's own timestamp, handed on to handlers as DomainEventContext.OccurredAt - an integration
+/// event's occurredAt must be when the aggregate changed, not when a (re)delivery ran.
 /// </summary>
 public readonly record struct OutboxWorkItem(
-    Guid Id, string EventName, string Payload, int Attempt, string? TraceParent = null);
+    Guid Id,
+    string EventName,
+    string Payload,
+    int Attempt,
+    string? TraceParent = null,
+    DateTimeOffset OccurredAt = default);
 
 /// <summary>
 /// Claims batches of due outbox rows. Exposed as plain async methods rather than a loop so it
@@ -53,7 +60,7 @@ public sealed class OutboxPoller(
                 LIMIT @batch
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING "Id", "EventName", "Payload", "Attempts", "TraceParent";
+            RETURNING "Id", "EventName", "Payload", "Attempts", "TraceParent", "OccurredAt";
             """;
 
         var connection = (NpgsqlConnection)context.Database.GetDbConnection();
@@ -76,7 +83,8 @@ public sealed class OutboxPoller(
                 reader.GetString(1),
                 reader.GetString(2),
                 reader.GetInt32(3),
-                reader.IsDBNull(4) ? null : reader.GetString(4)));
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetFieldValue<DateTimeOffset>(5)));
         }
 
         return claimed;

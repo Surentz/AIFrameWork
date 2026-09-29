@@ -2,8 +2,10 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Messaging;
 using FluentAssertions;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AiFramework.Infrastructure.Tests.Messaging;
 
@@ -134,5 +136,36 @@ public sealed class BehaviorTests
 
         result.IsSuccess.Should().BeTrue();
         handler.WasCalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenTheCommitLosesAConcurrencyRace_ReturnsConcurrencyConflict()
+    {
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateConcurrencyException("lost the race"));
+        await using var provider = Build<SaveHandler>(unitOfWork, withValidator: true);
+        var dispatcher = provider.GetRequiredService<ICommandDispatcher>();
+
+        var result = await dispatcher.SendAsync(new Save("ok"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Kind.Should().Be(ErrorKind.Conflict);
+        result.Error.Code.Should().Be(ErrorCodes.ConcurrencyConflict);
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenTheCommitFailsForAnotherReason_Throws()
+    {
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("constraint violated"));
+        await using var provider = Build<SaveHandler>(unitOfWork, withValidator: true);
+        var dispatcher = provider.GetRequiredService<ICommandDispatcher>();
+
+        var act = () => dispatcher.SendAsync(new Save("ok"), CancellationToken.None);
+
+        await act.Should().ThrowExactlyAsync<DbUpdateException>(
+            "only a lost concurrency race is an expected outcome; anything else is still a bug");
     }
 }

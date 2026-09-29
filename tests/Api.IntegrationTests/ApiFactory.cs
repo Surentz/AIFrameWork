@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Testcontainers.PostgreSql;
+using Testcontainers.RabbitMq;
 
 namespace AiFramework.Api.IntegrationTests;
 
@@ -20,12 +21,53 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine")
         .Build();
 
-    // The container must start BEFORE anything touches Services: the first access to
-    // Services builds the host, which runs ConfigureWebHost, which reads the container's
-    // connection string. Reversing these two lines fails with a connection error.
+    private readonly RabbitMqContainer _rabbit =
+        new RabbitMqBuilder("rabbitmq:4.3-management-alpine").Build();
+
+    /// <summary>For tests that inspect or publish to the broker directly (BrokerProbe).</summary>
+    public string RabbitMqConnectionString => _rabbit.GetConnectionString();
+
+    /// <summary>
+    /// Simulates a broker outage: stops the RabbitMQ application inside the container (not the
+    /// container itself), which closes every AMQP connection but keeps the container and its
+    /// mapped port. BrokerOutageTests only.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not Testcontainers' own <c>PauseAsync</c>/<c>UnpauseAsync</c>: pausing the
+    /// container is a TCP black hole, and the plan's V4c/V4e findings measured that
+    /// <c>IMessageBus.PublishAsync</c> does not return while the broker is paused — it blocks until
+    /// unpause. That would hang <c>DrainOutboxUntilEmptyAsync</c> and test a network partition, not
+    /// an outage. <c>rabbitmqctl stop_app</c> instead: <c>PublishAsync</c> returns at once, the
+    /// envelope waits in the durable outbox, and delivery resumes roughly 5s after
+    /// <see cref="StartBrokerAppAsync"/> (V4e).
+    /// </remarks>
+    public async Task StopBrokerAppAsync()
+    {
+        var result = await _rabbit.ExecAsync(["rabbitmqctl", "stop_app"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl stop_app failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+    }
+
+    /// <summary>Reverses <see cref="StopBrokerAppAsync"/>, restarting the RabbitMQ application.</summary>
+    public async Task StartBrokerAppAsync()
+    {
+        var result = await _rabbit.ExecAsync(["rabbitmqctl", "start_app"]);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"rabbitmqctl start_app failed (exit {result.ExitCode}): {result.Stderr}");
+        }
+    }
+
+    // The containers must start BEFORE anything touches Services: the first access to
+    // Services builds the host, which runs ConfigureWebHost, which reads the containers'
+    // connection strings. Reversing these two lines fails with a connection error.
     async Task IAsyncLifetime.InitializeAsync()
     {
-        await _container.StartAsync();
+        await Task.WhenAll(_container.StartAsync(), _rabbit.StartAsync());
         using var scope = Services.CreateScope();
         await scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>()
             .Database.MigrateAsync();
@@ -34,10 +76,18 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // Explicit interface implementation: WebApplicationFactory already exposes a
     // ValueTask DisposeAsync() from IAsyncDisposable, so declaring xUnit's
     // Task DisposeAsync() implicitly would hide it and leak the host.
+    //
+    // The host goes BEFORE the containers, the mirror of InitializeAsync. The other way round,
+    // durable Wolverine's DurabilityAgent keeps polling a database that is already gone and logs
+    // each failure; on Windows one of those lands after the EventLog provider is disposed, and the
+    // resulting ObjectDisposedException on a thread-pool thread crashes the test host after every
+    // test has passed ("Test Run Aborted"). Whether it hit was down to scheduling. The broker
+    // follows the same rule: a host outliving it would sit in its reconnect loop while stopping.
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await _container.DisposeAsync();
         await base.DisposeAsync();
+        await _container.DisposeAsync();
+        await _rabbit.DisposeAsync();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -49,6 +99,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // setting must be supplied before the host is built, not swapped in afterward via
         // ConfigureServices below — otherwise the stricter guard throws first.
         builder.UseSetting("ConnectionStrings:Default", _container.GetConnectionString());
+
+        // Durable Wolverine now also connects to RabbitMQ while the host starts (ADR 0026), so the
+        // broker, like the database, must be supplied before the host is built.
+        builder.UseSetting("ConnectionStrings:RabbitMq", _rabbit.GetConnectionString());
 
         // CreateAuthenticatedClientAsync registers a fresh user for nearly every test in this
         // project, all from one address. The production limit would exhaust itself partway

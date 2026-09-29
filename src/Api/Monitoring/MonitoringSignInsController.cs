@@ -16,7 +16,7 @@ namespace AiFramework.Api.Monitoring;
 /// </remarks>
 [ApiController]
 [Route("api/monitoring/sign-ins")]
-[Authorize(Policy = AuthorizationPolicies.Monitoring)]
+[Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
 public sealed class MonitoringSignInsController(IQueryDispatcher queries) : ControllerBase
 {
     /// <summary>Counts by outcome, the locked-out accounts, and the active-user count.</summary>

@@ -5,13 +5,12 @@ import { uniqueProductSku } from '../../support/identity.ts';
 test('shows the server validation message for an invalid quantity', async ({
   signedInPage,
   api,
-  workerUser,
 }) => {
   // A real catalogue sku, so this test still fails on the QUANTITY. With a sku the catalogue
   // does not hold, the request would be refused for the sku instead and this test would pass
   // while asserting nothing about quantity.
   const sku = uniqueProductSku();
-  await api.createProduct(workerUser, { sku, name: 'Widget', price: '9.99' });
+  await api.createProduct({ sku, name: 'Widget', price: '9.99' });
 
   await orders.placeOrder(signedInPage, { sku, quantity: 0 });
 

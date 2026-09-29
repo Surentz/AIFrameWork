@@ -4,7 +4,24 @@ namespace AiFramework.Application.Users;
 
 public interface IUserRepository
 {
-    public Task AddAsync(User user, CancellationToken cancellationToken);
+    /// <summary>
+    /// Inserts a new account, and returns false when its username is already taken.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Writes immediately, not at the unit of work's commit. The database's unique index is the
+    /// only real guard on a username: two simultaneous registrations of one name both pass
+    /// <c>RegisterUserHandler</c>'s pre-check, and the loser's insert fails. Committed later by
+    /// <c>Behaviors.CommitAsync</c>, that failure surfaced as an unhandled exception and a 500 —
+    /// after the handler had already reported success. Writing here puts it back inside the
+    /// handler, which answers the same 409 the pre-check does.
+    /// </para>
+    /// <para>
+    /// Unlike the other immediate writes on this port, this one goes through
+    /// <c>SaveChangesAsync</c>, so the domain-events interceptor still sees it.
+    /// </para>
+    /// </remarks>
+    public Task<bool> TryAddAsync(User user, CancellationToken cancellationToken);
 
     public Task<User?> GetAsync(Guid id, CancellationToken cancellationToken);
 

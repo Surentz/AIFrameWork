@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 /**
  * A username no other test will pick. `Date.now()` is not enough once workers run in parallel:
@@ -35,6 +36,13 @@ export const PASSWORD = 'a long enough e2e password';
  * thing that grants the administrator role (ADR 0020). A generated name could never appear in a
  * config file written before the run.
  *
- * `registerOrSignIn` is what makes a fixed name safe across runs — see its own comment.
+ * The kind overlay names it too (`k8s/overlays/local/config.yaml`). `signInOrRegister` is what
+ * makes a fixed name safe across runs — see its own comment.
  */
 export const ADMIN_USERNAME = 'e2e-admin';
+
+/**
+ * Where `e2e/setup/seed-admin.ts` saves the operator's session for the `adminUser` fixture to
+ * load. Git-ignored: it holds a live session cookie.
+ */
+export const ADMIN_STATE_PATH = fileURLToPath(new URL('../.auth/admin.json', import.meta.url));

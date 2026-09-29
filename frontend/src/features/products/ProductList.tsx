@@ -1,19 +1,40 @@
 import { Link } from 'react-router-dom';
-import { useProducts } from './queries';
+import { useCanManageCatalogue, useProducts } from './queries';
 import { formatPrice } from './types';
 import '../orders/orders.css';
 import './products.css';
 
 function Header(): React.JSX.Element {
+  const canManage = useCanManageCatalogue();
+
   return (
     <div className="page-header">
       <div>
         <h1 className="page-title">Catalogue</h1>
         <p className="page-subtitle">Every product, newest first.</p>
       </div>
-      <Link className="btn btn--primary" to="/products/new">
-        Add a product
-      </Link>
+      {canManage && (
+        <Link className="btn btn--primary" to="/products/new">
+          Add a product
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function EmptyState(): React.JSX.Element {
+  const canManage = useCanManageCatalogue();
+
+  return (
+    <div className="card products__state">
+      <p className="products__empty-title">No products yet.</p>
+      {canManage ? (
+        <Link className="btn btn--secondary" to="/products/new">
+          Add the first one
+        </Link>
+      ) : (
+        <p className="page-subtitle">An administrator adds products to the catalogue.</p>
+      )}
     </div>
   );
 }
@@ -52,12 +73,7 @@ export function ProductList(): React.JSX.Element {
     return (
       <>
         <Header />
-        <div className="card products__state">
-          <p className="products__empty-title">No products yet.</p>
-          <Link className="btn btn--secondary" to="/products/new">
-            Add the first one
-          </Link>
-        </div>
+        <EmptyState />
       </>
     );
   }

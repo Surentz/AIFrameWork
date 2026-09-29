@@ -12,10 +12,10 @@ echo   AIFrameWork - Local Environment Control
 echo ============================================
 echo.
 echo   1. Install/check prerequisites (Docker, .NET SDK, Node.js, kind, k9s, Playwright)
-echo   2. Start dev loop        (dev Postgres + API + job worker + Vite, scripts\dev.ps1)
+echo   2. Start dev loop        (dev Postgres + RabbitMQ + API + job worker + Vite, scripts\dev.ps1)
 echo   3. Start dev loop + Seq  (same, plus a structured log UI at localhost:55341)
 echo   4. Start job worker only (restarts just the worker - e.g. after "codegen write")
-echo   5. Stop dev loop         (scripts\stop-dev.ps1 - also stops Seq, if it was started)
+echo   5. Stop dev loop         (scripts\stop-dev.ps1 - stops the database and broker, and Seq if it was started)
 echo   6. Start Kubernetes      (creates the kind cluster if missing, else redeploys)
 echo   7. Stop Kubernetes       (deletes the kind cluster - Postgres data goes with it)
 echo   8. Run e2e tests         (local stack - stop the dev loop first, it uses port 5234)

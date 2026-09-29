@@ -12,8 +12,9 @@ namespace AiFramework.Infrastructure.Jobs.Scheduling;
 public static class QuartzRegistration
 {
     /// <summary>
-    /// Schema-qualified: Quartz's tables live in their own `quartz` schema, beside `wolverine` and
-    /// `wolverine_queues`, apart from EF's `public`. Must match the AddQuartzSchema migration.
+    /// Schema-qualified: Quartz's tables live in their own `quartz` schema, beside `wolverine`
+    /// (the durable envelope storage), apart from EF's `public`. Must match the AddQuartzSchema
+    /// migration.
     /// </summary>
     public const string TablePrefix = "quartz.qrtz_";
 

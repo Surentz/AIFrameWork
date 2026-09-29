@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - postgres.yaml
   - redis.yaml
+  - rabbitmq.yaml
   - migrate-job.yaml
   - api.yaml
   - worker.yaml

@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
-import { API_PORT, E2E_CONNECTION_STRING, PREVIEW_PORT, WORKER_PORT } from './e2e/support/env.ts';
+import {
+  API_PORT,
+  E2E_CONNECTION_STRING,
+  E2E_RABBITMQ_URL,
+  PREVIEW_PORT,
+  WORKER_PORT,
+} from './e2e/support/env.ts';
 import { ADMIN_USERNAME } from './e2e/support/identity.ts';
 import { resolveTarget } from './e2e/support/target.ts';
 
@@ -25,6 +31,10 @@ export default defineConfig({
   testDir: './e2e/specs',
   // No globalTeardown: it runs BEFORE the webServers stop, so the database went away under a live
   // API and worker. e2e/setup/run.ts tears it down after Playwright exits instead.
+
+  // Signs the operator in once for the run, on every target: see the file. On the stack Playwright
+  // manages it runs after the webServers are up, which is why it is a global setup at all.
+  globalSetup: './e2e/setup/seed-admin.ts',
 
   fullyParallel: true,
 
@@ -91,6 +101,9 @@ export default defineConfig({
             env: {
               ...serverLogging,
               ConnectionStrings__Default: E2E_CONNECTION_STRING,
+              // The e2e broker in docker-compose.e2e.yml. Both hosts refuse to start without one
+              // (ADR 0026): the API publishes, the worker publishes and listens.
+              ConnectionStrings__RabbitMq: E2E_RABBITMQ_URL,
               ASPNETCORE_URLS: `http://localhost:${API_PORT}`,
               ASPNETCORE_ENVIRONMENT: 'Development',
               // The same move ApiFactory makes. No appsettings file has a RateLimiting section,
@@ -128,6 +141,9 @@ export default defineConfig({
             env: {
               ...serverLogging,
               ConnectionStrings__Default: E2E_CONNECTION_STRING,
+              // The e2e broker in docker-compose.e2e.yml. Both hosts refuse to start without one
+              // (ADR 0026): the API publishes, the worker publishes and listens.
+              ConnectionStrings__RabbitMq: E2E_RABBITMQ_URL,
               ASPNETCORE_URLS: `http://localhost:${WORKER_PORT}`,
               ASPNETCORE_ENVIRONMENT: 'Development',
             },

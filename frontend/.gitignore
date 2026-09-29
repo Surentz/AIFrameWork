@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# The e2e operator's saved session (e2e/setup/seed-admin.ts): a live cookie, never committed.
+e2e/.auth/

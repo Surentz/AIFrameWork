@@ -30,6 +30,10 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # string below has to agree with it or the migration step silently targets the wrong database.
 $pgPort = if ($env:DEV_PG_PORT) { $env:DEV_PG_PORT } else { '55433' }
 
+# Same defaults docker-compose.yml's RABBITMQ_PORT / RABBITMQ_UI_PORT fall back to.
+$rabbitPort = if ($env:RABBITMQ_PORT) { $env:RABBITMQ_PORT } else { '55672' }
+$rabbitUiPort = if ($env:RABBITMQ_UI_PORT) { $env:RABBITMQ_UI_PORT } else { '55673' }
+
 # Same default docker-compose.yml's SEQ_PORT falls back to. Only read when -WithSeq is set.
 $seqPort = if ($env:SEQ_PORT) { $env:SEQ_PORT } else { '55341' }
 
@@ -79,9 +83,9 @@ Invoke-Step 'Checking the ports are free' {
     $global:LASTEXITCODE = 0
 }
 
-# --wait blocks on the healthcheck in docker-compose.yml, so Postgres (and Seq, with -WithSeq)
-# is genuinely accepting connections when this returns — no polling of our own required.
-Invoke-Step 'Starting the dev database' {
+# --wait blocks on the healthcheck in docker-compose.yml, so Postgres, the broker (and Seq, with
+# -WithSeq) are genuinely accepting connections when this returns — no polling of our own required.
+Invoke-Step 'Starting the dev database and message broker' {
     if ($WithSeq) {
         docker compose --project-directory $repoRoot --profile observability up -d --wait
     }
@@ -125,7 +129,14 @@ else {
 # `dotnet run` — no Seq, no -WithSeq — quietly attempting exports to a collector that was never
 # started. The env var is removed again immediately after spawning, same as ConnectionStrings__
 # Default's own cleanup above, so it does not leak into commands run later in this same window.
+#
+# ConnectionStrings__RabbitMq is set the same way, and always, not only with -WithSeq: both hosts
+# refuse to start without a broker (ADR 0026), and appsettings.Development.json names port 55672.
+# Setting it from $rabbitPort is what makes a RABBITMQ_PORT override reach the API and the worker,
+# exactly as DEV_PG_PORT reaches the migrations through ConnectionStrings__Default above. It is
+# removed after spawning for the same reason as the OTLP pair.
 Invoke-Step 'Launching the API' {
+    $env:ConnectionStrings__RabbitMq = "amqp://aiframework:aiframework@localhost:$rabbitPort/"
     if ($WithSeq) {
         $env:Observability__Otlp__Enabled = 'true'
         $env:Observability__Otlp__Endpoint = "http://localhost:$seqPort/ingest/otlp"
@@ -136,6 +147,7 @@ Invoke-Step 'Launching the API' {
         )
     }
     finally {
+        Remove-Item Env:\ConnectionStrings__RabbitMq -ErrorAction SilentlyContinue
         if ($WithSeq) {
             Remove-Item Env:\Observability__Otlp__Enabled -ErrorAction SilentlyContinue
             Remove-Item Env:\Observability__Otlp__Endpoint -ErrorAction SilentlyContinue
@@ -146,13 +158,14 @@ Invoke-Step 'Launching the API' {
 
 # The job worker, in a window of its own. The compose loop runs the same host split the cluster
 # does (ADR 0016) rather than a convenient approximation: the API here listens on no job queue, so
-# without this window an enqueued job simply sits in Postgres and nothing says so.
+# without this window an enqueued job simply sits on its RabbitMQ queue and nothing says so.
 #
 # It inherits the same environment as the API above — including -WithSeq's OTLP settings, which is
 # why this block sits inside the same try/finally-guarded region rather than after the cleanup:
 # a worker exporting to a different place than the API would defeat the point of having one log
 # store to correlate a job against the request that enqueued it.
 Invoke-Step 'Launching the job worker' {
+    $env:ConnectionStrings__RabbitMq = "amqp://aiframework:aiframework@localhost:$rabbitPort/"
     if ($WithSeq) {
         $env:Observability__Otlp__Enabled = 'true'
         $env:Observability__Otlp__Endpoint = "http://localhost:$seqPort/ingest/otlp"
@@ -163,6 +176,7 @@ Invoke-Step 'Launching the job worker' {
         )
     }
     finally {
+        Remove-Item Env:\ConnectionStrings__RabbitMq -ErrorAction SilentlyContinue
         if ($WithSeq) {
             Remove-Item Env:\Observability__Otlp__Enabled -ErrorAction SilentlyContinue
             Remove-Item Env:\Observability__Otlp__Endpoint -ErrorAction SilentlyContinue
@@ -181,18 +195,37 @@ Invoke-Step 'Launching the job worker' {
 Write-Host '==> Giving the API a moment to finish starting' -ForegroundColor Cyan
 Start-Sleep -Seconds 5
 
-# A missing node_modules doesn't fail loudly: `npm start` still launches, and only the
-# `vite` binary it shells out to is missing, so the error surfaces inside the new window
-# ("'vite' is not recognized...") well after this script has already reported success. Checking
-# here instead means a first run on a fresh clone (or a machine where npm install was never run)
-# just works.
+# A node_modules that is missing, or merely behind the lockfile, doesn't fail loudly: `npm start`
+# still launches, and the failure surfaces inside the new window well after this script has
+# reported success - as "'vite' is not recognized..." when nothing is installed, or as a Vite
+# "Failed to resolve import" for the one package a pulled commit added. Checking here means a
+# first run on a fresh clone, and a `git pull` across a dependency-adding commit, both just work.
 Invoke-Step 'Checking frontend dependencies' {
     $frontendDir = Join-Path $repoRoot 'frontend'
-    if (Test-Path (Join-Path $frontendDir 'node_modules')) {
+    $modulesDir = Join-Path $frontendDir 'node_modules'
+    $lockFile = Join-Path $frontendDir 'package-lock.json'
+    # npm rewrites node_modules/.package-lock.json on every install - including one that finds
+    # nothing to do, confirmed by touching the lockfile and re-running - so its timestamp is
+    # npm's own record of when the tree was last reconciled, and it always lands after the
+    # lockfile's. That makes this comparison self-healing: a lockfile whose timestamp moved
+    # without its contents changing costs one redundant install, not one on every launch.
+    $installedLock = Join-Path $modulesDir '.package-lock.json'
+    $reason =
+        if (-not (Test-Path $modulesDir)) { 'node_modules missing' }
+        # No record of what npm last installed, so there is nothing to compare against and the
+        # tree has to be assumed stale.
+        elseif (-not (Test-Path $installedLock)) { 'node_modules/.package-lock.json missing' }
+        elseif ((Test-Path $lockFile) -and
+                (Get-Item $lockFile).LastWriteTimeUtc -gt (Get-Item $installedLock).LastWriteTimeUtc) {
+            'package-lock.json is newer than the installed tree'
+        }
+        else { $null }
+
+    if (-not $reason) {
         $global:LASTEXITCODE = 0
         return
     }
-    Write-Host '    node_modules missing, running npm install...' -ForegroundColor DarkGray
+    Write-Host "    $reason, running npm install..." -ForegroundColor DarkGray
     # `--prefix` only changes where npm installs to, not where it reads package.json from —
     # that still comes from the process's current directory, which is whatever launched this
     # script (control-panel.bat's own folder, when run that way) and is not necessarily
@@ -222,9 +255,10 @@ Write-Host ''
 Write-Host "  App              http://localhost:$webPort" -ForegroundColor Green
 Write-Host "  API reference    http://localhost:$apiPort/scalar/v1" -ForegroundColor Green
 Write-Host "  Postgres         localhost:$pgPort" -ForegroundColor Green
+Write-Host "  RabbitMQ         amqp://localhost:$rabbitPort   UI http://localhost:$rabbitUiPort  (aiframework / aiframework)" -ForegroundColor Green
 if ($WithSeq) {
     Write-Host "  Seq              http://localhost:$seqPort" -ForegroundColor Green
 }
 Write-Host ''
 Write-Host '  Both tabs open by themselves. Ctrl-C in a window stops that process;' -ForegroundColor DarkGray
-Write-Host '  scripts\stop-dev.ps1 stops the database (and Seq, if it was started).' -ForegroundColor DarkGray
+Write-Host '  scripts\stop-dev.ps1 stops the database and broker (and Seq, if it was started).' -ForegroundColor DarkGray

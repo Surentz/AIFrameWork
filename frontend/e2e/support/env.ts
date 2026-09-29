@@ -10,3 +10,9 @@ export const PREVIEW_PORT = process.env.PREVIEW_PORT ?? '4173';
 export const PG_PORT = process.env.PG_PORT ?? '55432';
 
 export const E2E_CONNECTION_STRING = `Host=localhost;Port=${PG_PORT};Database=aiframework_e2e;Username=e2e;Password=e2e`;
+
+export const E2E_RABBITMQ_PORT = process.env.E2E_RABBITMQ_PORT ?? '55682';
+export const E2E_RABBITMQ_UI_PORT = process.env.E2E_RABBITMQ_UI_PORT ?? '55683';
+export const E2E_RABBITMQ_URL = `amqp://e2e:e2e@localhost:${E2E_RABBITMQ_PORT}/`;
+/** The management HTTP API, which e2e/support/broker.ts publishes through. */
+export const E2E_RABBITMQ_UI_URL = `http://localhost:${E2E_RABBITMQ_UI_PORT}`;

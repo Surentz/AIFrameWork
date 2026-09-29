@@ -117,6 +117,7 @@ generated-code tree, and keeping them apart is what makes each host's `codegen w
 | `react-conventions` / `react-testing` | Writing React / React tests |
 | `regenerate` | After changing a controller, DTO, `[ProducesResponseType]`, or any Wolverine/job handler; a red `codegen` or `contract` CI job |
 | `jobs` | Editing or debugging a background job, Quartz schedule, retry or dead-lettering |
+| `messaging` | RabbitMQ, integration events and their contracts, the shipments listener, anything that publishes or consumes a broker message |
 | `caching` | Making a query cacheable, adding eviction, stale or cross-user data |
 | `auth` | Sign-in, sessions, the security stamp, the `Admin` role, the sign-in audit |
 | `notifications` | The notification feed, handlers that write to it, SignalR push |
@@ -131,14 +132,17 @@ results without logs in the conversation.
 ## Running locally
 
 ```powershell
-./scripts/dev.ps1            # Postgres + API (5234) + job worker (5235) + Vite (5173)
+./scripts/dev.ps1            # Postgres + RabbitMQ + API (5234) + job worker (5235) + Vite (5173)
 ./scripts/worker.ps1         # restart just the worker — required after `codegen write`
 ./scripts/stop-dev.ps1
 ```
 
-Dev Postgres is **55433** (persistent); the e2e one is **55432** (throwaway). `npm run e2e`
-starts its own API on 5234 and worker on 5235 (ADR 0023), so stop the dev loop first or set
-`API_PORT` / `WORKER_PORT`.
+Dev Postgres is **55433** (persistent); the e2e one is **55432** (throwaway). The broker follows
+the same split: dev RabbitMQ is **55672** (AMQP) and **55673** (management UI, login
+`aiframework`/`aiframework`); the e2e one is **55682**/**55683**. The API and the worker both
+refuse to start without it, so a bare `dotnet run` or IDE F5 needs `docker compose up -d` first.
+`npm run e2e` starts its own API on 5234 and worker on 5235 (ADR 0023), so stop the dev loop
+first or set `API_PORT` / `WORKER_PORT`.
 
 **`dotnet ef` cannot see user-secrets** — it reads only the `ConnectionStrings__Default`
 environment variable, and `src/Infrastructure` is both `--project` and `--startup-project`
@@ -158,18 +162,25 @@ tests clean can still be rejected. Use the `regenerate` skill for the exact comm
 - **The API contract** — `openapi/AiFramework.Api.json` and `frontend/src/api/schema.d.ts`, after
   any controller, DTO or `[ProducesResponseType]` change. It needs placeholder env vars
   (`ConnectionStrings__Default`, `Wolverine__Durable=false`, `Admin__ReconcileOnStart=false`);
-  **any new startup path that dials Postgres needs its own switch** there too.
+  **any new startup path that dials Postgres needs its own switch** there too. RabbitMQ needs
+  none: it is configured only when Wolverine is durable.
 
 ## Rules that fail silently
 
 Each of these breaks with no compiler error and often no failing test. The linked skill has the
 full reasoning.
 
-**Jobs** (`jobs`, ADR 0016) — Jobs run in the worker; **the API listens to no queue**. An
-`EnqueueAsync` is **not transactional** with the command: a job that must not be lost is
-enqueued from a domain event handler. A job touching user data implements `IUserScopedJob`.
+**Jobs** (`jobs`, ADRs 0016/0026) — Jobs run in the worker. Jobs ride RabbitMQ quorum queues;
+**the API listens to no queue**. An `EnqueueAsync` is **not transactional** with the command: a
+job that must not be lost is enqueued from a domain event handler. A job touching user data implements `IUserScopedJob`.
 `ICurrentUser` and `IClientContext` are registered **per host**, never in `AddInfrastructure`.
 Never start a Quartz scheduler in the API.
+
+**Messaging** (`messaging`, ADR 0026) — An integration contract is someone else's dependency:
+within `.v1` fields may only be **added**; a rename or removal is a new `.v2` published alongside.
+Delivery is **at least once** — consumers dedupe on `eventId`, and a publisher must never mint a
+new one on redelivery. Application code never references Wolverine or RabbitMQ; it calls
+`IIntegrationEventPublisher`.
 
 **Caching** (`caching`, ADR 0009) — `ICacheable.CacheKey` **never contains a user id**; the
 behavior scopes it. Nothing on the auth path, and not the notification feed, is ever
