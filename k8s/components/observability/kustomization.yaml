@@ -24,13 +24,18 @@ configMapGenerator:
       - aiframework.json=grafana-dashboard.json
     options:
       disableNameSuffixHash: true
-  # The alert rules, as the same file prometheus-rules.test.yml unit-tests with promtool. The
-  # test file itself is not shipped.
+  # Prometheus's config and alert rules (the rules file is what prometheus-rules.test.yml
+  # unit-tests; the test file itself is not shipped). Both keep kustomize's content-hash suffix,
+  # deliberately unlike the dashboard above: a changed file gets a new ConfigMap name, kustomize
+  # rewrites the Deployment's volume to it, and the pod rolls - which is how a changed rule takes
+  # effect. An unchanged file changes nothing, so deploy.ps1 does not restart Prometheus and its
+  # emptyDir history survives the deploy.
+  - name: prometheus-config
+    files:
+      - prometheus.yml
   - name: prometheus-rules
     files:
       - prometheus-rules.yml
-    options:
-      disableNameSuffixHash: true
 
 # Adds the two Otlp keys to the SAME app-config ConfigMap k8s/overlays/local/config.yaml already
 # defines, rather than this component declaring its own ConfigMap - one ConfigMap, one envFrom on

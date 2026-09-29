@@ -274,11 +274,14 @@ Invoke-Step 'Rolling out the application' {
     # and triggers nothing, and the collector does not hot-reload its config file on a change to
     # the mounted volume. Silent otherwise — the collector keeps running on stale config with no
     # error anywhere.
-    # Prometheus and Grafana read mounted config the same way - prometheus.yml and its rules,
-    # Grafana's provisioning - and neither reloads it on a ConfigMap change, so they get the same
-    # restart. (Grafana does re-read the dashboard JSON itself, but a restart costs nothing here.)
+    # Grafana reads its provisioning the same way and gets the same restart; it holds nothing worth
+    # keeping. Prometheus is deliberately NOT restarted here: its storage is an emptyDir, so a
+    # restart on every deploy wiped the metric history the deploy was meant to be compared
+    # against. Its config and rules are hash-named generated ConfigMaps
+    # (k8s/components/observability/kustomization.yaml), so phase C's apply rolls it exactly when
+    # either file changed, and leaves it - and its history - alone otherwise.
     if ($WithObservability) {
-        foreach ($deployment in 'otel-collector', 'prometheus', 'grafana') {
+        foreach ($deployment in 'otel-collector', 'grafana') {
             kubectl --context $context -n $namespace rollout restart "deployment/$deployment"
             Assert-LastExitCode "kubectl rollout restart ($deployment)"
             kubectl --context $context -n $namespace rollout status "deployment/$deployment" --timeout=300s

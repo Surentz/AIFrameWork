@@ -1,42 +1,9 @@
 # Prometheus, as the cluster's metrics store and rule evaluator (ADR 0027). Metrics arrive PUSHED
 # from the OTel Collector through Prometheus's native OTLP receiver - there is no scrape config and
-# no application pod exposes a metrics port. Storage is an emptyDir: this is a rehearsal cluster,
-# and seven days of local metrics are not worth a PVC pinned to one node the way Postgres's is.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: prometheus-config
-data:
-  prometheus.yml: |
-    global:
-      evaluation_interval: 30s
-
-    # prometheus-rules.yml beside this file, mounted from the prometheus-rules ConfigMap that
-    # kustomization.yaml generates - the same file prometheus-rules.test.yml unit-tests.
-    rule_files:
-      - /etc/prometheus-rules/prometheus-rules.yml
-
-    otlp:
-      # service.name and service.instance.id already become `job` and `instance`. These are the
-      # other resource attributes worth a label: which build and which environment (Task 5), and
-      # the broker's and database's own identities from the collector's receivers. Everything
-      # else stays on target_info, joinable but not multiplied into every series.
-      promote_resource_attributes:
-        - service.version
-        - deployment.environment.name
-        - rabbitmq.queue.name
-        - rabbitmq.node.name
-        - rabbitmq.vhost.name
-        - postgresql.database.name
-        - postgresql.table.name
-
-    storage:
-      tsdb:
-        # OTLP pushes from two API replicas, the worker and the collector's own receivers arrive
-        # on their own clocks; without a window a sample a few seconds older than the newest one
-        # for its series is rejected.
-        out_of_order_time_window: 30m
----
+# no application pod exposes a metrics port. Its config is prometheus.yml beside this file (see
+# that file for why it is generated with a content hash). Storage is an emptyDir: this is a
+# rehearsal cluster, and seven days of local metrics are not worth a PVC pinned to one node the
+# way Postgres's is. History survives every deploy that leaves the config and rules alone.
 apiVersion: v1
 kind: Service
 metadata:

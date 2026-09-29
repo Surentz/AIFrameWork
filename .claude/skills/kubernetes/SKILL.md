@@ -142,9 +142,13 @@ on top, so only reach for this when the logging pipeline itself is what you're r
 - **Grafana** (`grafana.yaml`) has one provisioned datasource and one dashboard, and anonymous
   Viewer access. The dashboard is `grafana-dashboard.json`, a real file turned into a ConfigMap
   by the component's `configMapGenerator` — edit the JSON, not a YAML string.
-- **Prometheus, Grafana and the collector do not reload mounted config**, so `deploy.ps1`
-  restarts all three after applying. Without that a changed rule or pipeline silently never
-  takes effect.
+- **None of the three reloads mounted config, and they are handled differently on purpose.**
+  `deploy.ps1` restarts the collector and Grafana after applying (both stateless). Prometheus is
+  **not** restarted: its storage is an emptyDir, and a restart per deploy wiped the history a
+  deploy is meant to be compared against. Instead `prometheus.yml` and `prometheus-rules.yml`
+  are generated ConfigMaps **with** kustomize's content-hash suffix, so a changed file renames
+  the ConfigMap, the Deployment changes, and the pod rolls — only then. Do not add
+  `disableNameSuffixHash` to those two: a changed rule would silently never take effect.
 - **Checking a collector change without a cluster:** extract `config.yaml` from the ConfigMap
   and run the pinned image with `validate --config=…`; it names the broken component. The same
   goes for `promtool check config`/`check rules` in the Prometheus image.
