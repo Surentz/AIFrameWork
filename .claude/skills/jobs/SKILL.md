@@ -53,7 +53,7 @@ on an omission.
 | Job ran, but the API still serves stale data | Expected. A job cannot evict the API's cache — the TTL bounds it |
 | Command rolled back, job ran anyway | `EnqueueAsync` is not transactional. Raise a domain event instead |
 | Schedule missing or wrong after a rollout | An old-build pod re-synced the store. Restart a worker |
-| Worker refuses to start naming a `qrtz_` table | A missing migration. `dotnet ef database update` — do not switch to `CreateIfMissing` |
+| Worker refuses to start naming a `qrtz_` table, or `Database schema validation failed` naming Quartz's own `.sql` scripts | A missing migration. `dotnet ef database update` — do not run Quartz's scripts by hand and do not switch to `CreateIfMissing` |
 
 ## The six things that will cost you time
 
