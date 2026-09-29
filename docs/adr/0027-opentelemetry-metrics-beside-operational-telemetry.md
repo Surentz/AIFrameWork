@@ -3,10 +3,13 @@
 **Date:** 2026-09-29
 **Status:** Accepted
 
-> Written ahead of the cluster half of the implementation, like ADR 0021. The decision is made;
-> the code lands in `docs/superpowers/plans/2026-09-29-opentelemetry-observability.md`, Tasks 9,
-> 10 and 12, and Task 10's first job is to confirm on a real cluster the metric and label names
-> the dashboards and alert rules below depend on.
+> Written ahead of the cluster half of the implementation, like ADR 0021, and implemented the
+> same day by `docs/superpowers/plans/2026-09-29-opentelemetry-observability.md` (Tasks 9, 10
+> and 12). The metric and label names the dashboard and alert rules use were read off a live
+> Prometheus on the kind cluster, not taken from documentation. Two things the cluster taught
+> that this ADR did not foresee are recorded in the `kubernetes` skill: a counter born at 1 needs
+> Prometheus's `created-timestamp-zero-ingestion`, and Grafana's rate windows need the 60s push
+> interval declared.
 
 ## Context
 

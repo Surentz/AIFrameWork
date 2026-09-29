@@ -1,6 +1,6 @@
 ---
 name: kubernetes
-description: Use when deploying to or debugging the local kind cluster - deploy.ps1, two API replicas across two nodes, HPAs and disruption budgets, ingress cookie affinity, TLS, the migration Job, -WithObservability (OTel Collector to OpenSearch), and e2e-k8s.ps1.
+description: Use when deploying to or debugging the local kind cluster - deploy.ps1, two API replicas across two nodes, HPAs and disruption budgets, ingress cookie affinity, TLS, the migration Job, -WithObservability (OTel Collector to OpenSearch for logs and traces, Prometheus and Grafana for metrics, tail sampling, alert rules and their promtool tests), and e2e-k8s.ps1.
 ---
 
 # Running on Kubernetes

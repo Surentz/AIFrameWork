@@ -1,6 +1,6 @@
 ---
 name: observability
-description: Use when touching logging, tracing, OTLP export, trace links from the UI into the log store, or the traffic (RED) metrics and their charts - Monitoring__TraceLinkTemplate, ErrorPanel references, Behaviors.LoggedAsync levels, what must never be logged, Observability__Otlp__* config, TrafficMiddleware, histogram percentiles, and traffic_buckets.
+description: Use when touching logging, tracing, OTLP export, OpenTelemetry metrics, sampling, trace links from the UI into the log store, or the traffic (RED) metrics and their charts - Monitoring__TraceLinkTemplate, ErrorPanel references, Observability__Otlp__Headers, service.version, Behaviors.LoggedAsync levels, what must never be logged, Observability__Otlp__* config, TrafficMiddleware, histogram percentiles, and traffic_buckets.
 ---
 
 # Logging, tracing and traffic metrics
