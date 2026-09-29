@@ -18,7 +18,9 @@ before new adapters take effect, and which is otherwise a stop-everything-and-st
 `-WithSeq` starts `docker-compose.yml`'s `observability` profile alongside Postgres and points
 the launched API at it (`Observability__Otlp__Enabled`/`__Endpoint`, set on the API's own
 process environment, never baked into `appsettings.Development.json` — every developer's `dotnet
-run` would otherwise try to export to a collector nobody started). `scripts/stop-dev.ps1` always
+run` would otherwise try to export to a collector nobody started). It also sets
+`Monitoring__TraceLinkTemplate` on the API, so the monitoring tables' Trace column links into
+Seq. `scripts/stop-dev.ps1` always
 passes `--profile observability` to `docker compose down`, whether or not `-WithSeq` was used —
 confirmed empirically, not assumed, that a bare `docker compose down` does NOT stop a
 profile-started container even when it is currently running. See the `observability` skill.

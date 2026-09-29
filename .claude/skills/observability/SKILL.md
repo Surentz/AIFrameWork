@@ -1,6 +1,6 @@
 ---
 name: observability
-description: Use when touching logging, tracing, OTLP export, or the traffic (RED) metrics and their charts - Behaviors.LoggedAsync levels, what must never be logged, Observability__Otlp__* config, TrafficMiddleware, histogram percentiles, and traffic_buckets.
+description: Use when touching logging, tracing, OTLP export, trace links from the UI into the log store, or the traffic (RED) metrics and their charts - Monitoring__TraceLinkTemplate, ErrorPanel references, Behaviors.LoggedAsync levels, what must never be logged, Observability__Otlp__* config, TrafficMiddleware, histogram percentiles, and traffic_buckets.
 ---
 
 # Logging, tracing and traffic metrics
@@ -55,6 +55,36 @@ See `docs/superpowers/plans/2026-09-13-centralized-logging.md` for the full desi
 phased rollout, and ADR 0015 for the decision itself — MEL + a pipeline behavior over Serilog or
 a base class, OTLP export over a store-specific sink.
 
+
+## Trace links
+
+The trace id is how every other record reaches the log store, so the UI hands it out in two
+places.
+
+- **Monitoring tables.** Job runs, sign-in attempts and admin actions each have a Trace column
+  (`TraceLink`). `Monitoring__TraceLinkTemplate` turns it into a link: a URL with `{traceId}`
+  where the 32-hex id goes, carried to the SPA on `GET /api/monitoring/access` (admin-only, so a
+  member never learns where the log store is). Unset, the id is selectable text. The API
+  **refuses to start** on a template that is not an absolute http(s) URL containing
+  `{traceId}` (`MonitoringPageOptions.IsValidTemplate`) — it becomes an `href`.
+- **Errors.** `ErrorPanel` renders every failed query and mutation, and for a **5xx only**
+  appends `Reference: <trace id>`. A 4xx is the caller's to fix; a reference there reads as
+  "contact support".
+
+**Two id shapes, one normaliser.** `ProblemDetails.traceId` is `Activity.Id` — the full W3C
+traceparent `00-<trace>-<span>-<flags>`, ASP.NET Core's own convention, pinned by
+`ObservabilityRegistrationTests`. The audit tables store the bare 32-hex `TraceId`. Do not
+"fix" either: `frontend/src/api/traceId.ts`'s `normaliseTraceId` reads both, and rejects
+`HttpContext.TraceIdentifier`'s `0HN…:1` fallback, which appears in no log record.
+
+Verified templates:
+
+| Store | Template |
+|---|---|
+| Seq (dev, `-WithSeq`) | `http://localhost:55341/#/events?filter=@TraceId%20%3D%20'{traceId}'` |
+
+Seq has no separate trace route — traces live in the events view, and `#/events?filter=` is the
+shape Seq's own UI links use.
 
 ## Traffic
 
