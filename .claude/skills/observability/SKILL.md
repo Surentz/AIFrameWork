@@ -46,10 +46,23 @@ everywhere — appsettings.json, every test host, CI — so nothing tries to exp
 that was never started; the tracer provider itself is still registered unconditionally, which is
 what makes `Activity.Current` non-null and the `traceId` already written into every
 `ProblemDetails` resolve to a real, correlatable value. `Observability:Otlp:Endpoint` is the OTLP
-receiver's **root**, with no `/v1/logs`/`/v1/traces` suffix —
-`ObservabilityRegistration.BuildOtlpEndpoint` appends the right one per signal, and does not rely
-on the SDK to (confirmed empirically that it will not: see that method's own remarks for what
-that cost to discover).
+receiver's **root**, with no `/v1/logs`/`/v1/traces` suffix — `OtlpEndpoint.Build` appends the
+right one per signal, and does not rely on the SDK to (confirmed empirically that it will not:
+see that method's own remarks for what that cost to discover).
+
+**Every exporter goes through its host's `ConfigureExporter`** (`ObservabilityRegistration` and
+`WorkerObservability` each have one — the hosts compose separately, ADR 0016). A new signal's
+exporter that sets `Protocol`/`Endpoint` itself will miss the auth headers.
+
+**`Observability__Otlp__Headers` is a secret.** OTLP's `key=value,key2=value2` form, for a hosted
+backend's API key (`Authorization=Basic …`). Environment or secret store only — never an
+appsettings file. Blank is treated as unset. Seq and the in-cluster collector need none.
+
+**Every record carries `service.version` and `deployment.environment.name`**
+(`ObservabilityResource`). The version is the assembly's informational version,
+`1.0.0+<commit>`: a local build gets the commit from `.git` via the SDK; the image build has no
+`.git`, so `Dockerfile.api` takes `SOURCE_REVISION` and `deploy/deploy.ps1` passes it. An image
+built without it reports a bare `1.0.0`.
 
 See `docs/superpowers/plans/2026-09-13-centralized-logging.md` for the full design and the
 phased rollout, and ADR 0015 for the decision itself — MEL + a pipeline behavior over Serilog or

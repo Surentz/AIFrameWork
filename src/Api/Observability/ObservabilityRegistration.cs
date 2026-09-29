@@ -50,11 +50,8 @@ public static class ObservabilityRegistration
 
             if (options.Otlp.Enabled)
             {
-                logging.AddOtlpExporter(exporter =>
-                {
-                    exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
-                    exporter.Endpoint = OtlpEndpoint.Build(options.Otlp.Endpoint, OtlpEndpoint.LogsPath);
-                });
+                logging.AddOtlpExporter(
+                    exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.LogsPath));
             }
         });
 
@@ -68,6 +65,28 @@ public static class ObservabilityRegistration
             .WithTracing(tracing => ConfigureTracing(tracing, options));
 
         return builder;
+    }
+
+    /// <summary>
+    /// Every exporter this host creates goes through here, so logs, traces and metrics cannot
+    /// disagree about where they go or how they authenticate. Public so it can be tested
+    /// directly; OtlpEndpoint.Build's remarks record why the protocol is set explicitly and why
+    /// the signal path is appended here rather than left to the SDK.
+    /// </summary>
+    public static void ConfigureExporter(OtlpExporterOptions exporter, OtlpOptions otlp, string signalPath)
+    {
+        ArgumentNullException.ThrowIfNull(exporter);
+        ArgumentNullException.ThrowIfNull(otlp);
+
+        exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
+        exporter.Endpoint = OtlpEndpoint.Build(otlp.Endpoint, signalPath);
+
+        // Blank means unset: an unfilled secret arrives as "", which the exporter would try to
+        // parse as key=value pairs.
+        if (!string.IsNullOrWhiteSpace(otlp.Headers))
+        {
+            exporter.Headers = otlp.Headers;
+        }
     }
 
     /// <summary>Split out of AddObservability purely to stay under MA0051's line limit.</summary>
@@ -87,11 +106,8 @@ public static class ObservabilityRegistration
 
         if (options.Otlp.Enabled && options.Otlp.Traces)
         {
-            tracing.AddOtlpExporter(exporter =>
-            {
-                exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
-                exporter.Endpoint = OtlpEndpoint.Build(options.Otlp.Endpoint, OtlpEndpoint.TracesPath);
-            });
+            tracing.AddOtlpExporter(
+                exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.TracesPath));
         }
     }
 }

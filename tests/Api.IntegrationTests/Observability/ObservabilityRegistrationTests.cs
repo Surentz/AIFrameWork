@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using AiFramework.Api.Observability;
 using AiFramework.Infrastructure.Observability;
 using FluentAssertions;
+using OpenTelemetry.Exporter;
 
 namespace AiFramework.Api.IntegrationTests.Observability;
 
@@ -66,5 +67,46 @@ public sealed partial class ObservabilityRegistrationTests(ApiFactory factory)
         var endpoint = OtlpEndpoint.Build(receiverRoot, signalPath);
 
         endpoint.Should().Be(new Uri(expected));
+    }
+
+    [Fact]
+    public void ConfigureExporter_SpeaksHttpProtobufToTheSignalsOwnPath()
+    {
+        var exporter = new OtlpExporterOptions();
+
+        ObservabilityRegistration.ConfigureExporter(
+            exporter, new OtlpOptions { Endpoint = "http://collector:4318" }, OtlpEndpoint.TracesPath);
+
+        exporter.Protocol.Should().Be(OtlpExportProtocol.HttpProtobuf);
+        exporter.Endpoint.Should().Be(new Uri("http://collector:4318/v1/traces"));
+    }
+
+    [Fact]
+    public void ConfigureExporter_WithHeaders_SendsThem()
+    {
+        // What a hosted backend (Grafana Cloud, Honeycomb, …) authenticates the export with.
+        var exporter = new OtlpExporterOptions();
+
+        ObservabilityRegistration.ConfigureExporter(
+            exporter,
+            new OtlpOptions { Headers = "Authorization=Basic abc123,X-Scope-OrgID=tenant-1" },
+            OtlpEndpoint.LogsPath);
+
+        exporter.Headers.Should().Be("Authorization=Basic abc123,X-Scope-OrgID=tenant-1");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ConfigureExporter_WithBlankHeaders_SendsNone(string? headers)
+    {
+        // An unfilled secret arrives as "" - and the exporter would try to parse it as k=v pairs.
+        var exporter = new OtlpExporterOptions();
+
+        ObservabilityRegistration.ConfigureExporter(
+            exporter, new OtlpOptions { Headers = headers }, OtlpEndpoint.LogsPath);
+
+        exporter.Headers.Should().BeNull();
     }
 }

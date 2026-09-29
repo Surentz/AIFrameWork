@@ -40,4 +40,16 @@ public sealed class OtlpOptions
     public string Endpoint { get; set; } = "http://localhost:4318";
 
     public bool Traces { get; set; } = true;
+
+    /// <summary>
+    /// Headers sent with every export, in OTLP's own <c>key=value,key2=value2</c> form — how a
+    /// hosted backend (Grafana Cloud, Honeycomb, Azure Monitor's OTLP ingestion, …) authenticates
+    /// the sender. Unset for Seq and for the in-cluster collector, which need none.
+    /// </summary>
+    /// <remarks>
+    /// <b>A secret.</b> It carries an API key, so it comes from the environment or a secret store
+    /// as <c>Observability__Otlp__Headers</c> — never from an appsettings file, which is committed.
+    /// Blank is treated as unset, so an unfilled secret does not become an unparseable header.
+    /// </remarks>
+    public string? Headers { get; set; }
 }
