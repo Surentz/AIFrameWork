@@ -46,6 +46,31 @@ data:
         check_interval: 1s
         limit_percentage: 80
         spike_limit_percentage: 25
+      # Tail sampling (traces only): decided once a trace's spans have had 10s to arrive, so it
+      # can keep every trace that went wrong or slow and a fifth of the ordinary ones. The apps
+      # head-sample nothing away by default (Observability:Otlp:TraceSampleRatio = 1), so this
+      # is where volume is cut. Policies are OR'd. Logs are never sampled - a trace link still
+      # finds every request's log lines even when its spans were dropped here.
+      #
+      # REQUIRES A SINGLE COLLECTOR REPLICA: a trace's spans (two API pods, the worker) must all
+      # reach the same collector to be judged together. Scaling this Deployment out would need a
+      # load-balancing exporter tier in front, keyed on trace id.
+      tail_sampling:
+        decision_wait: 10s
+        num_traces: 20000
+        policies:
+          - name: errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: slow
+            type: latency
+            latency:
+              threshold_ms: 1000
+          - name: a-fifth-of-the-rest
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 20
       batch: {}
 
     exporters:
@@ -82,7 +107,7 @@ data:
           exporters: [opensearch]
         traces:
           receivers: [otlp]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, tail_sampling, batch]
           exporters: [opensearch]
         metrics:
           receivers: [otlp, rabbitmq, postgresql]

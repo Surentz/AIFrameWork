@@ -24,6 +24,13 @@ configMapGenerator:
       - aiframework.json=grafana-dashboard.json
     options:
       disableNameSuffixHash: true
+  # The alert rules, as the same file prometheus-rules.test.yml unit-tests with promtool. The
+  # test file itself is not shipped.
+  - name: prometheus-rules
+    files:
+      - prometheus-rules.yml
+    options:
+      disableNameSuffixHash: true
 
 # Adds the two Otlp keys to the SAME app-config ConfigMap k8s/overlays/local/config.yaml already
 # defines, rather than this component declaring its own ConfigMap - one ConfigMap, one envFrom on

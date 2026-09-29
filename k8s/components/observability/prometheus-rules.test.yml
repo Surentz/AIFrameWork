@@ -1,0 +1,146 @@
+# Unit tests for prometheus-rules.yml, run by the pinned image's own promtool:
+#
+#   docker run --rm --entrypoint promtool -v "$PWD/k8s/components/observability:/rules" \
+#     prom/prometheus:v3.15.0 test rules /rules/prometheus-rules.test.yml
+#
+# Series names and labels are the ones Prometheus actually holds on the kind cluster (read off
+# /api/v1/label/__name__/values), not the ones the semantic conventions suggest - see the
+# kubernetes skill on Wolverine's "_Messages" suffix. Every alert has a firing case and, where a
+# threshold could be misjudged, a quiet case beside it.
+rule_files:
+  - prometheus-rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # 10 of every 70 requests fail: 14%, over the 5% line for longer than 5 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{job="aiframework-api", http_route="api/orders", http_response_status_code="200"}'
+        values: '0+60x20'
+      - series: 'http_server_request_duration_seconds_count{job="aiframework-api", http_route="api/orders", http_response_status_code="500"}'
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ApiHighServerErrorRate
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: More than 5% of API requests are failing with a 5xx.
+              description: 14.29% of requests failed over the last 5 minutes. Each one left a trace id in its ProblemDetails and its log lines; the monitoring page's Traffic view shows which routes.
+
+  # 1 in 61: under 2%, which is noise, not an incident.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{job="aiframework-api", http_route="api/orders", http_response_status_code="200"}'
+        values: '0+60x20'
+      - series: 'http_server_request_duration_seconds_count{job="aiframework-api", http_route="api/orders", http_response_status_code="500"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ApiHighServerErrorRate
+        exp_alerts: []
+
+  # Every request takes between 1 and 2.5 seconds, for longer than 10 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_bucket{job="aiframework-api", le="0.5"}'
+        values: '0+0x25'
+      - series: 'http_server_request_duration_seconds_bucket{job="aiframework-api", le="1"}'
+        values: '0+0x25'
+      - series: 'http_server_request_duration_seconds_bucket{job="aiframework-api", le="2.5"}'
+        values: '0+30x25'
+      - series: 'http_server_request_duration_seconds_bucket{job="aiframework-api", le="+Inf"}'
+        values: '0+30x25'
+      - series: 'http_server_request_duration_seconds_count{job="aiframework-api", http_response_status_code="200"}'
+        values: '0+30x25'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ApiSlowRequests
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: API p95 latency has been over one second for 10 minutes.
+              description: p95 is 2.425s. The Grafana dashboard breaks it down by route.
+
+  # The same slowness on a single stray request every few minutes is not a latency problem:
+  # the traffic guard keeps a p95 over three samples from paging anyone.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_bucket{job="aiframework-api", le="1"}'
+        values: '0+0x25'
+      - series: 'http_server_request_duration_seconds_bucket{job="aiframework-api", le="2.5"}'
+        values: '0+0.2x25'
+      - series: 'http_server_request_duration_seconds_bucket{job="aiframework-api", le="+Inf"}'
+        values: '0+0.2x25'
+      - series: 'http_server_request_duration_seconds_count{job="aiframework-api", http_response_status_code="200"}'
+        values: '0+0.2x25'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ApiSlowRequests
+        exp_alerts: []
+
+  # A single dead letter is worth knowing about at once - the series is born at 1 on the
+  # cluster, which created-timestamp-zero-ingestion turns into a 0 -> 1 step; modelled here as
+  # the 0 sample that feature writes.
+  - interval: 1m
+    input_series:
+      - series: 'wolverine_dead_letter_queue_Messages_total{job="aiframework-worker", message_type="AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1"}'
+        values: '0 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: MessagesDeadLettered
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: aiframework-worker
+              message_type: AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1
+            exp_annotations:
+              summary: AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1 was dead-lettered.
+              description: Dead letters live in Postgres (wolverine.wolverine_dead_letters). Retry or discard them from the monitoring page's Jobs view.
+
+  # 2,000 messages ready and not being taken, for over 10 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'rabbitmq_message_current{rabbitmq_queue_name="aiframework.jobs.heavy", state="ready"}'
+        values: '2000x20'
+      - series: 'rabbitmq_message_current{rabbitmq_queue_name="aiframework.jobs.heavy", state="unacknowledged"}'
+        values: '5x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: BrokerBacklog
+        exp_alerts:
+          - exp_labels: { severity: warning, rabbitmq_queue_name: aiframework.jobs.heavy }
+            exp_annotations:
+              summary: aiframework.jobs.heavy has had over 1000 ready messages for 10 minutes.
+
+  # 90 of 100 pooled connections in use for over 5 minutes, in one process.
+  - interval: 1m
+    input_series:
+      - series: 'db_client_connection_count{job="aiframework-api", instance="api-a", db_client_connection_pool_name="aiframework", db_client_connection_state="used"}'
+        values: '90x10'
+      - series: 'db_client_connection_count{job="aiframework-api", instance="api-a", db_client_connection_pool_name="aiframework", db_client_connection_state="idle"}'
+        values: '10x10'
+      - series: 'db_client_connection_max{job="aiframework-api", instance="api-a", db_client_connection_pool_name="aiframework"}'
+        values: '100x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: DatabasePoolSaturated
+        exp_alerts:
+          - exp_labels: { severity: warning, job: aiframework-api, instance: api-a }
+            exp_annotations:
+              summary: api-a is using over 80% of its database connection pool.
+
+  # No telemetry at all from the API for five minutes: the API, the collector or the export is
+  # down, and every other alert here has gone quiet for the wrong reason.
+  - interval: 1m
+    input_series:
+      - series: 'target_info{job="aiframework-worker"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: TelemetryMissing
+        exp_alerts:
+          - exp_labels: { severity: critical, job: aiframework-api }
+            exp_annotations:
+              summary: No telemetry from the API for over 5 minutes.

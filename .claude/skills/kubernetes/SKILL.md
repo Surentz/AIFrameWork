@@ -148,6 +148,22 @@ on top, so only reach for this when the logging pipeline itself is what you're r
 - **Checking a collector change without a cluster:** extract `config.yaml` from the ConfigMap
   and run the pinned image with `validate --config=…`; it names the broken component. The same
   goes for `promtool check config`/`check rules` in the Prometheus image.
+- **Tail sampling lives in the collector's traces pipeline**: every ERROR trace, every trace over
+  1s, and 20% of the rest (measured: 39 of 200 fast requests kept; the dead-lettered shipment's
+  error trace kept). It needs **one collector replica** — a trace's spans must meet in one
+  collector. Logs are never sampled.
+- **Alert rules are `prometheus-rules.yml`, unit-tested by `prometheus-rules.test.yml`**, run
+  with the pinned image's promtool:
+  `docker run --rm --entrypoint promtool -v "<abs path>/k8s/components/observability:/rules" prom/prometheus:v3.15.0 test rules /rules/prometheus-rules.test.yml`.
+  Six rules: 5xx share, p95 latency (with a traffic guard), dead letters, broker backlog, pool
+  saturation, and `TelemetryMissing` (which notices when the others have gone quiet for the
+  wrong reason). No Alertmanager: firing alerts show at Prometheus's `/alerts`.
+- **`--enable-feature=created-timestamp-zero-ingestion` is load-bearing.** A counter series born
+  at 1 (the first dead letter, the first 5xx on a route) is otherwise invisible to
+  `increase()`/`rate()`, and `MessagesDeadLettered` stays silent for exactly the dead letter it
+  exists for.
+- **Grafana's datasource carries `timeInterval: 60s`** — the OTLP push interval. At the 15s
+  default, `$__rate_interval` holds one sample and every rate panel says "No data".
 - Port-forwards (printed by `deploy.ps1`): Grafana 3000, Prometheus 9090 (`/alerts`), OpenSearch
-  Dashboards 5601.
+  Dashboards 5601. A pod restart breaks an open port-forward silently; start a new one.
 

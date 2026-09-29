@@ -11,6 +11,11 @@ data:
     global:
       evaluation_interval: 30s
 
+    # prometheus-rules.yml beside this file, mounted from the prometheus-rules ConfigMap that
+    # kustomization.yaml generates - the same file prometheus-rules.test.yml unit-tests.
+    rule_files:
+      - /etc/prometheus-rules/prometheus-rules.yml
+
     otlp:
       # service.name and service.instance.id already become `job` and `instance`. These are the
       # other resource attributes worth a label: which build and which environment (Task 5), and
@@ -94,11 +99,16 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus-rules
             - name: data
               mountPath: /prometheus
       volumes:
         - name: config
           configMap:
             name: prometheus-config
+        - name: rules
+          configMap:
+            name: prometheus-rules
         - name: data
           emptyDir: {}
