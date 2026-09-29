@@ -112,3 +112,14 @@ Three things about this worth knowing before you change it:
   the document says so. Do not narrow it to `number` to make it look tidier.
 - **`schema.d.ts` is in eslint's `ignores`**, beside `dist/`. It is generated output, so a style
   rule failing on it is answered by not linting it, never by relaxing the rule.
+
+## Dependencies held back or overridden
+
+Each entry says what would let it go. Check before assuming a peer-range error is new.
+
+- **`eslint-plugin-jsx-a11y` runs under an npm `overrides` entry** (`package.json`) that points
+  its `eslint` peer at the root version. 6.10.2 is the latest release (October 2024) and declares
+  `eslint ^3‖…‖^9`, so without the override `npm ci` refuses ESLint 10. It calls none of the rule
+  `context` methods ESLint 10 removed, and a file breaking one rule per plugin reports the same
+  errors under 9 and 10 (verified 2026-09-29). **Remove the override** once a jsx-a11y release
+  declares ESLint 10 — upstream issues jsx-eslint/eslint-plugin-jsx-a11y#1075, #1079, #1081.
