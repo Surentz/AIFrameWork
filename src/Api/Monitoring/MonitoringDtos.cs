@@ -19,6 +19,14 @@ public sealed record MonitoringAccessResponse
     /// operator role has somewhere to appear without a contract change.
     /// </summary>
     public required UserRole Role { get; init; }
+
+    /// <summary>
+    /// The log store's URL for one trace, with <c>{traceId}</c> where the 32-hex id goes; null
+    /// when none is configured, in which case trace ids are shown as text. Carried here because
+    /// every monitoring page already asks this endpoint, and because it is admin-only: a member
+    /// never learns where the log store is.
+    /// </summary>
+    public string? TraceLinkTemplate { get; init; }
 }
 
 /// <summary>One attempt at one job.</summary>

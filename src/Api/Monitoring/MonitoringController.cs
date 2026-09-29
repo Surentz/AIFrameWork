@@ -4,13 +4,15 @@ using AiFramework.Application.Monitoring;
 using AiFramework.Application.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace AiFramework.Api.Monitoring;
 
 /// <summary>
-/// The monitoring area's own endpoint: who is looking at it. Each area of the page gets its own
-/// controller beneath <c>api/monitoring</c> — jobs here already, traffic and sign-in history in
-/// phases 3 and 4 — rather than one controller accumulating every operator concern.
+/// The monitoring area's own endpoint: who is looking at it, and where its trace links point.
+/// Each area of the page gets its own controller beneath <c>api/monitoring</c> — jobs here
+/// already, traffic and sign-in history in phases 3 and 4 — rather than one controller
+/// accumulating every operator concern.
 /// </summary>
 /// <remarks>
 /// The policy sits on the CONTROLLER, not on each action, so an endpoint added later is gated by
@@ -22,7 +24,9 @@ namespace AiFramework.Api.Monitoring;
 [Route("api/monitoring")]
 [Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
 public sealed class MonitoringController(
-    IQueryDispatcher queries, ICurrentUser currentUser) : ControllerBase
+    IQueryDispatcher queries,
+    ICurrentUser currentUser,
+    IOptions<MonitoringPageOptions> pageOptions) : ControllerBase
 {
     /// <summary>Confirms monitoring access and identifies the operator.</summary>
     [HttpGet("access")]
@@ -39,12 +43,16 @@ public sealed class MonitoringController(
         var result = await queries.SendAsync(new GetUser(userId), cancellationToken)
             .ConfigureAwait(false);
 
+        var configured = pageOptions.Value.TraceLinkTemplate;
+        var template = string.IsNullOrWhiteSpace(configured) ? null : configured;
+
         return result.IsSuccess
             ? Ok(new MonitoringAccessResponse
             {
                 UserId = result.Value.UserId,
                 Username = result.Value.Username,
                 Role = result.Value.Role,
+                TraceLinkTemplate = template,
             })
             : result.Problem(HttpContext);
     }
