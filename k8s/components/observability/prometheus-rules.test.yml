@@ -97,7 +97,36 @@ tests:
               message_type: AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1
             exp_annotations:
               summary: AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1 was dead-lettered.
-              description: Dead letters live in Postgres (wolverine.wolverine_dead_letters). Retry or discard them from the monitoring page's Jobs view.
+              description: Dead letters live in Postgres (wolverine.wolverine_dead_letters). Retry them from the monitoring page's Jobs view.
+
+  # The same, with NO zero sample: a dead letter an hour or more after the worker started, when
+  # the start-timestamp zero is too old for Prometheus to accept. The series simply appears at 1.
+  # increase() cannot see that step; the rule must still fire.
+  - interval: 1m
+    input_series:
+      - series: 'wolverine_dead_letter_queue_Messages_total{job="aiframework-worker", message_type="AiFramework.Application.Monitoring.PruneJobRuns"}'
+        values: '_x20 1x10'
+    alert_rule_test:
+      - eval_time: 23m
+        alertname: MessagesDeadLettered
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: aiframework-worker
+              message_type: AiFramework.Application.Monitoring.PruneJobRuns
+            exp_annotations:
+              summary: AiFramework.Application.Monitoring.PruneJobRuns was dead-lettered.
+              description: Dead letters live in Postgres (wolverine.wolverine_dead_letters). Retry them from the monitoring page's Jobs view.
+
+  # A dead letter from long ago is not news: nothing new has been dead-lettered for 15 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'wolverine_dead_letter_queue_Messages_total{job="aiframework-worker", message_type="AiFramework.Application.Monitoring.PruneJobRuns"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: MessagesDeadLettered
+        exp_alerts: []
 
   # 2,000 messages ready and not being taken, for over 10 minutes.
   - interval: 1m

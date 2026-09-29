@@ -510,7 +510,7 @@
     {
       "type": "timeseries",
       "title": "Messages dead-lettered (last 15 minutes)",
-      "description": "Every dead letter lands in Postgres (wolverine.wolverine_dead_letters) and on the monitoring page's Jobs view, where it can be retried. The ApiMessagesDeadLettered alert fires on this.",
+      "description": "Every dead letter lands in Postgres (wolverine.wolverine_dead_letters) and on the monitoring page's Jobs view, where it can be retried. The MessagesDeadLettered alert uses the same expression: increase(), plus any series born in the last 15 minutes, whose first increment increase() cannot see.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -531,7 +531,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (message_type) (increase(wolverine_dead_letter_queue_Messages_total{job=~\"$job\"}[15m]))",
+          "expr": "sum by (message_type) (increase(wolverine_dead_letter_queue_Messages_total{job=~\"$job\"}[15m])) or sum by (message_type) (wolverine_dead_letter_queue_Messages_total{job=~\"$job\"} unless wolverine_dead_letter_queue_Messages_total{job=~\"$job\"} offset 15m)",
           "legendFormat": "{{message_type}}"
         }
       ]

@@ -46,14 +46,28 @@ groups:
       - alert: MessagesDeadLettered
         # Any dead letter at all. Each one is a job or an inbound message that will not be retried
         # again without an operator (the monitoring page's Jobs view can retry it).
-        expr: sum by (job, message_type) (increase(wolverine_dead_letter_queue_Messages_total[15m])) > 0
+        #
+        # Two halves, because a message type's FIRST dead letter creates its series already at 1.
+        # increase() only sees that step when Prometheus has the 0 that
+        # created-timestamp-zero-ingestion writes at the counter's start time - and that start time
+        # is the worker's, so an hour or more into its life the 0 is too old to be accepted and the
+        # first dead letter would pass unseen. The second half catches a series that did not exist
+        # 15 minutes ago. Its one false positive: right after Prometheus itself restarts (empty
+        # storage), every existing dead-letter series looks new for 15 minutes.
+        expr: |
+          sum by (job, message_type) (increase(wolverine_dead_letter_queue_Messages_total[15m])) > 0
+          or
+          sum by (job, message_type) (
+            wolverine_dead_letter_queue_Messages_total
+            unless wolverine_dead_letter_queue_Messages_total offset 15m
+          ) > 0
         labels:
           severity: warning
         annotations:
           summary: '{{ $labels.message_type }} was dead-lettered.'
           description: >-
-            Dead letters live in Postgres (wolverine.wolverine_dead_letters). Retry or discard them
-            from the monitoring page's Jobs view.
+            Dead letters live in Postgres (wolverine.wolverine_dead_letters). Retry them from the
+            monitoring page's Jobs view.
 
       - alert: BrokerBacklog
         # Ready messages nobody is taking. The worker has no autoscaler (see the kubernetes skill),
