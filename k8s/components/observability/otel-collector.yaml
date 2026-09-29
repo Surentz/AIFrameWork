@@ -20,6 +20,14 @@ data:
             endpoint: 0.0.0.0:4318
 
     processors:
+      # First in every pipeline, per its own README: it refuses data (the SDKs retry) before the
+      # collector is OOMKilled and drops everything it holds. The percentages are of the
+      # container's cgroup memory limit, read at startup, so they follow the Deployment's
+      # `limits.memory` below rather than hard-coding megabytes that would drift from it.
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
       batch: {}
 
     exporters:
@@ -43,11 +51,11 @@ data:
       pipelines:
         logs:
           receivers: [otlp]
-          processors: [batch]
+          processors: [memory_limiter, batch]
           exporters: [opensearch]
         traces:
           receivers: [otlp]
-          processors: [batch]
+          processors: [memory_limiter, batch]
           exporters: [opensearch]
 ---
 apiVersion: v1
