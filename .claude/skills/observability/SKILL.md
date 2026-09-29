@@ -99,6 +99,27 @@ Verified templates:
 Seq has no separate trace route — traces live in the events view, and `#/events?filter=` is the
 shape Seq's own UI links use.
 
+## Metrics (ADR 0027)
+
+OpenTelemetry metrics for the **runtime and the infrastructure**, beside — never instead of —
+the Postgres traffic rollup below, which stays the monitoring page's source.
+
+- **Meters, in both hosts:** HttpClient, `System.Runtime` (`dotnet.gc.*`,
+  `dotnet.thread_pool.*`), Npgsql (`db.client.operation.duration`, `db.client.connection.count`
+  by state against `db.client.connection.max`), and `Wolverine:*` (`wolverine-execution-time`,
+  `wolverine-messages-received`/`-succeeded`, `wolverine-dead-letter-queue`, inbox/outbox counts).
+  **API only:** ASP.NET Core's built-in meters (`http.server.request.duration`, Kestrel, auth,
+  rate limiting). The worker skips them for the reason it skips ASP.NET tracing.
+- **No `OpenTelemetry.Instrumentation.Runtime`.** On .NET 9+ it only subscribes to
+  `System.Runtime`, which `AddMeter` does directly.
+- **Gate:** exported when `Otlp:Enabled` **and** `Otlp:Metrics` (default `true`). The meter
+  provider itself is always registered; `MetricsPipelineTests`/`WorkerMetricsTests` prove the
+  meters with an in-memory reader and export off.
+- **Where it lands:** Seq 2026.1 (`-WithSeq`) takes OTLP metrics — its Metrics view lists every
+  name above. On the cluster, Prometheus + Grafana (see the `kubernetes` skill).
+- **Cardinality is a review item.** Every tag here is a route template, a pool or a queue name.
+  A tag carrying a user id, an order id or a raw path multiplies the series count.
+
 ## Traffic
 
 RED metrics — rate, errors, duration — for both the HTTP surface and every command and query,

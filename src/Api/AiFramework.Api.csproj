@@ -43,17 +43,19 @@
   </ItemGroup>
 
   <!--
-    OpenTelemetry: the export pipeline for every ILogger record and Activity in the solution.
-    These five track their own release counter (1.18.0), independent of the shared framework's
-    10.0.11 patch line, and are released together — keep them on one version. See
-    docs/superpowers/plans/2026-09-13-centralized-logging.md and ADR 0014.
+    OpenTelemetry: the export pipeline for every ILogger record, Activity and metric in the
+    solution. These four track their own release counter (1.19.x), independent of the shared
+    framework's 10.0.x patch line, and are released together — keep them on one version. See
+    docs/superpowers/plans/2026-09-13-centralized-logging.md and ADRs 0015 and 0027.
+
+    No OpenTelemetry.Instrumentation.Runtime: on .NET 9+ it only subscribes to the runtime's
+    built-in "System.Runtime" meter, which ObservabilityRegistration does with AddMeter directly.
   -->
   <ItemGroup>
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
   </ItemGroup>
 
 </Project>

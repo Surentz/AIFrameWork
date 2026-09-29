@@ -1,6 +1,7 @@
 using AiFramework.Infrastructure.Observability;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -62,7 +63,8 @@ public static class ObservabilityRegistration
                     serviceVersion: ObservabilityResource.ServiceVersionOf(typeof(ObservabilityRegistration).Assembly),
                     serviceInstanceId: string.IsNullOrWhiteSpace(instanceId) ? null : instanceId)
                 .AddAttributes(ObservabilityResource.DeploymentAttributes(builder.Environment.EnvironmentName)))
-            .WithTracing(tracing => ConfigureTracing(tracing, options));
+            .WithTracing(tracing => ConfigureTracing(tracing, options))
+            .WithMetrics(metrics => ConfigureMetrics(metrics, options));
 
         return builder;
     }
@@ -108,6 +110,33 @@ public static class ObservabilityRegistration
         {
             tracing.AddOtlpExporter(
                 exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.TracesPath));
+        }
+    }
+
+    /// <summary>
+    /// ADR 0027. Registered unconditionally, like the tracer provider: the SDK aggregates in
+    /// process and costs nothing per request, and only the OTLP exporter is gated. Every meter
+    /// here tags by route template or pool name, never by a user, an order or a raw path —
+    /// the cardinality rule a new meter must keep.
+    /// </summary>
+    private static void ConfigureMetrics(MeterProviderBuilder metrics, ObservabilityOptions options)
+    {
+        // ASP.NET Core's and HttpClient's built-in .NET 8+ meters (http.server.request.duration,
+        // Kestrel connections, SignalR connections, http.client.request.duration).
+        metrics.AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            // The runtime's built-in meter (GC, thread pool, exceptions). On .NET 9+ this is all
+            // OpenTelemetry.Instrumentation.Runtime would do, so that package is not referenced.
+            .AddMeter("System.Runtime")
+            // Wolverine names its meter "Wolverine:<ServiceName>", and ServiceName defaults to the
+            // entry assembly's name — a wildcard keeps this true if either ever changes.
+            .AddMeter("Wolverine:*")
+            .AddInfrastructureMetrics();
+
+        if (options.Otlp.Enabled && options.Otlp.Metrics)
+        {
+            metrics.AddOtlpExporter(
+                exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.MetricsPath));
         }
     }
 }

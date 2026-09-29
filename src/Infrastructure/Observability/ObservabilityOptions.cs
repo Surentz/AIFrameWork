@@ -42,6 +42,13 @@ public sealed class OtlpOptions
     public bool Traces { get; set; } = true;
 
     /// <summary>
+    /// Exports metrics (ADR 0027) when <see cref="Enabled"/> is also true. On by default, like
+    /// <see cref="Traces"/>: every OTLP receiver this application is pointed at — Seq 2026.1, the
+    /// collector, a hosted backend — takes all three signals. Off is for a receiver that does not.
+    /// </summary>
+    public bool Metrics { get; set; } = true;
+
+    /// <summary>
     /// Headers sent with every export, in OTLP's own <c>key=value,key2=value2</c> form — how a
     /// hosted backend (Grafana Cloud, Honeycomb, Azure Monitor's OTLP ingestion, …) authenticates
     /// the sender. Unset for Seq and for the in-cluster collector, which need none.

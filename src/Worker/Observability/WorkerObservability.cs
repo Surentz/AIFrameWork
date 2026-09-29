@@ -2,6 +2,7 @@ using AiFramework.Infrastructure.Jobs.Scheduling;
 using AiFramework.Infrastructure.Observability;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -66,7 +67,8 @@ public static class WorkerObservability
                     serviceVersion: ObservabilityResource.ServiceVersionOf(typeof(WorkerObservability).Assembly),
                     serviceInstanceId: string.IsNullOrWhiteSpace(instanceId) ? null : instanceId)
                 .AddAttributes(ObservabilityResource.DeploymentAttributes(builder.Environment.EnvironmentName)))
-            .WithTracing(tracing => ConfigureTracing(tracing, options));
+            .WithTracing(tracing => ConfigureTracing(tracing, options))
+            .WithMetrics(metrics => ConfigureMetrics(metrics, options));
 
         return builder;
     }
@@ -110,6 +112,26 @@ public static class WorkerObservability
         {
             tracing.AddOtlpExporter(
                 exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.TracesPath));
+        }
+    }
+
+    /// <summary>
+    /// ADR 0027, the worker's half. No ASP.NET Core meter, for the reason this class's remarks
+    /// give for tracing: the only HTTP here is two kubelet probes. The runtime and the database
+    /// are the point — heavy jobs and pool pressure happen in this host.
+    /// </summary>
+    private static void ConfigureMetrics(MeterProviderBuilder metrics, ObservabilityOptions options)
+    {
+        metrics.AddHttpClientInstrumentation()
+            .AddMeter("System.Runtime")
+            // Wolverine's meter is "Wolverine:<ServiceName>"; see the Api's ConfigureMetrics.
+            .AddMeter("Wolverine:*")
+            .AddInfrastructureMetrics();
+
+        if (options.Otlp.Enabled && options.Otlp.Metrics)
+        {
+            metrics.AddOtlpExporter(
+                exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.MetricsPath));
         }
     }
 }
