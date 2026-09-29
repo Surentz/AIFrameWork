@@ -43,16 +43,13 @@ public sealed class MonitoringController(
         var result = await queries.SendAsync(new GetUser(userId), cancellationToken)
             .ConfigureAwait(false);
 
-        var configured = pageOptions.Value.TraceLinkTemplate;
-        var template = string.IsNullOrWhiteSpace(configured) ? null : configured;
-
         return result.IsSuccess
             ? Ok(new MonitoringAccessResponse
             {
                 UserId = result.Value.UserId,
                 Username = result.Value.Username,
                 Role = result.Value.Role,
-                TraceLinkTemplate = template,
+                TraceLinkTemplate = pageOptions.Value.LinkTemplate,
             })
             : result.Problem(HttpContext);
     }

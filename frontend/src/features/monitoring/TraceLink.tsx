@@ -28,7 +28,7 @@ export function TraceLink({ traceId, template }: TraceLinkProps): React.JSX.Elem
       href={href}
       target="_blank"
       rel="noreferrer"
-      aria-label={`Open trace ${id} in the log store`}
+      aria-label={`Open trace ${id} in the log store (opens in a new tab)`}
     >
       {code}
     </a>

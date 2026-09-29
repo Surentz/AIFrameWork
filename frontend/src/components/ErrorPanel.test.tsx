@@ -38,6 +38,22 @@ describe('ErrorPanel', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent('Reference');
   });
 
+  it('says what failed before the message', () => {
+    const error = new ApiError(503, { detail: 'Service unavailable.' });
+
+    render(<ErrorPanel error={error} lead="The products could not be loaded." />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The products could not be loaded. Service unavailable.',
+    );
+  });
+
+  it('gives no reference for a server failure that carried no trace id', () => {
+    render(<ErrorPanel error={new ApiError(502, {})} />);
+
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Reference');
+  });
+
   it('shows the message of an error that never reached the server', () => {
     render(<ErrorPanel error={new TypeError('Failed to fetch')} />);
 

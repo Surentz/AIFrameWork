@@ -25,6 +25,14 @@ public sealed class MonitoringPageOptions
     public string? TraceLinkTemplate { get; set; }
 
     /// <summary>
+    /// <see cref="TraceLinkTemplate"/> as the SPA should see it: null for blank as well as unset,
+    /// because an empty environment variable or an unfilled secret arrives as "" rather than as
+    /// absent. Read-only, so the configuration binder leaves it alone.
+    /// </summary>
+    public string? LinkTemplate =>
+        string.IsNullOrWhiteSpace(TraceLinkTemplate) ? null : TraceLinkTemplate;
+
+    /// <summary>
     /// True for an unset template, or one that becomes an absolute http(s) URL once the
     /// placeholder is filled. Everything else is refused at startup rather than shipped to the
     /// browser as an <c>href</c> — a <c>javascript:</c> template would run in an administrator's

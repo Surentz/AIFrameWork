@@ -42,6 +42,19 @@ public sealed class TraceLinkTemplateTests(ApiFactory factory)
         valid.Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void LinkTemplate_ForABlankSetting_IsNull(string? configured)
+    {
+        // An unset secret or an empty environment variable arrives as "" or whitespace; the SPA
+        // must see "no template", not a template it would try to fill.
+        var options = new MonitoringPageOptions { TraceLinkTemplate = configured };
+
+        options.LinkTemplate.Should().BeNull();
+    }
+
     [Fact]
     public async Task Access_WithNoTemplateConfigured_CarriesNull()
     {

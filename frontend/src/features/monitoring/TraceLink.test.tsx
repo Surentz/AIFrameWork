@@ -7,11 +7,15 @@ describe('TraceLink', () => {
   it('links to the trace when a template is configured', () => {
     render(<TraceLink traceId={id} template="https://logs.test/trace/{traceId}" />);
 
-    const link = screen.getByRole('link', { name: `Open trace ${id} in the log store` });
+    const link = screen.getByRole('link', {
+      name: `Open trace ${id} in the log store (opens in a new tab)`,
+    });
     expect(link).toHaveAttribute('href', `https://logs.test/trace/${id}`);
     // The log store is another application: leaving the monitoring page for it would lose the
     // operator's filters and page.
     expect(link).toHaveAttribute('target', '_blank');
+    // A new tab without noreferrer hands the log store a window.opener back into this session.
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
   });
 
   it('shows the id as text when no template is configured', () => {
