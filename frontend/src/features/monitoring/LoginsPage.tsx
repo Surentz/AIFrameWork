@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useSignInEvents, useSignInHealth } from './queries';
+import { useSignInEvents, useSignInHealth, useTraceLinkTemplate } from './queries';
 import type { SignInOutcome } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
+import { TraceLink } from './TraceLink';
 import './monitoring.css';
 
 const Outcomes: readonly SignInOutcome[] = [
@@ -24,6 +26,7 @@ export function LoginsPage(): React.JSX.Element {
   const [page, setPage] = useState(1);
 
   const events = useSignInEvents(outcome, username, page);
+  const traceLinkTemplate = useTraceLinkTemplate();
 
   return (
     <section>
@@ -71,11 +74,7 @@ export function LoginsPage(): React.JSX.Element {
         </label>
       </div>
 
-      {events.error && (
-        <p className="alert" role="alert">
-          {events.error.message}
-        </p>
-      )}
+      {events.error && <ErrorPanel error={events.error} />}
 
       {!events.isSuccess ? (
         events.isPending && <p role="status">Loading sign-ins…</p>
@@ -94,6 +93,7 @@ export function LoginsPage(): React.JSX.Element {
                 <th scope="col">Outcome</th>
                 <th scope="col">Address</th>
                 <th scope="col">Client</th>
+                <th scope="col">Trace</th>
               </tr>
             </thead>
             <tbody>
@@ -104,6 +104,9 @@ export function LoginsPage(): React.JSX.Element {
                   <td>{event.outcome}</td>
                   <td>{event.ipAddress ?? '—'}</td>
                   <td className="runs__error">{event.userAgent ?? '—'}</td>
+                  <td>
+                    <TraceLink traceId={event.traceId} template={traceLinkTemplate} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -140,11 +143,7 @@ function SignInSummary(): React.JSX.Element {
   const health = useSignInHealth();
 
   if (health.error) {
-    return (
-      <p className="alert" role="alert">
-        {health.error.message}
-      </p>
-    );
+    return <ErrorPanel error={health.error} />;
   }
 
   if (!health.isSuccess) {

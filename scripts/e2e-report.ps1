@@ -16,7 +16,7 @@ $frontend = Join-Path (Split-Path -Parent $PSScriptRoot) 'frontend'
 $report = Join-Path $frontend 'playwright-report/index.html'
 
 if (-not (Test-Path $report)) {
-    Write-Host 'No e2e report found. Run the suite first (control panel option 6 or 7).' -ForegroundColor DarkGray
+    Write-Host 'No e2e report found. Run the suite first (control panel option 10 or 11).' -ForegroundColor DarkGray
     exit 0
 }
 

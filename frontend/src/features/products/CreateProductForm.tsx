@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ProductFields } from './ProductFields';
 import type { ProductFieldValues } from './ProductFields';
 import { useCreateProduct } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import '../orders/orders.css';
 import './products.css';
 
@@ -87,9 +88,7 @@ export function CreateProductForm(): React.JSX.Element {
           </div>
 
           {mutation.error && Object.keys(fieldErrors).length === 0 && (
-            <p className="alert" role="alert">
-              {mutation.error.message}
-            </p>
+            <ErrorPanel error={mutation.error} />
           )}
         </div>
       </form>

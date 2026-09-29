@@ -121,10 +121,10 @@ generated-code tree, and keeping them apart is what makes each host's `codegen w
 | `caching` | Making a query cacheable, adding eviction, stale or cross-user data |
 | `auth` | Sign-in, sessions, the security stamp, the `Admin` role, the sign-in audit |
 | `notifications` | The notification feed, handlers that write to it, SignalR push |
-| `observability` | Logging, tracing, OTLP, traffic metrics and their charts |
+| `observability` | Logging, tracing, OTLP, OpenTelemetry metrics, sampling, trace links from the UI, traffic metrics and their charts |
 | `resilience` | Outbound HTTP clients, retry/timeouts, explicit DB transactions |
 | `local-dev` | The dev loop scripts, Seq, ports, `dotnet ef` vs user-secrets, the control panel |
-| `kubernetes` | The kind cluster, `deploy.ps1`, HPAs, ingress affinity, `-WithObservability` |
+| `kubernetes` | The kind cluster, `deploy.ps1`, HPAs, ingress affinity, `-WithObservability` (OpenSearch, Prometheus, Grafana, alert rules) |
 
 Agents: `dotnet-reviewer` and `react-reviewer` before committing; `test-runner` for test
 results without logs in the conversation.

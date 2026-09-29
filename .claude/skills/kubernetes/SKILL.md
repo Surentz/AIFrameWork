@@ -1,6 +1,6 @@
 ---
 name: kubernetes
-description: Use when deploying to or debugging the local kind cluster - deploy.ps1, two API replicas across two nodes, HPAs and disruption budgets, ingress cookie affinity, TLS, the migration Job, -WithObservability (OTel Collector to OpenSearch), and e2e-k8s.ps1.
+description: Use when deploying to or debugging the local kind cluster - deploy.ps1, two API replicas across two nodes, HPAs and disruption budgets, ingress cookie affinity, TLS, the migration Job, -WithObservability (OTel Collector to OpenSearch for logs and traces, Prometheus and Grafana for metrics, tail sampling, alert rules and their promtool tests), and e2e-k8s.ps1.
 ---
 
 # Running on Kubernetes
@@ -128,4 +128,46 @@ on top, so only reach for this when the logging pipeline itself is what you're r
 - **`Observability__Otlp__Enabled`/`__Endpoint`** are added to the same `app-config` ConfigMap
   `k8s/overlays/local/config.yaml` already defines, by a Kustomize patch inside the component —
   double underscores, like every other key there.
+- **Metrics go to Prometheus, pushed** (ADR 0027). The collector's `metrics` pipeline takes the
+  apps' OTLP plus its own `rabbitmq` (management API, port 15672) and `postgresql` receivers,
+  whose credentials come from `app-secrets` through the collector's `env`, and exports to
+  Prometheus's native OTLP receiver (`--web.enable-otlp-receiver`). No pod exposes a metrics
+  port and Prometheus has no scrape config. `otlp.promote_resource_attributes` in
+  `prometheus.yaml` is what turns `service.version`, `deployment.environment.name` and the
+  receivers' queue/database names into labels — anything not listed stays on `target_info`.
+- **Metric names are Prometheus's translation, and some are ugly.** Units are appended, so
+  Wolverine's non-standard `Messages`/`Milliseconds` units produce
+  `wolverine_inbox_count_Messages` — capital included. Read names off
+  `/api/v1/label/__name__/values` unfiltered; a `[a-z_]` filter hides these.
+- **Grafana** (`grafana.yaml`) has one provisioned datasource and one dashboard, and anonymous
+  Viewer access. The dashboard is `grafana-dashboard.json`, a real file turned into a ConfigMap
+  by the component's `configMapGenerator` — edit the JSON, not a YAML string.
+- **None of the three reloads mounted config, and they are handled differently on purpose.**
+  `deploy.ps1` restarts the collector and Grafana after applying (both stateless). Prometheus is
+  **not** restarted: its storage is an emptyDir, and a restart per deploy wiped the history a
+  deploy is meant to be compared against. Instead `prometheus.yml` and `prometheus-rules.yml`
+  are generated ConfigMaps **with** kustomize's content-hash suffix, so a changed file renames
+  the ConfigMap, the Deployment changes, and the pod rolls — only then. Do not add
+  `disableNameSuffixHash` to those two: a changed rule would silently never take effect.
+- **Checking a collector change without a cluster:** extract `config.yaml` from the ConfigMap
+  and run the pinned image with `validate --config=…`; it names the broken component. The same
+  goes for `promtool check config`/`check rules` in the Prometheus image.
+- **Tail sampling lives in the collector's traces pipeline**: every ERROR trace, every trace over
+  1s, and 20% of the rest (measured: 39 of 200 fast requests kept; the dead-lettered shipment's
+  error trace kept). It needs **one collector replica** — a trace's spans must meet in one
+  collector. Logs are never sampled.
+- **Alert rules are `prometheus-rules.yml`, unit-tested by `prometheus-rules.test.yml`**, run
+  with the pinned image's promtool:
+  `docker run --rm --entrypoint promtool -v "<abs path>/k8s/components/observability:/rules" prom/prometheus:v3.15.0 test rules /rules/prometheus-rules.test.yml`.
+  Six rules: 5xx share, p95 latency (with a traffic guard), dead letters, broker backlog, pool
+  saturation, and `TelemetryMissing` (which notices when the others have gone quiet for the
+  wrong reason). No Alertmanager: firing alerts show at Prometheus's `/alerts`.
+- **`--enable-feature=created-timestamp-zero-ingestion` is load-bearing.** A counter series born
+  at 1 (the first dead letter, the first 5xx on a route) is otherwise invisible to
+  `increase()`/`rate()`, and `MessagesDeadLettered` stays silent for exactly the dead letter it
+  exists for.
+- **Grafana's datasource carries `timeInterval: 60s`** — the OTLP push interval. At the 15s
+  default, `$__rate_interval` holds one sample and every rate panel says "No data".
+- Port-forwards (printed by `deploy.ps1`): Grafana 3000, Prometheus 9090 (`/alerts`), OpenSearch
+  Dashboards 5601. A pod restart breaks an open port-forward silently; start a new one.
 

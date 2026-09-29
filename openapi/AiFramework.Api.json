@@ -3661,6 +3661,13 @@
           "role": {
             "description": "Always UserRole.Admin on a successful response — the policy admits nobody\nelse. Returned anyway so the page can render who it is showing, and so a future read-only\noperator role has somewhere to appear without a contract change.",
             "$ref": "#/components/schemas/UserRole"
+          },
+          "traceLinkTemplate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The log store's URL for one trace, with `{traceId}` where the 32-hex id goes; null\nwhen none is configured, in which case trace ids are shown as text. Carried here because\nevery monitoring page already asks this endpoint, and because it is admin-only: a member\nnever learns where the log store is."
           }
         },
         "description": "Who is looking at the monitoring page."

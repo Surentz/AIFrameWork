@@ -19,7 +19,58 @@ data:
           http:
             endpoint: 0.0.0.0:4318
 
+      # Broker and database metrics, measured from outside the app (ADR 0027): a queue's depth is
+      # the broker's to report, and a metric that stops when the app stops cannot tell anyone the
+      # app has stopped. Credentials come from app-secrets through the env block below.
+      rabbitmq:
+        endpoint: http://rabbitmq:15672
+        username: ${env:RABBITMQ_DEFAULT_USER}
+        password: ${env:RABBITMQ_DEFAULT_PASS}
+        collection_interval: 30s
+      postgresql:
+        endpoint: postgres:5432
+        transport: tcp
+        username: postgres
+        password: ${env:POSTGRES_PASSWORD}
+        databases: [aiframework]
+        collection_interval: 30s
+        tls:
+          insecure: true
+
     processors:
+      # First in every pipeline, per its own README: it refuses data (the SDKs retry) before the
+      # collector is OOMKilled and drops everything it holds. The percentages are of the
+      # container's cgroup memory limit, read at startup, so they follow the Deployment's
+      # `limits.memory` below rather than hard-coding megabytes that would drift from it.
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      # Tail sampling (traces only): decided once a trace's spans have had 10s to arrive, so it
+      # can keep every trace that went wrong or slow and a fifth of the ordinary ones. The apps
+      # head-sample nothing away by default (Observability:Otlp:TraceSampleRatio = 1), so this
+      # is where volume is cut. Policies are OR'd. Logs are never sampled - a trace link still
+      # finds every request's log lines even when its spans were dropped here.
+      #
+      # REQUIRES A SINGLE COLLECTOR REPLICA: a trace's spans (two API pods, the worker) must all
+      # reach the same collector to be judged together. Scaling this Deployment out would need a
+      # load-balancing exporter tier in front, keyed on trace id.
+      tail_sampling:
+        decision_wait: 10s
+        num_traces: 20000
+        policies:
+          - name: errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: slow
+            type: latency
+            latency:
+              threshold_ms: 1000
+          - name: a-fifth-of-the-rest
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 20
       batch: {}
 
     exporters:
@@ -39,16 +90,29 @@ data:
         traces_index: otel-traces
         traces_index_time_format: 'yyyy.MM.dd'
 
+      # Prometheus's native OTLP receiver (--web.enable-otlp-receiver on prometheus.yaml): pushed,
+      # never scraped, so no application pod opens a metrics port. OpenSearch is not a metrics
+      # store here - see ADR 0027. `otlp_http`, not the older `otlphttp` alias, which 0.160 logs
+      # as deprecated.
+      otlp_http/prometheus:
+        metrics_endpoint: http://prometheus:9090/api/v1/otlp/v1/metrics
+        tls:
+          insecure: true
+
     service:
       pipelines:
         logs:
           receivers: [otlp]
-          processors: [batch]
+          processors: [memory_limiter, batch]
           exporters: [opensearch]
         traces:
           receivers: [otlp]
-          processors: [batch]
+          processors: [memory_limiter, tail_sampling, batch]
           exporters: [opensearch]
+        metrics:
+          receivers: [otlp, rabbitmq, postgresql]
+          processors: [memory_limiter, batch]
+          exporters: [otlp_http/prometheus]
 ---
 apiVersion: v1
 kind: Service
@@ -81,6 +145,24 @@ spec:
           image: otel/opentelemetry-collector-contrib:0.160.0
           ports:
             - containerPort: 4318
+          # For the rabbitmq and postgresql receivers' ${env:...} references, from the same
+          # app-secrets the broker and database themselves read.
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_PASSWORD
           volumeMounts:
             - name: config
               mountPath: /etc/otelcol-contrib

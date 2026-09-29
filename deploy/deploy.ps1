@@ -111,17 +111,23 @@ if ($CreateCluster) {
 }
 
 if (-not $SkipBuild) {
+    # The image build copies no .git, so the SDK cannot stamp the commit into the assemblies'
+    # informational version the way a local build does. Passing it in is what makes every span and
+    # log record from the cluster say which commit produced it (service.version, see
+    # ObservabilityResource). A tree with uncommitted changes still reports HEAD - "-dirty" would
+    # be more honest, but the tag is for correlating with history, and HEAD is what history has.
+    $revision = git -C $repoRoot rev-parse --short HEAD
     Invoke-Step 'Building the api image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target runtime `
-            -t aiframework-api:local $repoRoot
+            --build-arg "SOURCE_REVISION=$revision" -t aiframework-api:local $repoRoot
     }
     Invoke-Step 'Building the migrator image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target migrator `
-            -t aiframework-migrator:local $repoRoot
+            --build-arg "SOURCE_REVISION=$revision" -t aiframework-migrator:local $repoRoot
     }
     Invoke-Step 'Building the worker image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target worker `
-            -t aiframework-worker:local $repoRoot
+            --build-arg "SOURCE_REVISION=$revision" -t aiframework-worker:local $repoRoot
     }
     Invoke-Step 'Building the web image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.web') `
@@ -268,11 +274,19 @@ Invoke-Step 'Rolling out the application' {
     # and triggers nothing, and the collector does not hot-reload its config file on a change to
     # the mounted volume. Silent otherwise — the collector keeps running on stale config with no
     # error anywhere.
+    # Grafana reads its provisioning the same way and gets the same restart; it holds nothing worth
+    # keeping. Prometheus is deliberately NOT restarted here: its storage is an emptyDir, so a
+    # restart on every deploy wiped the metric history the deploy was meant to be compared
+    # against. Its config and rules are hash-named generated ConfigMaps
+    # (k8s/components/observability/kustomization.yaml), so phase C's apply rolls it exactly when
+    # either file changed, and leaves it - and its history - alone otherwise.
     if ($WithObservability) {
-        kubectl --context $context -n $namespace rollout restart deployment/otel-collector
-        Assert-LastExitCode 'kubectl rollout restart (otel-collector)'
-        kubectl --context $context -n $namespace rollout status deployment/otel-collector --timeout=300s
-        Assert-LastExitCode 'kubectl rollout status (otel-collector)'
+        foreach ($deployment in 'otel-collector', 'grafana') {
+            kubectl --context $context -n $namespace rollout restart "deployment/$deployment"
+            Assert-LastExitCode "kubectl rollout restart ($deployment)"
+            kubectl --context $context -n $namespace rollout status "deployment/$deployment" --timeout=300s
+            Assert-LastExitCode "kubectl rollout status ($deployment)"
+        }
     }
 }
 
@@ -302,4 +316,11 @@ if ($WithObservability) {
     Write-Host 'OpenSearch Dashboards: kubectl --context ' -NoNewline -ForegroundColor DarkGray
     Write-Host "$context -n $namespace port-forward svc/opensearch-dashboards 5601:5601" -ForegroundColor DarkGray
     Write-Host '  then open http://localhost:5601' -ForegroundColor DarkGray
+    Write-Host 'Grafana (metrics):     kubectl --context ' -NoNewline -ForegroundColor DarkGray
+    Write-Host "$context -n $namespace port-forward svc/grafana 3000:3000" -ForegroundColor DarkGray
+    Write-Host '  then open http://localhost:3000' -ForegroundColor DarkGray
+    Write-Host 'Prometheus (alerts):   kubectl --context ' -NoNewline -ForegroundColor DarkGray
+    Write-Host "$context -n $namespace port-forward svc/prometheus 9090:9090" -ForegroundColor DarkGray
+    Write-Host '  then open http://localhost:9090/alerts' -ForegroundColor DarkGray
+    Write-Host 'Or all three at once, reconnecting after each redeploy: ./deploy/observability-ui.ps1' -ForegroundColor DarkGray
 }

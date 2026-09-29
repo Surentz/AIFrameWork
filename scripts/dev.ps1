@@ -135,11 +135,18 @@ else {
 # Setting it from $rabbitPort is what makes a RABBITMQ_PORT override reach the API and the worker,
 # exactly as DEV_PG_PORT reaches the migrations through ConnectionStrings__Default above. It is
 # removed after spawning for the same reason as the OTLP pair.
+#
+# Monitoring__TraceLinkTemplate rides with -WithSeq, for the API only (the worker serves no
+# monitoring page): it turns the Trace column of the monitoring tables into links to Seq's events
+# view filtered to that trace. #/events?filter=<expression> is the shape Seq's own UI links use,
+# and @TraceId = '<32 hex>' was confirmed against Seq 2026.1's events API.
 Invoke-Step 'Launching the API' {
     $env:ConnectionStrings__RabbitMq = "amqp://aiframework:aiframework@localhost:$rabbitPort/"
     if ($WithSeq) {
         $env:Observability__Otlp__Enabled = 'true'
         $env:Observability__Otlp__Endpoint = "http://localhost:$seqPort/ingest/otlp"
+        $env:Monitoring__TraceLinkTemplate =
+            "http://localhost:$seqPort/#/events?filter=@TraceId%20%3D%20'{traceId}'"
     }
     try {
         Start-Process powershell -WorkingDirectory $repoRoot -ArgumentList @(
@@ -151,6 +158,7 @@ Invoke-Step 'Launching the API' {
         if ($WithSeq) {
             Remove-Item Env:\Observability__Otlp__Enabled -ErrorAction SilentlyContinue
             Remove-Item Env:\Observability__Otlp__Endpoint -ErrorAction SilentlyContinue
+            Remove-Item Env:\Monitoring__TraceLinkTemplate -ErrorAction SilentlyContinue
         }
     }
     $global:LASTEXITCODE = 0
