@@ -8,6 +8,7 @@ import {
   useTriggerJob,
 } from './queries';
 import type { JobRunStatus } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './monitoring.css';
 
 const Statuses: readonly JobRunStatus[] = ['Running', 'Succeeded', 'Failed'];
@@ -67,11 +68,7 @@ export function JobsPage(): React.JSX.Element {
         </label>
       </div>
 
-      {runs.error && (
-        <p className="alert" role="alert">
-          {runs.error.message}
-        </p>
-      )}
+      {runs.error && <ErrorPanel error={runs.error} />}
 
       {!runs.isSuccess ? (
         runs.isPending && <p role="status">Loading job runs…</p>
@@ -80,9 +77,7 @@ export function JobsPage(): React.JSX.Element {
       ) : (
         <>
           <table className="runs">
-            <caption className="muted">
-              Job runs: {Number(runs.data.totalCount)} total
-            </caption>
+            <caption className="muted">Job runs: {Number(runs.data.totalCount)} total</caption>
             <thead>
               <tr>
                 <th scope="col">Job</th>
@@ -102,7 +97,11 @@ export function JobsPage(): React.JSX.Element {
                   <td>{run.attempt}</td>
                   <td>{run.status}</td>
                   <td>{new Date(run.startedAt).toLocaleString()}</td>
-                  <td>{run.durationMs === null ? '—' : `${Number(run.durationMs).toLocaleString()} ms`}</td>
+                  <td>
+                    {run.durationMs === null
+                      ? '—'
+                      : `${Number(run.durationMs).toLocaleString()} ms`}
+                  </td>
                   <td className="runs__error">{run.error ?? ''}</td>
                 </tr>
               ))}
@@ -147,16 +146,8 @@ function DeadLetters(): React.JSX.Element {
     <>
       <h2>Dead letters</h2>
 
-      {deadLetters.error && (
-        <p className="alert" role="alert">
-          {deadLetters.error.message}
-        </p>
-      )}
-      {retry.error && (
-        <p className="alert" role="alert">
-          {retry.error.message}
-        </p>
-      )}
+      {deadLetters.error && <ErrorPanel error={deadLetters.error} />}
+      {retry.error && <ErrorPanel error={retry.error} />}
 
       {!deadLetters.isSuccess ? (
         deadLetters.isPending && <p role="status">Loading dead letters…</p>
@@ -214,11 +205,7 @@ function TriggerJob(): React.JSX.Element {
     <>
       <h2>Run a scheduled job now</h2>
 
-      {trigger.error && (
-        <p className="alert" role="alert">
-          {trigger.error.message}
-        </p>
-      )}
+      {trigger.error && <ErrorPanel error={trigger.error} />}
 
       <div className="filters">
         <label htmlFor="trigger-job">

@@ -1,13 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSession } from '../auth/queries';
-import {
-  useChangeUserRole,
-  useSignOutUser,
-  useUserActions,
-  useUsers,
-} from './queries';
+import { useChangeUserRole, useSignOutUser, useUserActions, useUsers } from './queries';
 import type { AdministeredUser } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './monitoring.css';
 
 /** Mirrors the API's own default page size, so "Next" knows when there is no next. */
@@ -62,11 +58,7 @@ export function UsersPage(): React.JSX.Element {
         <button type="submit">Search</button>
       </form>
 
-      {users.error && (
-        <p className="alert" role="alert">
-          {users.error.message}
-        </p>
-      )}
+      {users.error && <ErrorPanel error={users.error} />}
 
       {users.isPending && <p role="status">Loading users…</p>}
 
@@ -163,9 +155,11 @@ function UserRow({ user }: UserRowProps): React.JSX.Element {
             </>
           )}
         </td>
-        <td>{user.lastSeenAt === null || user.lastSeenAt === undefined
-          ? 'Never'
-          : new Date(user.lastSeenAt).toLocaleString()}</td>
+        <td>
+          {user.lastSeenAt === null || user.lastSeenAt === undefined
+            ? 'Never'
+            : new Date(user.lastSeenAt).toLocaleString()}
+        </td>
         <td>
           {isSelf ? (
             <span className="muted">You</span>
@@ -230,9 +224,7 @@ function UserRow({ user }: UserRowProps): React.JSX.Element {
               has an implicit role, and overriding it would take the row out of the table's own
               semantics for a screen reader. */}
           <td colSpan={5}>
-            <p className="alert" role="alert">
-              {error.message}
-            </p>
+            <ErrorPanel error={error} />
           </td>
         </tr>
       )}
@@ -301,11 +293,7 @@ function History({ userId, username }: HistoryProps): React.JSX.Element {
   const actions = useUserActions(userId);
 
   if (actions.error) {
-    return (
-      <p className="alert" role="alert">
-        {actions.error.message}
-      </p>
-    );
+    return <ErrorPanel error={actions.error} />;
   }
 
   if (!actions.isSuccess) {

@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 
 /**
  * Gate for the routes that need a session. A layout route, so it guards its whole subtree from
@@ -20,11 +21,7 @@ export function RequireAuth(): React.JSX.Element {
   // A 401 already resolved to null in useSession, so reaching here means the request itself
   // failed. Redirecting would hide that behind a login page the user does not need.
   if (error) {
-    return (
-      <p className="alert" role="alert">
-        {error.message}
-      </p>
-    );
+    return <ErrorPanel error={error} />;
   }
 
   // `replace`, so Back does not bounce off the guard into a redirect loop; `state` remembers

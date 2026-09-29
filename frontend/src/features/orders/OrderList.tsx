@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useOrders } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './orders.css';
 
 function Header(): React.JSX.Element {
@@ -37,9 +38,7 @@ export function OrderList(): React.JSX.Element {
     return (
       <>
         <Header />
-        <p className="alert" role="alert">
-          {error.message}
-        </p>
+        <ErrorPanel error={error} />
       </>
     );
   }
@@ -94,11 +93,7 @@ export function OrderList(): React.JSX.Element {
         </table>
       </div>
 
-      {error && (
-        <p className="alert orders__error" role="alert">
-          {error.message}
-        </p>
-      )}
+      {error && <ErrorPanel error={error} className="orders__error" />}
 
       {hasNextPage && (
         <div className="orders__more">

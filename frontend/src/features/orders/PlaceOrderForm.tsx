@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { formatPrice } from '../products/types';
 import { useAllProducts, useCanManageCatalogue } from '../products/queries';
 import { usePlaceOrder } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './orders.css';
 
 export function PlaceOrderForm(): React.JSX.Element {
@@ -44,9 +45,7 @@ export function PlaceOrderForm(): React.JSX.Element {
       </div>
 
       {productsError && (
-        <p className="alert" role="alert">
-          The products could not be loaded. {productsError.message}
-        </p>
+        <ErrorPanel error={productsError} lead="The products could not be loaded." />
       )}
 
       <form className="card order-form" onSubmit={handleSubmit}>
@@ -136,9 +135,7 @@ export function PlaceOrderForm(): React.JSX.Element {
           </div>
 
           {mutation.error && Object.keys(fieldErrors).length === 0 && (
-            <p className="alert" role="alert">
-              {mutation.error.message}
-            </p>
+            <ErrorPanel error={mutation.error} />
           )}
         </div>
       </form>

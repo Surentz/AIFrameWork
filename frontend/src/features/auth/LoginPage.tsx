@@ -3,6 +3,7 @@ import type { SubmitEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthShell } from './AuthShell';
 import { useLogin } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 
 export function LoginPage(): React.JSX.Element {
   const [username, setUsername] = useState('');
@@ -127,9 +128,7 @@ export function LoginPage(): React.JSX.Element {
         </button>
 
         {mutation.error && Object.keys(fieldErrors).length === 0 && (
-          <p className="alert" role="alert">
-            {mutation.error.message}
-          </p>
+          <ErrorPanel error={mutation.error} />
         )}
       </form>
     </AuthShell>

@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useChangePassword, useSignOutEverywhere } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import '../orders/orders.css';
 
 /** Mirrors PasswordPolicy.MinimumLength in src/Application/Users; the server is the authority. */
@@ -108,9 +109,7 @@ export function ChangePasswordPage(): React.JSX.Element {
           </div>
 
           {mutation.error && Object.keys(fieldErrors).length === 0 && (
-            <p className="alert" role="alert">
-              {mutation.error.message}
-            </p>
+            <ErrorPanel error={mutation.error} />
           )}
 
           {mutation.isSuccess && (
@@ -138,11 +137,7 @@ export function ChangePasswordPage(): React.JSX.Element {
           {signOutEverywhere.isPending && <span className="spinner" aria-hidden="true" />}
           {signOutEverywhere.isPending ? 'Signing out…' : 'Sign out everywhere'}
         </button>
-        {signOutEverywhere.isError && (
-          <p className="alert" role="alert">
-            {signOutEverywhere.error.message}
-          </p>
-        )}
+        {signOutEverywhere.isError && <ErrorPanel error={signOutEverywhere.error} />}
       </div>
     </>
   );

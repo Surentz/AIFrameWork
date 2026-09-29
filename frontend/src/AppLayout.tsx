@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { ErrorPanel } from './components/ErrorPanel';
 import { Mark } from './components/Mark';
 import { useLogout, useSession } from './features/auth/queries';
 import { NotificationBell } from './features/notifications/NotificationBell';
@@ -65,11 +66,7 @@ export function AppLayout(): React.JSX.Element {
         </div>
       </header>
 
-      {logout.error && (
-        <p className="alert shell__error" role="alert">
-          {logout.error.message}
-        </p>
-      )}
+      {logout.error && <ErrorPanel error={logout.error} className="shell__error" />}
 
       <main className="shell__content">
         <Outlet />

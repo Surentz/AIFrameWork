@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSignInEvents, useSignInHealth } from './queries';
 import type { SignInOutcome } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './monitoring.css';
 
 const Outcomes: readonly SignInOutcome[] = [
@@ -71,11 +72,7 @@ export function LoginsPage(): React.JSX.Element {
         </label>
       </div>
 
-      {events.error && (
-        <p className="alert" role="alert">
-          {events.error.message}
-        </p>
-      )}
+      {events.error && <ErrorPanel error={events.error} />}
 
       {!events.isSuccess ? (
         events.isPending && <p role="status">Loading sign-ins…</p>
@@ -140,11 +137,7 @@ function SignInSummary(): React.JSX.Element {
   const health = useSignInHealth();
 
   if (health.error) {
-    return (
-      <p className="alert" role="alert">
-        {health.error.message}
-      </p>
-    );
+    return <ErrorPanel error={health.error} />;
   }
 
   if (!health.isSuccess) {
