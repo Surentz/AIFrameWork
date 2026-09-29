@@ -11,6 +11,9 @@ groups:
     rules:
       - alert: ApiHighServerErrorRate
         # 5xx only: a 4xx is the caller's to fix, and a burst of wrong passwords is not an outage.
+        # With a traffic guard (about 15 requests in 5 minutes): probes and the SignalR hub are
+        # excluded from this metric (DisableHttpMetrics in Program.cs), so on a quiet API one
+        # failure in three requests would otherwise page as a 33% error rate.
         expr: |
           (
             sum(rate(http_server_request_duration_seconds_count{job="aiframework-api", http_response_status_code=~"5.."}[5m]))
@@ -19,6 +22,8 @@ groups:
           /
           sum(rate(http_server_request_duration_seconds_count{job="aiframework-api"}[5m]))
           > 0.05
+          and
+          sum(rate(http_server_request_duration_seconds_count{job="aiframework-api"}[5m])) > 0.05
         for: 5m
         labels:
           severity: critical

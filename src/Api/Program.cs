@@ -417,20 +417,26 @@ app.MapControllers();
 
 // Only when realtime is on - mapping a hub whose INotificationPush was never registered would
 // accept connections that can never receive anything.
+//
+// DisableHttpMetrics on this and both probes below (ADR 0027): none of them is a request a user
+// made. The hub's WebSocket "request" lasts as long as the tab is open, and kubelet probes are
+// ~0.4 req/s of 1 ms 200s across two pods - counted, they would drag the p95 up or down and dilute
+// the 5xx share the alert rules read. MetricsPipelineTests pins the probes; Realtime is off under
+// test, so the hub's exclusion is on this comment's word.
 if (realtime.Enabled)
 {
-    app.MapHub<NotificationHub>("/hubs/notifications");
+    app.MapHub<NotificationHub>("/hubs/notifications").DisableHttpMetrics();
 }
 
 // No fallback authorization policy is registered, so this stays anonymous without an attribute -
 // a readiness probe that needs credentials is not a readiness probe.
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).DisableHttpMetrics();
 
 // Readiness, distinct from the liveness check above: this one answers "may this pod receive
 // traffic", which needs Postgres. It stays a separate endpoint because /health must remain
 // database-free — HealthTests boots a host with no database at all and asserts 200 on it.
 // Anonymous for the same reason /health is: no fallback authorization policy is registered.
-app.MapHealthChecks("/health/ready");
+app.MapHealthChecks("/health/ready").DisableHttpMetrics();
 
 // Development only, deliberately: a deployed instance must not publish its endpoint surface.
 // Asserted in both directions by OpenApiDocumentTests, because a missing environment check
