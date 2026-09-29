@@ -322,4 +322,5 @@ if ($WithObservability) {
     Write-Host 'Prometheus (alerts):   kubectl --context ' -NoNewline -ForegroundColor DarkGray
     Write-Host "$context -n $namespace port-forward svc/prometheus 9090:9090" -ForegroundColor DarkGray
     Write-Host '  then open http://localhost:9090/alerts' -ForegroundColor DarkGray
+    Write-Host 'Or all three at once, reconnecting after each redeploy: ./deploy/observability-ui.ps1' -ForegroundColor DarkGray
 }

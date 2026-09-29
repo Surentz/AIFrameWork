@@ -8,10 +8,16 @@
   omitting it against a name that does not exist fails just as fast in the kubectl calls that
   follow. This is the single entry point that checks first and calls deploy.ps1 either way, so
   the .bat launcher does not have to encode that logic itself.
+
+  -WithObservability passes straight through to deploy.ps1 (OpenSearch, Prometheus, Grafana and
+  the collector - see the kubernetes skill). It must be passed on EVERY redeploy of a cluster
+  that has it: a plain deploy applies the plain overlay, whose app-config has no OTLP keys, so the
+  apps stop exporting while the observability pods keep running and quietly show nothing new.
 #>
 [CmdletBinding()]
 param(
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$WithObservability
 )
 
 Set-StrictMode -Version Latest
@@ -32,6 +38,7 @@ $ErrorActionPreference = $prevEap
 
 $deployArgs = @{}
 if ($SkipBuild) { $deployArgs['SkipBuild'] = $true }
+if ($WithObservability) { $deployArgs['WithObservability'] = $true }
 
 if ($existing -contains $cluster) {
     Write-Host "==> Cluster '$cluster' already exists - redeploying onto it" -ForegroundColor Cyan
