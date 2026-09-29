@@ -1,0 +1,104 @@
+# Prometheus, as the cluster's metrics store and rule evaluator (ADR 0027). Metrics arrive PUSHED
+# from the OTel Collector through Prometheus's native OTLP receiver - there is no scrape config and
+# no application pod exposes a metrics port. Storage is an emptyDir: this is a rehearsal cluster,
+# and seven days of local metrics are not worth a PVC pinned to one node the way Postgres's is.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      evaluation_interval: 30s
+
+    otlp:
+      # service.name and service.instance.id already become `job` and `instance`. These are the
+      # other resource attributes worth a label: which build and which environment (Task 5), and
+      # the broker's and database's own identities from the collector's receivers. Everything
+      # else stays on target_info, joinable but not multiplied into every series.
+      promote_resource_attributes:
+        - service.version
+        - deployment.environment.name
+        - rabbitmq.queue.name
+        - rabbitmq.node.name
+        - rabbitmq.vhost.name
+        - postgresql.database.name
+        - postgresql.table.name
+
+    storage:
+      tsdb:
+        # OTLP pushes from two API replicas, the worker and the collector's own receivers arrive
+        # on their own clocks; without a window a sample a few seconds older than the newest one
+        # for its series is rejected.
+        out_of_order_time_window: 30m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.15.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+            - --web.enable-otlp-receiver
+            # A counter series is born at its first increment - the first dead letter, the
+            # first 5xx on a route - so its first sample is already 1, and rate()/increase()
+            # never see the step from 0: the alert on "any dead letter" stayed silent for the
+            # first one. This writes a 0 at the OTLP start timestamp, which is exactly that step.
+            # Observed on this cluster before and after adding it.
+            - --enable-feature=created-timestamp-zero-ingestion
+          ports:
+            - containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}

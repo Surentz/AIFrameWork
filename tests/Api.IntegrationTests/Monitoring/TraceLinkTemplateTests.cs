@@ -30,6 +30,12 @@ public sealed class TraceLinkTemplateTests(ApiFactory factory)
     [InlineData("   ", true)]
     [InlineData(SeqTemplate, true)]
     [InlineData("https://logs.example.com/trace/{traceId}", true)]
+    // The -WithObservability overlay's OpenSearch Dashboards template, verbatim: rison's !, ' and
+    // parentheses in the fragment must not make it look invalid, or that overlay's API would not
+    // start.
+    [InlineData(
+        "http://localhost:5601/app/data-explorer/discover#?_a=(discover:(columns:!(_source),isDirty:!f,sort:!()),metadata:(indexPattern:otel-logs,view:discover))&_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:now-7d,to:now))&_q=(filters:!(),query:(language:kuery,query:'traceId:%22{traceId}%22'))",
+        true)]
     [InlineData("https://logs.example.com/search", false)]
     [InlineData("/relative/{traceId}", false)]
     [InlineData("javascript:alert(1)//{traceId}", false)]

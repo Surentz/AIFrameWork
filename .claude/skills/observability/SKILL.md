@@ -95,9 +95,14 @@ Verified templates:
 | Store | Template |
 |---|---|
 | Seq (dev, `-WithSeq`) | `http://localhost:55341/#/events?filter=@TraceId%20%3D%20'{traceId}'` |
+| OpenSearch Dashboards (kind, `-WithObservability`) | Discover over the `otel-logs` index pattern, `traceId:"{traceId}"`, last 7 days — the full string is in `k8s/components/observability/kustomization.yaml` |
 
 Seq has no separate trace route — traces live in the events view, and `#/events?filter=` is the
-shape Seq's own UI links use.
+shape Seq's own UI links use. OpenSearch Dashboards' link needs an index pattern, which
+`dashboards-index-pattern-job.yaml` creates **with its field list** (the saved-objects API does
+not fill one in; without it every load raises "Could not locate that index-pattern-field").
+It covers logs only: the collector's exporter leaves spans' `@timestamp` at 0001-01-01. Both
+templates were checked by loading them in a browser against a real stored trace id.
 
 ## Metrics (ADR 0027)
 

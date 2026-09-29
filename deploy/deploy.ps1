@@ -274,11 +274,16 @@ Invoke-Step 'Rolling out the application' {
     # and triggers nothing, and the collector does not hot-reload its config file on a change to
     # the mounted volume. Silent otherwise — the collector keeps running on stale config with no
     # error anywhere.
+    # Prometheus and Grafana read mounted config the same way - prometheus.yml and its rules,
+    # Grafana's provisioning - and neither reloads it on a ConfigMap change, so they get the same
+    # restart. (Grafana does re-read the dashboard JSON itself, but a restart costs nothing here.)
     if ($WithObservability) {
-        kubectl --context $context -n $namespace rollout restart deployment/otel-collector
-        Assert-LastExitCode 'kubectl rollout restart (otel-collector)'
-        kubectl --context $context -n $namespace rollout status deployment/otel-collector --timeout=300s
-        Assert-LastExitCode 'kubectl rollout status (otel-collector)'
+        foreach ($deployment in 'otel-collector', 'prometheus', 'grafana') {
+            kubectl --context $context -n $namespace rollout restart "deployment/$deployment"
+            Assert-LastExitCode "kubectl rollout restart ($deployment)"
+            kubectl --context $context -n $namespace rollout status "deployment/$deployment" --timeout=300s
+            Assert-LastExitCode "kubectl rollout status ($deployment)"
+        }
     }
 }
 
@@ -308,4 +313,10 @@ if ($WithObservability) {
     Write-Host 'OpenSearch Dashboards: kubectl --context ' -NoNewline -ForegroundColor DarkGray
     Write-Host "$context -n $namespace port-forward svc/opensearch-dashboards 5601:5601" -ForegroundColor DarkGray
     Write-Host '  then open http://localhost:5601' -ForegroundColor DarkGray
+    Write-Host 'Grafana (metrics):     kubectl --context ' -NoNewline -ForegroundColor DarkGray
+    Write-Host "$context -n $namespace port-forward svc/grafana 3000:3000" -ForegroundColor DarkGray
+    Write-Host '  then open http://localhost:3000' -ForegroundColor DarkGray
+    Write-Host 'Prometheus (alerts):   kubectl --context ' -NoNewline -ForegroundColor DarkGray
+    Write-Host "$context -n $namespace port-forward svc/prometheus 9090:9090" -ForegroundColor DarkGray
+    Write-Host '  then open http://localhost:9090/alerts' -ForegroundColor DarkGray
 }

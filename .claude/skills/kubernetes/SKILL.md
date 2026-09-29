@@ -128,4 +128,26 @@ on top, so only reach for this when the logging pipeline itself is what you're r
 - **`Observability__Otlp__Enabled`/`__Endpoint`** are added to the same `app-config` ConfigMap
   `k8s/overlays/local/config.yaml` already defines, by a Kustomize patch inside the component —
   double underscores, like every other key there.
+- **Metrics go to Prometheus, pushed** (ADR 0027). The collector's `metrics` pipeline takes the
+  apps' OTLP plus its own `rabbitmq` (management API, port 15672) and `postgresql` receivers,
+  whose credentials come from `app-secrets` through the collector's `env`, and exports to
+  Prometheus's native OTLP receiver (`--web.enable-otlp-receiver`). No pod exposes a metrics
+  port and Prometheus has no scrape config. `otlp.promote_resource_attributes` in
+  `prometheus.yaml` is what turns `service.version`, `deployment.environment.name` and the
+  receivers' queue/database names into labels — anything not listed stays on `target_info`.
+- **Metric names are Prometheus's translation, and some are ugly.** Units are appended, so
+  Wolverine's non-standard `Messages`/`Milliseconds` units produce
+  `wolverine_inbox_count_Messages` — capital included. Read names off
+  `/api/v1/label/__name__/values` unfiltered; a `[a-z_]` filter hides these.
+- **Grafana** (`grafana.yaml`) has one provisioned datasource and one dashboard, and anonymous
+  Viewer access. The dashboard is `grafana-dashboard.json`, a real file turned into a ConfigMap
+  by the component's `configMapGenerator` — edit the JSON, not a YAML string.
+- **Prometheus, Grafana and the collector do not reload mounted config**, so `deploy.ps1`
+  restarts all three after applying. Without that a changed rule or pipeline silently never
+  takes effect.
+- **Checking a collector change without a cluster:** extract `config.yaml` from the ConfigMap
+  and run the pinned image with `validate --config=…`; it names the broken component. The same
+  goes for `promtool check config`/`check rules` in the Prometheus image.
+- Port-forwards (printed by `deploy.ps1`): Grafana 3000, Prometheus 9090 (`/alerts`), OpenSearch
+  Dashboards 5601.
 

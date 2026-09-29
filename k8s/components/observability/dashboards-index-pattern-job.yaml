@@ -1,0 +1,72 @@
+# The otel-logs-* index pattern OpenSearch Dashboards' Discover needs before the monitoring
+# page's trace links (Monitoring__TraceLinkTemplate, patched in by kustomization.yaml) can land
+# anywhere. Without it Discover has nothing to search.
+#
+# Created through the saved-objects API WITH its field list, which that API does not fill in by
+# itself: a pattern saved with no fields searches fine but raises "Could not locate that
+# index-pattern-field (id: @timestamp)" on every load, because the histogram cannot find its time
+# field. Confirmed against Dashboards 3.8 while building this; so is the rest of the shape:
+#   - /api/index_patterns/_fields_for_wildcard is the only way to get the field list here (this
+#     version has no /api/index_patterns/index_pattern create endpoint - 404).
+#   - That list only exists once an otel-logs-* index does, so the script waits for the first log
+#     record to land rather than for Dashboards alone.
+#   - `overwrite=true` makes a re-run replace the pattern (200 both times), so the Job is
+#     idempotent under deploy.ps1's delete-and-reapply of every Job.
+#
+# Logs only, not otel-traces-*: the collector's exporter stamps spans' time on startTime and
+# leaves their @timestamp at 0001-01-01, so a shared otel-* pattern sorts every span to year one.
+# A trace's log lines are what a trace link is for; spans stay searchable in their own index.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboards-index-pattern
+data:
+  create.sh: |
+    set -eu
+    osd=http://opensearch-dashboards:5601
+    fields_url="$osd/api/index_patterns/_fields_for_wildcard?pattern=otel-logs-*&meta_fields=_source&meta_fields=_id&meta_fields=_type&meta_fields=_index&meta_fields=_score"
+
+    # Up to ten minutes: Dashboards starts slowly, and the first log record has to be exported,
+    # batched and indexed before there is a field list to read.
+    for i in $(seq 1 120); do
+      if curl -sS "$fields_url" 2>/dev/null | grep -q '"name":"@timestamp"'; then break; fi
+      sleep 5
+    done
+
+    # The field list, re-encoded as a JSON string: the saved object stores it that way.
+    fields=$(curl -sS "$fields_url" \
+      | sed -e 's/^{"fields"://' -e 's/}$//' -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+    printf '{"attributes":{"title":"otel-logs-*","timeFieldName":"@timestamp","fields":"%s"}}' \
+      "$fields" > /tmp/body.json
+
+    code=$(curl -sS -o /tmp/resp -w '%{http_code}' -X POST \
+      "$osd/api/saved_objects/index-pattern/otel-logs?overwrite=true" \
+      -H 'osd-xsrf: true' -H 'Content-Type: application/json' --data-binary @/tmp/body.json)
+    echo "index pattern save: $code"
+    [ "$code" = 200 ] || { cat /tmp/resp >&2; exit 1; }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dashboards-index-pattern
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-index-pattern
+          image: curlimages/curl:8.22.0
+          command: ['sh', '/script/create.sh']
+          volumeMounts:
+            - name: script
+              mountPath: /script
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ['ALL']
+      volumes:
+        - name: script
+          configMap:
+            name: dashboards-index-pattern
