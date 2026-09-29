@@ -95,9 +95,32 @@ public static class WorkerObservability
         }
     }
 
+    /// <summary>
+    /// Parent-based ratio sampling from <see cref="OtlpOptions.TraceSampleRatio"/> (see its remarks for
+    /// what it does and does not affect). Public so it can be tested directly; a ratio outside
+    /// (0, 1] stops the host at startup rather than quietly recording everything or nothing.
+    /// </summary>
+    public static Sampler SamplerFor(OtlpOptions otlp)
+    {
+        ArgumentNullException.ThrowIfNull(otlp);
+
+        var ratio = otlp.TraceSampleRatio;
+        if (double.IsNaN(ratio) || ratio <= 0 || ratio > 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(otlp),
+                ratio,
+                "Observability:Otlp:TraceSampleRatio must be greater than 0 and at most 1. To record no traces, set Observability:Otlp:Traces to false.");
+        }
+
+        return new ParentBasedSampler(new TraceIdRatioBasedSampler(ratio));
+    }
+
     /// <summary>Split out of the method above purely to stay under MA0051's line limit.</summary>
     private static void ConfigureTracing(TracerProviderBuilder tracing, ObservabilityOptions options)
     {
+        tracing.SetSampler(SamplerFor(options.Otlp));
+
         // No AddAspNetCoreInstrumentation: see this class's remarks. Outbound HTTP is here
         // because a job legitimately calls out (the mail provider that replaces
         // LoggingOrderNotifier will), and that is exactly what a trace should show.

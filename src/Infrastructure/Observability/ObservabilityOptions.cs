@@ -49,6 +49,21 @@ public sealed class OtlpOptions
     public bool Metrics { get; set; } = true;
 
     /// <summary>
+    /// The share of ROOT traces this host records, 0 exclusive to 1 inclusive. One by default:
+    /// keep everything, which is right for Seq, the in-cluster collector (which tail-samples on
+    /// its own, keeping every error and slow trace) and any store that is not billed by volume.
+    /// Lower it only when exporting straight to a hosted backend that charges per span.
+    /// </summary>
+    /// <remarks>
+    /// Parent-based: a trace a caller already decided to keep is always kept, so a job continues
+    /// the request that enqueued it. It decides what is recorded, never whether a trace id exists
+    /// — ProblemDetails, the audit tables and every log record still carry one — and logs are not
+    /// sampled at all. 0 is refused rather than meaning "none": that is <see cref="Traces"/> =
+    /// false, said plainly.
+    /// </remarks>
+    public double TraceSampleRatio { get; set; } = 1.0;
+
+    /// <summary>
     /// Headers sent with every export, in OTLP's own <c>key=value,key2=value2</c> form — how a
     /// hosted backend (Grafana Cloud, Honeycomb, Azure Monitor's OTLP ingestion, …) authenticates
     /// the sender. Unset for Seq and for the in-cluster collector, which need none.

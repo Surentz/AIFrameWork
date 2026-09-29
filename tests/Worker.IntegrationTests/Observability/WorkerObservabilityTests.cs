@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using AiFramework.Infrastructure.Observability;
 using AiFramework.Worker.Observability;
 using FluentAssertions;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Trace;
 
 namespace AiFramework.Worker.IntegrationTests.Observability;
 
@@ -11,6 +13,31 @@ namespace AiFramework.Worker.IntegrationTests.Observability;
 /// </summary>
 public sealed class WorkerObservabilityTests
 {
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(1.5)]
+    public void SamplerFor_ARatioOutsideZeroToOne_IsRefused(double ratio)
+    {
+        var act = () => WorkerObservability.SamplerFor(new OtlpOptions { TraceSampleRatio = ratio });
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithMessage("*TraceSampleRatio*");
+    }
+
+    [Fact]
+    public void SamplerFor_AnyRatio_KeepsATraceItsParentKept()
+    {
+        // A job continues the trace of the request that enqueued it (Wolverine propagates the
+        // context), so a job must never drop what the API decided to keep.
+        var sampler = WorkerObservability.SamplerFor(new OtlpOptions { TraceSampleRatio = 0.000001 });
+        var parent = new ActivityContext(
+            ActivityTraceId.CreateRandom(), ActivitySpanId.CreateRandom(), ActivityTraceFlags.Recorded, isRemote: true);
+
+        var decision = sampler.ShouldSample(
+            new SamplingParameters(parent, parent.TraceId, "PruneJobRuns", ActivityKind.Consumer));
+
+        decision.Decision.Should().Be(SamplingDecision.RecordAndSample);
+    }
+
     [Fact]
     public void ConfigureExporter_SpeaksHttpProtobufToTheSignalsOwnPath()
     {

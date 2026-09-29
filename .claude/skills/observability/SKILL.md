@@ -125,6 +125,17 @@ the Postgres traffic rollup below, which stays the monitoring page's source.
 - **Cardinality is a review item.** Every tag here is a route template, a pool or a queue name.
   A tag carrying a user id, an order id or a raw path multiplies the series count.
 
+## Sampling
+
+- **Head, in the app:** `Observability__Otlp__TraceSampleRatio`, parent-based, default `1`
+  (keep everything). Lower it only when exporting straight to a backend billed per span. A trace
+  a caller kept is always kept, so a job never drops the request that enqueued it. It decides
+  what is **recorded**, never whether a trace id exists: ProblemDetails, the audit tables and
+  every log record still carry one (`ARequest_WithSamplingAlmostOff_StillCarriesAW3CTraceId`),
+  and **logs are never sampled** — a trace link always finds the request's log lines. `0` is
+  refused at startup; "no traces" is `Otlp:Traces=false`.
+- **Tail, in the collector** (cluster only): see the `kubernetes` skill.
+
 ## Traffic
 
 RED metrics — rate, errors, duration — for both the HTTP surface and every command and query,
