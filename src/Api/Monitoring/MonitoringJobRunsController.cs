@@ -9,7 +9,7 @@ namespace AiFramework.Api.Monitoring;
 /// <summary>What every job attempt did. See <c>MonitoringJobsController</c> for the area's rules.</summary>
 [ApiController]
 [Route("api/monitoring/jobs/runs")]
-[Authorize(Policy = AuthorizationPolicies.Monitoring)]
+[Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
 public sealed class MonitoringJobRunsController(IQueryDispatcher queries) : ControllerBase
 {
     /// <summary>The job-run table, newest first.</summary>

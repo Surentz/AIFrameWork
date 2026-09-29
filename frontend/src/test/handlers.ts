@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { Session } from '../features/auth/types';
+import type { FulfilmentOrder } from '../features/fulfilment/types';
 import type { Notification } from '../features/notifications/types';
 import type { Order } from '../features/orders/types';
 import type { Product } from '../features/products/types';
@@ -17,6 +18,19 @@ export const anOrder: Order = {
   // 'Placed' | 'Shipped' | 'Cancelled'. Adding Status to the order reads is what makes the
   // ship/cancel endpoints observable at all — before that, a shipped order read back identically.
   status: 'Placed',
+};
+
+/** Someone else's order, as the fulfilment queue shows it to an operator. */
+export const anOrderToFulfil: FulfilmentOrder = {
+  id: anOrder.id,
+  buyerId: '99999999-9999-9999-9999-999999999999',
+  buyerUsername: 'ada',
+  status: 'Placed',
+  sku: 'SKU-1',
+  quantity: 2,
+  placedAt: '2026-09-02T10:00:00+00:00',
+  productName: 'Widget',
+  unitPrice: 9.99,
 };
 
 export const aProduct: Product = {
@@ -93,7 +107,7 @@ export const handlers = [
           exceptionType: 'InvalidOperationException',
           exceptionMessage: 'the handler gave up',
           sentAt: '2026-09-20T10:00:00+00:00',
-          receivedAt: 'postgresql://jobs_heavy/',
+          receivedAt: 'rabbitmq://queue/aiframework.jobs.heavy',
           replayable: false,
         },
       ],
@@ -249,6 +263,27 @@ export const handlers = [
     HttpResponse.json({ ...anOrder, id: String(params.id) }),
   ),
   http.post('/api/orders', () => HttpResponse.json(anOrder.id, { status: 201 })),
+  http.get('/api/fulfilment/orders', () =>
+    HttpResponse.json({
+      items: [
+        anOrderToFulfil,
+        {
+          ...anOrderToFulfil,
+          id: '88888888-8888-8888-8888-888888888888',
+          buyerUsername: 'grace',
+          productName: 'Gadget',
+        },
+      ],
+      nextCursor: null,
+    }),
+  ),
+  http.post('/api/fulfilment/orders/:id/ship', ({ params }) =>
+    HttpResponse.json({
+      orderId: String(params.id),
+      status: 'Shipped',
+      changedAt: '2026-09-02T11:00:00+00:00',
+    }),
+  ),
   http.get('/api/products', () =>
     HttpResponse.json({
       items: [

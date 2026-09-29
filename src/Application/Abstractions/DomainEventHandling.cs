@@ -4,12 +4,14 @@ using AiFramework.Domain.Abstractions;
 namespace AiFramework.Application.Abstractions;
 
 /// <summary>
-/// What a handler needs to be idempotent. MessageId is stable across every redelivery of the
-/// same event, so it is the dedupe key — "have I already processed message X?" is answerable
-/// without inventing a business key. Attempt lets a handler degrade on a retry.
+/// What a handler needs to be idempotent, and when the event happened. MessageId is stable across
+/// every redelivery of the same event, so it is the dedupe key — "have I already processed message
+/// X?" is answerable without inventing a business key. Attempt lets a handler degrade on a retry.
+/// OccurredAt is the outbox row's own timestamp — when the aggregate changed, not when this
+/// delivery ran — and defaults so the many existing test constructions need no change.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct DomainEventContext(Guid MessageId, int Attempt);
+public readonly record struct DomainEventContext(Guid MessageId, int Attempt, DateTimeOffset OccurredAt = default);
 
 /// <summary>
 /// Handles one domain event. MUST be idempotent: delivery is at-least-once, and retry

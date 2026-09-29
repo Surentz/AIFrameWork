@@ -164,12 +164,19 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         };
     });
 
+// Every capability maps to the Admin role today, in this one place. The names are what the
+// controllers depend on, so a later permission model changes this loop and nothing else. ADR 0024.
 builder.Services.AddAuthorization(options =>
-    options.AddPolicy(
-        AuthorizationPolicies.Monitoring,
-        policy => policy
-            .RequireAuthenticatedUser()
-            .RequireRole(nameof(UserRole.Admin))));
+{
+    foreach (var name in AuthorizationPolicies.All)
+    {
+        options.AddPolicy(
+            name,
+            policy => policy
+                .RequireAuthenticatedUser()
+                .RequireRole(nameof(UserRole.Admin)));
+    }
+});
 
 // Bound here rather than inside AddAdministratorRoles, for the same reason CacheOptions is bound
 // here: a registration that binds configuration itself cannot be resolved from a bare
@@ -353,6 +360,9 @@ builder.Services.Configure<ResilienceOptions>(builder.Configuration.GetSection("
 // replacing it. UseWolverine hooks the host builder, so this cannot go through AddInfrastructure.
 builder.Host.AddWolverineEventPath(
     connectionString,
+    // The broker (ADR 0026). Null is allowed here and refused inside the durable branch, so a host
+    // started with Wolverine__Durable=false needs no broker at all.
+    builder.Configuration.GetConnectionString("RabbitMq"),
     // Wolverine loads its pre-generated Release adapters from this assembly, and codegen
     // writes them into this project. typeof(Program) rather than GetEntryAssembly() so that
     // WebApplicationFactory tests resolve the Api assembly and not the test host.

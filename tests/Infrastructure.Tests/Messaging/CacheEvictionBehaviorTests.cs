@@ -2,8 +2,10 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.Messaging;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AiFramework.Infrastructure.Tests.Messaging;
 
@@ -60,7 +62,7 @@ public sealed class CacheEvictionBehaviorTests
     private static readonly Guid Bob = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private static ServiceProvider Build<TCommandHandler>(
-        ICurrentUser currentUser, bool enabled = true)
+        ICurrentUser currentUser, bool enabled = true, IUnitOfWork? unitOfWork = null)
         where TCommandHandler : class, ICommandHandler<Touch, bool>
     {
         var services = new ServiceCollection();
@@ -75,7 +77,7 @@ public sealed class CacheEvictionBehaviorTests
         services.AddScoped<IQueryDispatcher, QueryDispatcher>();
         services.AddScoped<ICommandDispatcher, CommandDispatcher>();
         services.AddSingleton(currentUser);
-        services.AddSingleton(Substitute.For<IUnitOfWork>());
+        services.AddSingleton(unitOfWork ?? Substitute.For<IUnitOfWork>());
 
         return services.BuildServiceProvider();
     }
@@ -119,6 +121,25 @@ public sealed class CacheEvictionBehaviorTests
 
         CountingLookupHandler.Calls.Should().Be(
             1, "nothing changed, so there is nothing to invalidate");
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenTheCommitLosesAConcurrencyRace_DoesNotEvict()
+    {
+        CountingLookupHandler.Calls = 0;
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateConcurrencyException("lost the race"));
+        await using var provider = Build<TouchHandler>(UserOf(Alice), unitOfWork: unitOfWork);
+        var queries = provider.GetRequiredService<IQueryDispatcher>();
+        var commands = provider.GetRequiredService<ICommandDispatcher>();
+
+        await queries.SendAsync(new Lookup(1), CancellationToken.None);
+        await commands.SendAsync(new Touch(1), CancellationToken.None);
+        await queries.SendAsync(new Lookup(1), CancellationToken.None);
+
+        CountingLookupHandler.Calls.Should().Be(
+            1, "the handler succeeded but nothing was written, so there is nothing to invalidate");
     }
 
     [Fact]

@@ -18,8 +18,13 @@ test('signs out and back in', async ({ signedInPage, workerUser }) => {
 
   // "Remember me" was left unticked, so the cookie must end with the browser: a session cookie,
   // which Playwright reports with an expiry of -1.
-  const [session] = await signedInPage.context().cookies();
-  expect(session?.name).toBe(SessionCookie);
+  //
+  // Found by name, not taken as the first cookie: behind the kind cluster's ingress the context
+  // also holds aiframework.route, the affinity cookie (ADR 0010), and the order Playwright lists
+  // them in is not ours to rely on. Taking [0] failed every kind run while passing locally, where
+  // there is no ingress. The next test already looks it up this way.
+  const session = (await signedInPage.context().cookies()).find((c) => c.name === SessionCookie);
+  expect(session, `no ${SessionCookie} cookie after signing back in`).toBeDefined();
   expect(session?.expires).toBe(-1);
 });
 

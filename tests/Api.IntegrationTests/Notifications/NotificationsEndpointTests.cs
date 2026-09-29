@@ -22,9 +22,9 @@ public sealed class NotificationsEndpointTests(ApiFactory factory)
 
     private sealed record ReadResult(int MarkedCount, int UnreadCount);
 
-    private static async Task<Guid> PlaceOrderAsync(HttpClient client)
+    private async Task<Guid> PlaceOrderAsync(HttpClient client)
     {
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 2 });
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         return await response.Content.ReadFromJsonAsync<Guid>();

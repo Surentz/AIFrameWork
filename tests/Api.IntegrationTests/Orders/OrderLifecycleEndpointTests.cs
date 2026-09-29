@@ -5,8 +5,8 @@ using FluentAssertions;
 namespace AiFramework.Api.IntegrationTests.Orders;
 
 /// <summary>
-/// The ship/cancel transitions over HTTP, and the notifications they produce once the outbox
-/// drains.
+/// The buyer's side of the lifecycle over HTTP — cancelling — and the notifications it produces
+/// once the outbox drains. Shipping is the operator's: see <c>FulfilmentEndpointTests</c>.
 /// </summary>
 [Collection(nameof(ApiFactoryCollection))]
 public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
@@ -19,9 +19,9 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
 
     private sealed record NotificationPage(IReadOnlyList<NotificationItem> Items, string? NextCursor);
 
-    private static async Task<Guid> PlaceOrderAsync(HttpClient client)
+    private async Task<Guid> PlaceOrderAsync(HttpClient client)
     {
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 2 });
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         return await response.Content.ReadFromJsonAsync<Guid>();
@@ -36,38 +36,13 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task ShipOrder_OnAPlacedOrder_ReportsShipped()
-    {
-        using var client = await factory.CreateAuthenticatedClientAsync();
-        var orderId = await PlaceOrderAsync(client);
-
-        var response = await client.PostAsync($"/api/orders/{orderId}/ship", null);
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var status = await response.Content.ReadFromJsonAsync<StatusResponse>();
-        status!.Status.Should().Be("Shipped");
-    }
-
-    [Fact]
-    public async Task ShipOrder_PersistsTheTransition()
-    {
-        // The handler reads tracked; if it did not, this second call would still see Placed and
-        // succeed instead of conflicting.
-        using var client = await factory.CreateAuthenticatedClientAsync();
-        var orderId = await PlaceOrderAsync(client);
-
-        await client.PostAsync($"/api/orders/{orderId}/ship", null);
-        var second = await client.PostAsync($"/api/orders/{orderId}/ship", null);
-
-        second.StatusCode.Should().Be(HttpStatusCode.Conflict);
-    }
-
-    [Fact]
     public async Task CancelOrder_AfterShipping_IsConflict()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
         var orderId = await PlaceOrderAsync(client);
-        await client.PostAsync($"/api/orders/{orderId}/ship", null);
+        using var operatorClient = await factory.CreateAdminClientAsync();
+        (await operatorClient.PostAsync($"/api/fulfilment/orders/{orderId}/ship", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
         var response = await client.PostAsJsonAsync(
             $"/api/orders/{orderId}/cancel", new { Reason = "Changed my mind." });
@@ -102,31 +77,6 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task ShipOrder_ForAnotherUsersOrder_IsNotFound()
-    {
-        using var owner = await factory.CreateAuthenticatedClientAsync();
-        var orderId = await PlaceOrderAsync(owner);
-
-        using var stranger = await factory.CreateAuthenticatedClientAsync();
-        var response = await stranger.PostAsync($"/api/orders/{orderId}/ship", null);
-
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-    }
-
-    [Fact]
-    public async Task ShippingAndDraining_NotifiesTheBuyer()
-    {
-        using var client = await factory.CreateAuthenticatedClientAsync();
-        var orderId = await PlaceOrderAsync(client);
-        await client.PostAsync($"/api/orders/{orderId}/ship", null);
-
-        await factory.DrainOutboxUntilEmptyAsync();
-
-        var notifications = await NotificationsForAsync(client, orderId);
-        notifications.Should().Contain(n => n.Kind == "OrderShipped");
-    }
-
-    [Fact]
     public async Task CancellingAndDraining_NotifiesTheBuyerWithTheReason()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
@@ -145,7 +95,7 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
     public async Task UpdatingAProductsPriceAndDraining_NotifiesItsPastPurchasers()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client, price: 10.00m);
+        var sku = await CatalogueSetup.CreateProductAsync(factory, price: 10.00m);
 
         var placed = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 1 });
         placed.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -155,7 +105,9 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
         var product = products.Items.Single(
             p => string.Equals(p.Sku, sku, StringComparison.Ordinal));
 
-        var updated = await client.PutAsJsonAsync(
+        // The operator reprices; the buyer is the one notified. ADR 0025.
+        using var admin = await factory.CreateAdminClientAsync();
+        var updated = await admin.PutAsJsonAsync(
             $"/api/products/{product.Id}",
             new { Name = "Widget", Description = (string?)null, Price = 12.50m });
         updated.IsSuccessStatusCode.Should().BeTrue();
@@ -171,7 +123,7 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
     public async Task UpdatingAProductWithoutChangingThePrice_NotifiesNobody()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client, price: 10.00m);
+        var sku = await CatalogueSetup.CreateProductAsync(factory, price: 10.00m);
         await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 1 });
 
         var products = await client.GetFromJsonAsync<ProductPage>("/api/products?limit=100");
@@ -179,9 +131,13 @@ public sealed class OrderLifecycleEndpointTests(ApiFactory factory)
         var product = products.Items.Single(
             p => string.Equals(p.Sku, sku, StringComparison.Ordinal));
 
-        await client.PutAsJsonAsync(
+        // Asserted, because a refused update would notify nobody too, and pass this for the wrong
+        // reason.
+        using var admin = await factory.CreateAdminClientAsync();
+        var updated = await admin.PutAsJsonAsync(
             $"/api/products/{product.Id}",
             new { Name = "Renamed", Description = (string?)null, Price = 10.00m });
+        updated.IsSuccessStatusCode.Should().BeTrue();
 
         await factory.DrainOutboxUntilEmptyAsync();
 

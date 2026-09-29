@@ -12,10 +12,11 @@ namespace AiFramework.Api.Monitoring;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Beneath <c>api/monitoring</c> and behind the policy that is already there, rather than under
-/// a policy of its own. Administering users is an operations task, this application has exactly
-/// one privileged surface, and a second policy would be a second thing to get wrong. See ADR
-/// 0020 for the policy and ADR 0022 for this feature.
+/// Beneath <c>api/monitoring</c>, because administering users is an operations task, but behind
+/// <see cref="AuthorizationPolicies.Users.Manage"/> rather than the monitoring read policy: who may
+/// grant the administrator role is a different capability from who may look at a dashboard, even
+/// while one role holds both. See ADR 0020 for the role, ADR 0022 for this feature, and ADR 0024
+/// for the capability names.
 /// </para>
 /// <para>
 /// Both rails — no self-demotion, never the last administrator — are enforced in the handlers
@@ -25,7 +26,7 @@ namespace AiFramework.Api.Monitoring;
 /// </remarks>
 [ApiController]
 [Route("api/monitoring/users")]
-[Authorize(Policy = AuthorizationPolicies.Monitoring)]
+[Authorize(Policy = AuthorizationPolicies.Users.Manage)]
 // One route template per action below, so S6960's "controller with multiple responsibilities"
 // heuristic does not fire on a controller that has exactly one: administering accounts.
 #pragma warning disable S6960

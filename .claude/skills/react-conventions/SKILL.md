@@ -1,7 +1,6 @@
 ---
 name: react-conventions
 description: Use when writing or modifying React or TypeScript in this repo - function components, hooks, TanStack Query, forms, and error handling.
-paths: "frontend/src/**/*.{ts,tsx}"
 ---
 
 # React Conventions

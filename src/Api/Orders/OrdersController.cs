@@ -58,22 +58,8 @@ public sealed class OrdersController(
             : result.Problem(HttpContext);
     }
 
-    /// <summary>
-    /// Marks one of the caller's own orders as shipped. 409 if it has already shipped or was
-    /// cancelled — an illegal transition is a conflict with existing state, not a malformed
-    /// request.
-    /// </summary>
-    [HttpPost("{id:guid}/ship")]
-    [ProducesResponseType<OrderStatusResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult> Ship(Guid id, CancellationToken cancellationToken)
-    {
-        var result = await commands.SendAsync(
-            new ShipOrder(id), cancellationToken).ConfigureAwait(false);
-
-        return result.IsSuccess ? Ok(ToResponse(result.Value)) : result.Problem(HttpContext);
-    }
+    // No ship action here: a buyer shipping their own order blocked the operator's real one for
+    // good. Shipping is FulfilmentController's, behind Orders.Fulfil. ADR 0024.
 
     /// <summary>
     /// Cancels one of the caller's own orders. 409 if it has already shipped or was already

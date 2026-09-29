@@ -260,6 +260,24 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
         seen.Attempt.Should().Be(3);
     }
 
+    // An integration event's occurredAt comes from here, so it must be the row's time, carried
+    // through unchanged - not the clock at delivery.
+    [Fact]
+    public async Task ProcessAsync_PassesTheItemsOccurredAtInTheDomainEventContext()
+    {
+        var id = await SeedAsync("test.contextual", "{}", 1);
+        var occurredAt = Now.AddHours(-2);
+        await using var provider = BuildProvider();
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>()
+            .ProcessAsync(
+                new OutboxWorkItem(id, "test.contextual", "{}", 1, OccurredAt: occurredAt), CancellationToken.None);
+
+        provider.GetRequiredService<ContextSink>().Seen.Should().ContainSingle()
+            .Which.OccurredAt.Should().Be(occurredAt);
+    }
+
     // Amendment 2: proves the processor's injected IServiceProvider actually IS the scope it
     // was resolved from — Task 9's pump depends on this, so it is verified here rather than
     // assumed. This compares the HANDLER INSTANCE dispatch actually ran on (captured by

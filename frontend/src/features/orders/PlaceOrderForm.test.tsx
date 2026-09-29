@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { aProduct, server } from '../../test/handlers';
+import { anAdminSession, aProduct, server } from '../../test/handlers';
 import { withQueryClient } from '../../test/withQueryClient';
 import { OrderDetail } from './OrderDetail';
 import { PlaceOrderForm } from './PlaceOrderForm';
@@ -150,7 +150,24 @@ describe('PlaceOrderForm', () => {
 
     expect(await screen.findByText(/no products in the catalogue/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Place order' })).toBeDisabled();
-    expect(screen.getByRole('link', { name: /add a product/i })).toBeInTheDocument();
+  });
+
+  it('tells a member an administrator adds products, with no link to a form they cannot use', async () => {
+    server.use(http.get('/api/products', () => HttpResponse.json({ items: [], nextCursor: null })));
+    renderForm();
+
+    expect(await screen.findByText(/an administrator has to add one/i)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /add a product/i })).not.toBeInTheDocument();
+  });
+
+  it('links an administrator to add a product when the catalogue is empty', async () => {
+    server.use(
+      http.get('/api/products', () => HttpResponse.json({ items: [], nextCursor: null })),
+      http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)),
+    );
+    renderForm();
+
+    expect(await screen.findByRole('link', { name: /add a product/i })).toBeInTheDocument();
   });
 
   it('renders the error state when the catalogue cannot be loaded', async () => {

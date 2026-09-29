@@ -11,7 +11,7 @@ namespace Internal.Generated.WolverineHandlers
 
         public override System.Type[] HandlerTypes()
         {
-            return new System.Type[] { typeof(AiFramework.Application.Maintenance.PruneProcessedOutboxHandler), typeof(AiFramework.Application.Monitoring.PruneAdminActionsHandler), typeof(AiFramework.Application.Monitoring.PruneJobRunsHandler), typeof(AiFramework.Application.Monitoring.PruneSignInEventsHandler), typeof(AiFramework.Application.Monitoring.PruneTrafficBucketsHandler), typeof(AiFramework.Application.Orders.RebuildOrderReportHandler), typeof(AiFramework.Application.Orders.SendOrderConfirmationHandler), typeof(AiFramework.Infrastructure.EventPath.OrderPlacedNotificationHandler) };
+            return new System.Type[] { typeof(AiFramework.Application.Maintenance.PruneProcessedOutboxHandler), typeof(AiFramework.Application.Monitoring.PruneAdminActionsHandler), typeof(AiFramework.Application.Monitoring.PruneJobRunsHandler), typeof(AiFramework.Application.Monitoring.PruneSignInEventsHandler), typeof(AiFramework.Application.Monitoring.PruneTrafficBucketsHandler), typeof(AiFramework.Application.Orders.RebuildOrderReportHandler), typeof(AiFramework.Application.Orders.SendOrderConfirmationHandler), typeof(AiFramework.Infrastructure.EventPath.OrderPlacedNotificationHandler), typeof(AiFramework.Infrastructure.Integration.ShipmentConfirmedHandler) };
         }
 
 
@@ -42,6 +42,7 @@ namespace Internal.Generated.WolverineHandlers
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Internal.Generated.WolverineHandlers.PruneTrafficBucketsHandler72837670))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Internal.Generated.WolverineHandlers.RebuildOrderReportHandler339131284))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Internal.Generated.WolverineHandlers.SendOrderConfirmationHandler160443526))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Internal.Generated.WolverineHandlers.ShipmentConfirmedV1Handler1858014267))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Maintenance.PruneProcessedOutboxHandler))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Monitoring.PruneAdminActionsHandler))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Monitoring.PruneJobRunsHandler))]
@@ -50,6 +51,10 @@ namespace Internal.Generated.WolverineHandlers
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Orders.RebuildOrderReportHandler))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Orders.SendOrderConfirmationHandler))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Infrastructure.EventPath.OrderPlacedNotificationHandler))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Infrastructure.Integration.ShipmentConfirmedHandler))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1>))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Maintenance.PruneProcessedOutbox))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Maintenance.PruneProcessedOutbox>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Maintenance.PruneProcessedOutbox>))]

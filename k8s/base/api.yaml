@@ -40,10 +40,24 @@ spec:
       # is meant to prevent and exactly the state nobody would notice. It stays satisfiable as
       # the HPA scales - with maxSkew 1 across the cluster's nodes, 6 replicas spread evenly
       # rather than pending.
+      #
+      # Two settings make it survive a rolling update, and both were found by one hanging:
+      #  - nodeTaintsPolicy: Honor. By default a spread counts TAINTED nodes as domains, so kind's
+      #    control plane - which no api pod may run on - sat in the count with zero pods. With one
+      #    replica per worker, the rollout's surge pod would make a worker hold 2 against that 0, a
+      #    skew of 2, so DoNotSchedule left it Pending and `kubectl rollout status` timed out:
+      #    every deploy.ps1 run after the first hung at "Rolling out the application".
+      #  - matchLabelKeys: [pod-template-hash]. Count only pods of the same revision. Otherwise the
+      #    old ReplicaSet's pods are counted while the new ones are placed, and a finished rollout
+      #    can leave both new replicas on one node - observed - which is the state this exists to
+      #    prevent, and nothing re-spreads running pods.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          matchLabelKeys:
+            - pod-template-hash
           labelSelector:
             matchLabels:
               app: api

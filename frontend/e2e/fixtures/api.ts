@@ -53,40 +53,44 @@ export async function registerUser(): Promise<TestUser> {
 }
 
 /**
- * Registers a FIXED username, or signs in as it when it already exists.
+ * Signs in as a FIXED username, registering it only when it does not exist yet.
  *
  * Only the administrator needs this, and only because its name has to be known before the run
- * starts — `playwright.config.ts` names it in the API's `Admin__Usernames`, which is the sole
- * grant of the role (ADR 0020). A fixed name collides two ways that a generated one cannot, and
- * both land here rather than in a spec: `--ui` keeps the database between runs, so the account
- * already exists on the second iteration; and two Playwright workers arranging in parallel both
- * pass the API's check-then-insert, so one of them gets the unique index's 409.
+ * starts — the target's `Admin__Usernames` names it, and configuration is the sole grant of the
+ * role (ADR 0020). `e2e/setup/seed-admin.ts` calls it exactly once per run; nothing else may.
+ *
+ * Sign-in FIRST, because the account almost always exists: `--ui` keeps the database, and the kind
+ * cluster's Postgres keeps it across runs. That makes the usual cost one auth call, and a fresh
+ * database two (a refused sign-in, then the registration) — which matters against the kind
+ * cluster's 10-per-60-seconds budget. Registering first would cost two every time.
  *
  * Every other user in this suite is generated and registered exactly once — see `registerUser`.
  */
-export async function registerOrSignIn(username: string): Promise<TestUser> {
+export async function signInOrRegister(username: string): Promise<TestUser> {
   const context = await request.newContext(connectionOptions);
 
   try {
-    const registration = await context.post('/api/auth/register', {
-      data: { username, password: PASSWORD, displayName: 'E2E Operator' },
+    // rememberMe is `required` on LoginRequest, so omitting it is a 400 and not a default.
+    const signIn = await context.post('/api/auth/login', {
+      data: { username, password: PASSWORD, rememberMe: false },
     });
 
-    if (!registration.ok()) {
-      if (registration.status() !== 409) {
+    if (!signIn.ok()) {
+      if (signIn.status() !== 401) {
         throw new Error(
-          `Registering '${username}' failed with ${String(registration.status())}: ${await registration.text()}`,
+          `Signing in as '${username}' failed with ${String(signIn.status())}: ${await signIn.text()}`,
         );
       }
 
-      // rememberMe is `required` on LoginRequest, so omitting it is a 400 and not a default.
-      const signIn = await context.post('/api/auth/login', {
-        data: { username, password: PASSWORD, rememberMe: false },
+      // 401 is both "no such account" and "wrong password" (ADR 0006), so a registration that
+      // then answers 409 means the account exists with a password this suite does not know.
+      const registration = await context.post('/api/auth/register', {
+        data: { username, password: PASSWORD, displayName: 'E2E Operator' },
       });
 
-      if (!signIn.ok()) {
+      if (!registration.ok()) {
         throw new Error(
-          `'${username}' exists but signing in failed with ${String(signIn.status())}: ${await signIn.text()}`,
+          `'${username}' could not sign in, and registering it failed with ${String(registration.status())}: ${await registration.text()}`,
         );
       }
     }
@@ -122,19 +126,31 @@ export interface ApiClient {
    * aim it at `workerUser`.
    */
   failSignIn(username: string): Promise<void>;
-  /** Creates a product for `sku` (named after it, priced 19.95) and orders it. Returns the order id. */
+  /**
+   * Creates a product for `sku` (named after it, priced 19.95) as the operator, then orders it as
+   * `user`. Returns the order id.
+   */
   placeOrder(user: TestUser, order: { sku: string; quantity: number }): Promise<string>;
   /** Orders a product ALREADY in the catalogue - see createProduct. Returns the order id. */
   orderProduct(user: TestUser, order: { sku: string; quantity: number }): Promise<string>;
   /** `count` orders with generated SKUs, in parallel. Returns the SKUs, newest-first order not guaranteed. */
   placeOrders(user: TestUser, count: number): Promise<readonly string[]>;
-  shipOrder(user: TestUser, orderId: string): Promise<void>;
+  /**
+   * Ships any buyer's order through the fulfilment endpoint. Needs an administrator, so a spec
+   * that calls it passes `adminUser` and carries `@local-only`. ADR 0024.
+   */
+  shipOrder(admin: TestUser, orderId: string): Promise<void>;
   cancelOrder(user: TestUser, orderId: string, reason: string): Promise<void>;
-  /** Returns the new product's id. The catalogue is global, so any signed-in user may add to it. */
-  createProduct(user: TestUser, product: NewProduct): Promise<string>;
-  /** Replaces a product's editable fields; a changed price notifies everyone who ordered it. */
+  /**
+   * Returns the new product's id. Always as the operator the client was built with: writing to
+   * the catalogue needs `Catalogue.Manage` (ADR 0025), so there is no user to choose.
+   */
+  createProduct(product: NewProduct): Promise<string>;
+  /**
+   * Replaces a product's editable fields, as the operator; a changed price notifies everyone who
+   * ordered it.
+   */
   updateProduct(
-    user: TestUser,
     id: string,
     product: { name: string; price: string; description?: string | null },
   ): Promise<void>;
@@ -164,8 +180,12 @@ export interface ApiClient {
  * Arrange-through-the-API, so a test that needs existing data pays milliseconds instead of a
  * form-fill per row. /api/orders carries no [EnableRateLimiting] — only the auth endpoints do —
  * so this is free even against the cluster.
+ *
+ * `operator` is the administrator every catalogue write goes through (ADR 0025). Its session was
+ * signed in once for the whole run by `e2e/setup/seed-admin.ts`, so building a client costs no
+ * auth call.
  */
-export function createApiClient(): ApiClient {
+export function createApiClient(operator: TestUser): ApiClient {
   const contexts = new Map<string, Promise<APIRequestContext>>();
 
   function contextFor(user: TestUser): Promise<APIRequestContext> {
@@ -186,7 +206,7 @@ export function createApiClient(): ApiClient {
     // PlaceOrder now refuses a sku the catalogue does not hold, so this creates the product it
     // is about to order first — keeping placeOrder a one-call arrange for every existing caller
     // instead of pushing a createProduct call onto each of them.
-    await createProduct(user, { sku: order.sku, name: order.sku, price: '19.95' });
+    await createProduct({ sku: order.sku, name: order.sku, price: '19.95' });
 
     return orderProduct(user, order);
   }
@@ -207,8 +227,8 @@ export function createApiClient(): ApiClient {
     return (await response.json()) as string;
   }
 
-  async function createProduct(user: TestUser, product: NewProduct): Promise<string> {
-    const context = await contextFor(user);
+  async function createProduct(product: NewProduct): Promise<string> {
+    const context = await contextFor(operator);
     const response = await context.post('/api/products', {
       data: { description: null, ...product },
     });
@@ -292,16 +312,16 @@ export function createApiClient(): ApiClient {
     placeOrder,
     orderProduct,
     createProduct,
-    async shipOrder(user, orderId) {
-      await postOrFail(user, `/api/orders/${orderId}/ship`, `Shipping order ${orderId}`);
+    async shipOrder(admin, orderId) {
+      await postOrFail(admin, `/api/fulfilment/orders/${orderId}/ship`, `Shipping order ${orderId}`);
     },
     async cancelOrder(user, orderId, reason) {
       await postOrFail(user, `/api/orders/${orderId}/cancel`, `Cancelling order ${orderId}`, {
         data: { reason },
       });
     },
-    async updateProduct(user, id, product) {
-      await postOrFail(user, `/api/products/${id}`, `Updating product ${id}`, {
+    async updateProduct(id, product) {
+      await postOrFail(operator, `/api/products/${id}`, `Updating product ${id}`, {
         method: 'put',
         data: { description: null, ...product },
       });

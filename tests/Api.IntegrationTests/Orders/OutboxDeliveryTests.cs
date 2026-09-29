@@ -15,7 +15,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
     public async Task PostOrders_WritesAPendingOutboxRow()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
 
         var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 2 });
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
@@ -35,7 +35,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
     public async Task PostOrders_ThenDrainingTheOutbox_RunsTheHandler()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 1 });
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
         var orderId = await response.Content.ReadFromJsonAsync<Guid>();
@@ -54,7 +54,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
     public async Task PostOrders_ThenDrainingTheOutbox_MarksTheOutboxRowProcessed()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 1 });
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
         var orderId = await response.Content.ReadFromJsonAsync<Guid>();
@@ -74,7 +74,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
     public async Task RedeliveringAProcessedMessage_DoesNotDuplicateTheAuditRow()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 1 });
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
         var orderId = await response.Content.ReadFromJsonAsync<Guid>();
@@ -101,7 +101,7 @@ public sealed class OutboxDeliveryTests(ApiFactory factory)
     public async Task RedeliveringAProcessedMessage_SucceedsInsteadOfBeingRetried()
     {
         using var client = await factory.CreateAuthenticatedClientAsync();
-        var sku = await CatalogueSetup.CreateProductAsync(client);
+        var sku = await CatalogueSetup.CreateProductAsync(factory);
         var response = await client.PostAsJsonAsync("/api/orders", new { Sku = sku, Quantity = 1 });
         response.StatusCode.Should().Be(HttpStatusCode.Created, "a rejected order would never reach the outbox");
         var orderId = await response.Content.ReadFromJsonAsync<Guid>();

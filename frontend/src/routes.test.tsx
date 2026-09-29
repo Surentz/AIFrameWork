@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
-import { anAdminSession, server } from './test/handlers';
+import { anAdminSession, aProduct, server } from './test/handlers';
 import { withQueryClient } from './test/withQueryClient';
 import { AppRoutes } from './routes';
 
@@ -42,12 +42,23 @@ describe('AppRoutes', () => {
   });
 
   it('matches /products/new as the create screen rather than as an id', async () => {
-    // The route order is what decides this; declared the other way round, "new" would be
-    // captured as :id and the detail screen would request /api/products/new.
+    // Were "new" captured as :id, the detail screen would request /api/products/new. As an
+    // administrator, because the create screen is theirs (ADR 0025).
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)));
+
     renderAt('/products/new');
 
     expect(await screen.findByRole('heading', { name: 'Add a product' })).toBeInTheDocument();
   });
+
+  it.each(['/products/new', `/products/${aProduct.id}/edit`])(
+    'explains the refusal when an ordinary member opens %s',
+    async (path) => {
+      renderAt(path);
+
+      expect(await screen.findByText(/This page is for administrators/)).toBeInTheDocument();
+    },
+  );
 
   it('renders the monitoring page, and its nav entry, for an administrator', async () => {
     server.use(http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)));
@@ -65,6 +76,30 @@ describe('AppRoutes', () => {
 
     expect(await screen.findByRole('link', { name: 'All orders' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Monitoring' })).not.toBeInTheDocument();
+  });
+
+  it('renders the fulfilment queue, and its nav entry, for an administrator', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)));
+
+    renderAt('/fulfilment');
+
+    expect(await screen.findByRole('heading', { name: 'Fulfilment' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Fulfilment' })).toBeInTheDocument();
+  });
+
+  it('keeps the fulfilment nav entry out of an ordinary member\'s shell', async () => {
+    renderAt('/orders');
+
+    expect(await screen.findByRole('link', { name: 'All orders' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Fulfilment' })).not.toBeInTheDocument();
+  });
+
+  it('explains the refusal when an ordinary member opens the fulfilment queue', async () => {
+    // The default Member session, reaching the route by a typed address.
+    renderAt('/fulfilment');
+
+    expect(await screen.findByText(/This page is for administrators/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Fulfilment' })).not.toBeInTheDocument();
   });
 
   // The reason /login sits outside the layout route: it is a full-bleed page, and rendering it

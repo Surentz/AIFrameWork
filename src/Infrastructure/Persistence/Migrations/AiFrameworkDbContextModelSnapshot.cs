@@ -17,7 +17,7 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -93,6 +93,12 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("integer");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<DateTimeOffset?>("ShippedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -115,6 +121,9 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Sku", "UserId", "PlacedAt")
                         .HasDatabaseName("IX_Orders_Sku_UserId_PlacedAt");
+
+                    b.HasIndex("Status", "PlacedAt", "Id")
+                        .HasDatabaseName("IX_Orders_Status_PlacedAt_Id");
 
                     b.HasIndex("UserId", "PlacedAt", "Id")
                         .IsDescending(false, true, true)

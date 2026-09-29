@@ -6,10 +6,10 @@ import { uniqueProductSku } from '../../support/identity.ts';
 // 'true' and there are two API replicas. That makes it an end-to-end check of ADR 0010's claim
 // that ingress cookie affinity keeps L1 eviction correct - the write and the read have to land
 // on the same pod for the new order to appear.
-test('places an order and sees it in the list', async ({ signedInPage, api, workerUser }) => {
+test('places an order and sees it in the list', async ({ signedInPage, api }) => {
   const sku = uniqueProductSku();
   const name = 'Widget';
-  await api.createProduct(workerUser, { sku, name, price: '19.95' });
+  await api.createProduct({ sku, name, price: '19.95' });
 
   await orders.placeOrder(signedInPage, { sku, quantity: 3 });
   // The heading is the product name once an order carries a catalogue snapshot - every order

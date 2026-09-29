@@ -26,7 +26,7 @@ profile-started container even when it is currently running. See the `observabil
 Or by hand:
 
 ```bash
-docker compose up -d --wait                                  # dev Postgres on 55433
+docker compose up -d --wait                                  # dev Postgres on 55433, RabbitMQ on 55672
 dotnet ef database update --project src/Infrastructure --startup-project src/Infrastructure
 dotnet run --project src/Api                                 # then `npm start` in frontend/
 ```
@@ -39,6 +39,12 @@ one-keystroke startup in Rider or Visual Studio, and the gotchas that come with 
 Two databases, two ports, and they are meant to coexist: **55433** is the dev database from
 `docker-compose.yml` (named volume, data persists); **55432** is the e2e one from
 `docker-compose.e2e.yml` (throwaway). Override either with `DEV_PG_PORT` / `PG_PORT`.
+
+The message broker follows the same split: the dev one is in `docker-compose.yml` too, on
+**55672** (AMQP) and **55673** (management UI); the e2e one is in `docker-compose.e2e.yml`, on
+**55682** and **55683**. Unlike Seq and Redis, both the API and the worker refuse to start
+without a broker (ADR 0026) — so `dotnet run` on its own, or an IDE's F5 (Rider, Visual Studio),
+needs `docker compose up -d` run first. `dev.ps1` and `worker.ps1` already do this.
 
 The dev connection string is committed in `src/Api/appsettings.Development.json` — throwaway
 credentials against a localhost-only container that is never deployed, the same judgement
@@ -74,10 +80,10 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Menu option | Runs |
 |---|---|
 | Install/check prerequisites | `scripts/install-prereqs.ps1` — see below |
-| Start dev loop | `scripts/dev.ps1` — the plain local dev loop: Postgres, API, **job worker**, Vite |
+| Start dev loop | `scripts/dev.ps1` — the plain local dev loop: Postgres, **RabbitMQ**, API, **job worker**, Vite |
 | Start dev loop + Seq | `scripts/dev.ps1 -WithSeq` — same, plus Seq at `localhost:55341` |
 | Start job worker only | `scripts/worker.ps1` — restarts just the worker, leaving a working API and Vite alone. Runs in the foreground, so you watch its log; `codegen write` needs a worker restart to take effect |
-| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/worker/Vite ports, tears down the database (and Seq, if it was started) |
+| Stop dev loop | `scripts/stop-dev.ps1` — kills the API/worker/Vite ports, tears down the database and the broker (and Seq, if it was started). Messages waiting on a queue survive in the `rabbitmqdata` volume, as rows do in `pgdata` |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
 | Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses ports 5234 and 5235 |

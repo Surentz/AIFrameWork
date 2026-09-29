@@ -13,11 +13,19 @@ internal static class CatalogueSetup
     /// and its sku index is unique, so a fixed literal would collide across tests sharing the
     /// one Postgres container.
     /// </summary>
-    public static async Task<string> CreateProductAsync(HttpClient client, decimal price = 19.95m)
+    /// <remarks>
+    /// Through an administrator of its own, never the caller's client: creating a product needs
+    /// <c>Catalogue.Manage</c> (ADR 0025), and the tests that call this are about ordering as a
+    /// member. The product is global, so who created it makes no difference to them.
+    /// </remarks>
+    public static async Task<string> CreateProductAsync(ApiFactory factory, decimal price = 19.95m)
     {
+        ArgumentNullException.ThrowIfNull(factory);
+
         var sku = $"SKU-{Guid.NewGuid():N}"[..20].ToUpperInvariant();
 
-        var response = await client.PostAsJsonAsync(
+        using var admin = await factory.CreateAdminClientAsync();
+        var response = await admin.PostAsJsonAsync(
             "/api/products",
             new { Sku = sku, Name = "Widget", Description = (string?)null, Price = price });
 

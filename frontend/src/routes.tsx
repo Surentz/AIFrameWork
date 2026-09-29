@@ -5,6 +5,7 @@ import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { RequireRole } from './features/auth/RequireRole';
+import { FulfilmentPage } from './features/fulfilment/FulfilmentPage';
 import { JobsPage } from './features/monitoring/JobsPage';
 import { LoginsPage } from './features/monitoring/LoginsPage';
 import { MonitoringPage } from './features/monitoring/MonitoringPage';
@@ -38,9 +39,14 @@ export function AppRoutes(): React.JSX.Element {
           {/* /products/new is declared before /products/:id so "new" is matched as the literal
               route, not captured as an id. */}
           <Route path="/products" element={<ProductList />} />
-          <Route path="/products/new" element={<CreateProductForm />} />
+          {/* Writing to the catalogue is an administrator's (ADR 0025). Gated here, like the
+              monitoring routes, so a member who types the address is told rather than shown a
+              form whose submit the API would refuse. */}
+          <Route element={<RequireRole allow="Admin" />}>
+            <Route path="/products/new" element={<CreateProductForm />} />
+            <Route path="/products/:id/edit" element={<EditProductForm />} />
+          </Route>
           <Route path="/products/:id" element={<ProductDetail />} />
-          <Route path="/products/:id/edit" element={<EditProductForm />} />
           <Route path="/notifications" element={<NotificationList />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
 
@@ -53,6 +59,7 @@ export function AppRoutes(): React.JSX.Element {
             <Route path="/monitoring/logins" element={<LoginsPage />} />
             <Route path="/monitoring/traffic" element={<TrafficPage />} />
             <Route path="/monitoring/users" element={<UsersPage />} />
+            <Route path="/fulfilment" element={<FulfilmentPage />} />
           </Route>
         </Route>
       </Route>

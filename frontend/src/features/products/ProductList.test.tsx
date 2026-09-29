@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
-import { aProduct, server } from '../../test/handlers';
+import { anAdminSession, aProduct, server } from '../../test/handlers';
 import { withQueryClient } from '../../test/withQueryClient';
 import { ProductList } from './ProductList';
 
@@ -21,6 +21,34 @@ describe('ProductList', () => {
 
     expect(await screen.findByRole('link', { name: 'Widget' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Gadget' })).toBeInTheDocument();
+  });
+
+  it('offers an administrator the create screen', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)));
+    renderList();
+
+    expect(await screen.findByRole('link', { name: 'Add a product' })).toHaveAttribute(
+      'href',
+      '/products/new',
+    );
+  });
+
+  it('offers a member no create link', async () => {
+    // The default session is a Member. Creating needs Catalogue.Manage (ADR 0025).
+    renderList();
+
+    expect(await screen.findByRole('link', { name: 'Widget' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Add a product' })).not.toBeInTheDocument();
+  });
+
+  it('tells a member who adds products when the catalogue is empty', async () => {
+    server.use(http.get('/api/products', () => HttpResponse.json({ items: [], nextCursor: null })));
+    renderList();
+
+    expect(
+      await screen.findByText('An administrator adds products to the catalogue.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Add the first one' })).not.toBeInTheDocument();
   });
 
   it('announces the loading state before the products arrive', async () => {

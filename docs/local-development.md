@@ -11,8 +11,8 @@ the reference; the script and the IDE sections build on it.
 ./scripts/dev.ps1 -WithSeq         # same, plus Seq (structured logs) at localhost:55341
 ```
 
-It checks Docker is running and that 5234 and 5173 are free, starts Postgres and waits for its
-healthcheck, applies migrations, then launches the API and the dev server **each in its own
+It checks Docker is running and that 5234 and 5173 are free, starts Postgres and RabbitMQ and
+waits for their healthchecks, applies migrations, then launches the API and the dev server **each in its own
 window**. Both are long-running foreground processes with their own logs, so a window each keeps
 those readable and makes Ctrl-C mean "stop this one".
 
@@ -21,7 +21,7 @@ The migration step is the part worth having: it sets `ConnectionStrings__Default
 afternoon" in the `local-dev` skill (`.claude/skills/local-dev/SKILL.md`). Without it,
 `database update` aims at the `design_time_only` placeholder rather than your dev database.
 
-`scripts/stop-dev.ps1` stops the database (and Seq, if `-WithSeq` started it); the two windows
+`scripts/stop-dev.ps1` stops the database and the broker (and Seq, if `-WithSeq` started it); the two windows
 are yours to Ctrl-C. A bare `docker compose down` also stops the database, but **not** Seq if it
 is running — Seq sits behind a compose profile, and `down` with no `--profile` flag only tears
 down the active profile set for that invocation, not whatever an earlier `up` left running. Use
@@ -30,7 +30,7 @@ down the active profile set for that invocation, not whatever an earlier `up` le
 ## The command line
 
 ```bash
-docker compose up -d --wait                 # dev Postgres on 55433
+docker compose up -d --wait                 # dev Postgres on 55433, RabbitMQ on 55672 (UI 55673)
 dotnet run --project src/Api                # API on 5234, opens the API reference
 npm start --prefix frontend                 # app on 5173, opens in a browser tab
 ```
@@ -59,6 +59,11 @@ one.
 **Running `bin/Debug/net10.0/AiFramework.Api.exe` directly opens nothing.** That path bypasses
 `launchSettings.json` entirely — it is read by `dotnet run` and by IDE launch configurations, not
 baked into the executable. This surprises people; it is not a bug.
+
+**Before either IDE's F5: `docker compose up -d --wait`.** Neither `dotnet run` nor an IDE launch
+configuration starts the dev stack's containers — both the API and the worker refuse to start
+without Postgres and the message broker (ADR 0026), so the "command line" steps above (or just
+the compose line) need to have been run at least once first.
 
 ## JetBrains Rider — one keystroke for both
 

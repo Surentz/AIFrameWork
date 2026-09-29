@@ -7,9 +7,9 @@ description: Use when editing or debugging a background job in this repo - lanes
 
 **Jobs run in the worker. The API listens to nothing.** That is the whole rule, and it is
 enforced rather than intended: `ApiPublishesOnlyTests` asserts against the runtime's own endpoint
-list that no `jobs_*` queue has a listener on the API host, and `JobDeliveryTests` asserts the
+list that no `aiframework.jobs.*` queue has a listener on the API host, and `JobDeliveryTests` asserts the
 mirror image on the worker. The API registers *routing* for every lane — publishing is how a job
-starts — and never `ListenToPostgresqlQueue`.
+starts — and never `ListenToRabbitQueue`.
 
 The reason is the API's own health: a job sharing the API process competes for the thread pool,
 the GC heap under a 768Mi limit, and the Npgsql pool, and every API rollout would kill work in
@@ -29,8 +29,10 @@ public sealed record RebuildOrderReport(Guid OwnerId) : IUserScopedJob
 
 | Lane | Queue | For | Parallelism per pod |
 |---|---|---|---|
-| `Light` | `jobs_light` | Milliseconds to seconds, a round trip or two, negligible CPU | 8 |
-| `Heavy` | `jobs_heavy` | Seconds to minutes, CPU- or memory-bound, or fanning a large result set | 2 |
+| `Light` | `aiframework.jobs.light` | Milliseconds to seconds, a round trip or two, negligible CPU | 8 |
+| `Heavy` | `aiframework.jobs.heavy` | Seconds to minutes, CPU- or memory-bound, or fanning a large result set | 2 |
+
+Both are RabbitMQ quorum queues (ADR 0026).
 
 The lane picks the queue; `Jobs__Queues` picks which host listens. Both lanes run on one worker
 today — splitting them onto differently-sized Deployments later is a manifest copy and no code
@@ -166,20 +168,20 @@ Misfires are set with `WithMisfireInstruction(CronTriggerMisfireInstruction.Fire
 Two rules for the worker suite, both learned from failing tests rather than reasoned out:
 
 - **`IncludeExternalTransports()` is required on a tracking session.** A job goes out to a
-  Postgres queue and comes back through the host's own listener, and a session ignores external
+  RabbitMQ queue and comes back through the host's own listener, and a session ignores external
   transports by default — without it the session sees the message "Sent", stops waiting, and
   every delivery assertion fails with "No messages of type … were received".
 - **Never use a tracking session to prove something did *not* happen.** `ExecuteAndWaitAsync`
   waits for a message to be handled, so a message that must never be handled only ever produces a
   timeout. Assert on the stored envelope instead: a scheduled job waits in
-  `wolverine_queues.wolverine_queue_<lane>_scheduled` — the queue transport's **own** schema, not
-  the `wolverine` one, whose tables are all empty at that point.
+  `wolverine.wolverine_incoming_envelopes` with status `Scheduled` until due; RabbitMQ has no
+  delayed delivery.
 
 In a Quartz test, fire a trigger with `IScheduler.TriggerJob(...)` and observe through a tracking
 session — never wait for a cron to come round.
 
-## The transport stays PostgreSQL
+## Jobs ride RabbitMQ
 
-RabbitMQ is deferred with named triggers: worker replicas sustained above four, queue polling
-visible in database load, a job needing priority the transport cannot express, or a consumer
-outside this solution. It would not remove Postgres from the path.
+Jobs ride RabbitMQ (ADR 0026); Postgres still holds the envelope storage. The `messaging` skill
+has the broker topology, outage behaviour, and the check to run before upgrading a database that
+still has jobs in the old Postgres queues.

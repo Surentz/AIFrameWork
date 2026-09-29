@@ -1,15 +1,11 @@
 /* eslint-disable no-empty-pattern -- Playwright decides which fixtures to inject by parsing the
    destructuring pattern of a fixture's first parameter, so one that depends on nothing must
    still write `{}`. Replacing it with a named parameter changes what Playwright injects. */
+import { existsSync, readFileSync } from 'node:fs';
 import { test as base } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
-import {
-  connectionOptions,
-  createApiClient,
-  registerOrSignIn,
-  registerUser,
-} from './api.ts';
-import { ADMIN_USERNAME } from '../support/identity.ts';
+import { connectionOptions, createApiClient, registerUser } from './api.ts';
+import { ADMIN_STATE_PATH, ADMIN_USERNAME, PASSWORD } from '../support/identity.ts';
 import type { ApiClient, TestUser } from './api.ts';
 
 export type { TestUser } from './api.ts';
@@ -66,22 +62,35 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   },
 
   /**
-   * The operator. Worker-scoped like `workerUser`, and for the same rate-limit reason.
+   * The operator, loaded from the session `e2e/setup/seed-admin.ts` signed in once for the whole
+   * run — so it costs no auth call, however many workers there are.
    *
-   * It holds Admin only because `playwright.config.ts` names `ADMIN_USERNAME` in the API's
-   * `Admin__Usernames` — configuration is the sole grant (ADR 0020), so this fixture cannot
-   * promote anybody, and a spec that needs it must carry `@local-only`: no off-target stack
-   * names this account.
+   * It holds Admin only because the target names `ADMIN_USERNAME` in the API's
+   * `Admin__Usernames`: `playwright.config.ts` does for the stack it starts, and the kind overlay
+   * does for the cluster. Configuration is the sole grant (ADR 0020), so this fixture cannot
+   * promote anybody. A spec that needs it on an arbitrary URL target needs that target configured
+   * the same way.
    */
   adminUser: [
     async ({}, use) => {
-      await use(await registerOrSignIn(ADMIN_USERNAME));
+      // Named, because the alternative is a bare ENOENT with no pointer to where the file comes
+      // from: a config without the globalSetup, or `npx playwright test` with a different one.
+      if (!existsSync(ADMIN_STATE_PATH)) {
+        throw new Error(
+          `No saved operator session at ${ADMIN_STATE_PATH}. It is written by ` +
+            'e2e/setup/seed-admin.ts, the globalSetup in playwright.config.ts - run through that config.',
+        );
+      }
+
+      const state = JSON.parse(readFileSync(ADMIN_STATE_PATH, 'utf8')) as TestUser['state'];
+      await use({ username: ADMIN_USERNAME, password: PASSWORD, state });
     },
     { scope: 'worker' },
   ],
 
-  api: async ({}, use) => {
-    const client = createApiClient();
+  /** Catalogue writes go through `adminUser` — see `createApiClient`. */
+  api: async ({ adminUser }, use) => {
+    const client = createApiClient(adminUser);
     await use(client);
     await client.dispose();
   },
@@ -115,7 +124,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await page.context().close();
   },
 
-  /** The default for a monitoring test. `@local-only` — see `adminUser`. */
+  /** The default for an operator's screen: monitoring, fulfilment, the catalogue forms. */
   adminPage: async ({ browser, adminUser }, use) => {
     const page = await newSignedInPage(browser, adminUser);
     await use(page);
