@@ -105,6 +105,19 @@ public sealed partial class ObservabilityRegistrationTests(ApiFactory factory)
     }
 
     [Fact]
+    public void Startup_WithAnInvalidSampleRatio_Fails()
+    {
+        // The host, not just the helper: a misconfigured ratio must stop the API rather than leave
+        // it running with tracing silently broken.
+        using var misconfigured = factory.WithWebHostBuilder(
+            builder => builder.UseSetting("Observability:Otlp:TraceSampleRatio", "0"));
+
+        var start = () => misconfigured.CreateClient();
+
+        start.Should().Throw<Exception>().Which.ToString().Should().Contain("TraceSampleRatio");
+    }
+
+    [Fact]
     public void SamplerFor_AnyRatio_KeepsATraceItsParentKept()
     {
         // Parent-based: a request the caller (another service, a traced browser) decided to keep
