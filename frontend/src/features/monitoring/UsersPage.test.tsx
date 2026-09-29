@@ -94,7 +94,7 @@ describe('UsersPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Admin__Usernames/);
   });
 
-  it('offers no actions on the signed-in administrator\'s own row', async () => {
+  it("offers no actions on the signed-in administrator's own row", async () => {
     server.use(
       http.get('/api/monitoring/users', () =>
         HttpResponse.json({
@@ -158,6 +158,19 @@ describe('UsersPage', () => {
     const history = within(await screen.findByRole('table', { name: /What has been done to ada/ }));
     expect(history.getByText('Promoted')).toBeInTheDocument();
     expect(history.getByText(anAdminSession.username)).toBeInTheDocument();
+  });
+
+  it('links each action to the trace of the request that made it', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const ada = within(await rowFor('ada'));
+    await user.click(ada.getByRole('button', { name: 'History' }));
+
+    const history = within(await screen.findByRole('table', { name: /What has been done to ada/ }));
+    expect(
+      await history.findByRole('link', { name: /open trace a3ce929d0e0e47364bf92f3577b34da6/i }),
+    ).toHaveAttribute('href', 'https://logs.test/trace/a3ce929d0e0e47364bf92f3577b34da6');
   });
 
   it('reports a failure to load the list', async () => {

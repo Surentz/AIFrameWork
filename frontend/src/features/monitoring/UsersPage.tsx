@@ -1,9 +1,16 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSession } from '../auth/queries';
-import { useChangeUserRole, useSignOutUser, useUserActions, useUsers } from './queries';
+import {
+  useChangeUserRole,
+  useSignOutUser,
+  useTraceLinkTemplate,
+  useUserActions,
+  useUsers,
+} from './queries';
 import type { AdministeredUser } from './types';
 import { ErrorPanel } from '../../components/ErrorPanel';
+import { TraceLink } from './TraceLink';
 import './monitoring.css';
 
 /** Mirrors the API's own default page size, so "Next" knows when there is no next. */
@@ -291,6 +298,7 @@ interface HistoryProps {
 
 function History({ userId, username }: HistoryProps): React.JSX.Element {
   const actions = useUserActions(userId);
+  const traceLinkTemplate = useTraceLinkTemplate();
 
   if (actions.error) {
     return <ErrorPanel error={actions.error} />;
@@ -313,6 +321,7 @@ function History({ userId, username }: HistoryProps): React.JSX.Element {
           <th scope="col">Action</th>
           <th scope="col">By</th>
           <th scope="col">From</th>
+          <th scope="col">Trace</th>
         </tr>
       </thead>
       <tbody>
@@ -322,6 +331,9 @@ function History({ userId, username }: HistoryProps): React.JSX.Element {
             <td>{action.kind}</td>
             <td>{action.actorUsername}</td>
             <td>{action.ipAddress ?? '—'}</td>
+            <td>
+              <TraceLink traceId={action.traceId} template={traceLinkTemplate} />
+            </td>
           </tr>
         ))}
       </tbody>

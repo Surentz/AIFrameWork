@@ -28,6 +28,16 @@ describe('JobsPage', () => {
     expect(runs.getByText('InvalidOperationException: the handler gave up')).toBeInTheDocument();
   });
 
+  it('links each run to its trace in the log store', async () => {
+    renderPage();
+
+    const runs = within(await screen.findByRole('table', { name: /job runs/i }));
+
+    expect(
+      await runs.findByRole('link', { name: /open trace 0af7651916cd43dd8448eb211c80319c/i }),
+    ).toHaveAttribute('href', 'https://logs.test/trace/0af7651916cd43dd8448eb211c80319c');
+  });
+
   it('shows the attempt number, so a retry reads as a retry', async () => {
     renderPage();
 

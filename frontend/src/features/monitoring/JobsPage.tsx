@@ -4,11 +4,13 @@ import {
   useDeadLetters,
   useJobHealth,
   useJobRuns,
+  useTraceLinkTemplate,
   useRetryDeadLetter,
   useTriggerJob,
 } from './queries';
 import type { JobRunStatus } from './types';
 import { ErrorPanel } from '../../components/ErrorPanel';
+import { TraceLink } from './TraceLink';
 import './monitoring.css';
 
 const Statuses: readonly JobRunStatus[] = ['Running', 'Succeeded', 'Failed'];
@@ -25,6 +27,7 @@ export function JobsPage(): React.JSX.Element {
   const [page, setPage] = useState(1);
 
   const runs = useJobRuns(status, jobName, page);
+  const traceLinkTemplate = useTraceLinkTemplate();
 
   return (
     <section>
@@ -87,6 +90,7 @@ export function JobsPage(): React.JSX.Element {
                 <th scope="col">Started</th>
                 <th scope="col">Duration</th>
                 <th scope="col">Error</th>
+                <th scope="col">Trace</th>
               </tr>
             </thead>
             <tbody>
@@ -103,6 +107,9 @@ export function JobsPage(): React.JSX.Element {
                       : `${Number(run.durationMs).toLocaleString()} ms`}
                   </td>
                   <td className="runs__error">{run.error ?? ''}</td>
+                  <td>
+                    <TraceLink traceId={run.traceId} template={traceLinkTemplate} />
+                  </td>
                 </tr>
               ))}
             </tbody>
