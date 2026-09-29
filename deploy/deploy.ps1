@@ -111,17 +111,23 @@ if ($CreateCluster) {
 }
 
 if (-not $SkipBuild) {
+    # The image build copies no .git, so the SDK cannot stamp the commit into the assemblies'
+    # informational version the way a local build does. Passing it in is what makes every span and
+    # log record from the cluster say which commit produced it (service.version, see
+    # ObservabilityResource). A tree with uncommitted changes still reports HEAD - "-dirty" would
+    # be more honest, but the tag is for correlating with history, and HEAD is what history has.
+    $revision = git -C $repoRoot rev-parse --short HEAD
     Invoke-Step 'Building the api image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target runtime `
-            -t aiframework-api:local $repoRoot
+            --build-arg "SOURCE_REVISION=$revision" -t aiframework-api:local $repoRoot
     }
     Invoke-Step 'Building the migrator image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target migrator `
-            -t aiframework-migrator:local $repoRoot
+            --build-arg "SOURCE_REVISION=$revision" -t aiframework-migrator:local $repoRoot
     }
     Invoke-Step 'Building the worker image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.api') --target worker `
-            -t aiframework-worker:local $repoRoot
+            --build-arg "SOURCE_REVISION=$revision" -t aiframework-worker:local $repoRoot
     }
     Invoke-Step 'Building the web image' {
         docker build -f (Join-Path $repoRoot 'Dockerfile.web') `

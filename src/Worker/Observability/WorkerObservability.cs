@@ -63,9 +63,12 @@ public static class WorkerObservability
         });
 
         builder.Services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource.AddService(
-                serviceName: options.ServiceName,
-                serviceInstanceId: string.IsNullOrWhiteSpace(instanceId) ? null : instanceId))
+            .ConfigureResource(resource => resource
+                .AddService(
+                    serviceName: options.ServiceName,
+                    serviceVersion: ObservabilityResource.ServiceVersionOf(typeof(WorkerObservability).Assembly),
+                    serviceInstanceId: string.IsNullOrWhiteSpace(instanceId) ? null : instanceId)
+                .AddAttributes(ObservabilityResource.DeploymentAttributes(builder.Environment.EnvironmentName)))
             .WithTracing(tracing => ConfigureTracing(tracing, options));
 
         return builder;
