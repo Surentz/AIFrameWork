@@ -82,12 +82,25 @@ updates:
     commit-message:
       prefix: deps
     groups:
-      # Majors stay one PR per package: those are the ones that need reading.
+      # Families whose packages peer each other's exact or same-major version, so a major for one
+      # alone can never install: `npm ci` fails ERESOLVE and the PR is red for a reason Dependabot
+      # cannot fix. Grouped with no update-types, so majors arrive as one PR per family. Listed
+      # before `frontend`: Dependabot places a dependency in the first group it matches.
+      vitest:
+        patterns: ['vitest', '@vitest/*']
+      eslint:
+        patterns: ['eslint', '@eslint/*']
+      # Majors outside those families stay one PR per package: those are the ones that need reading.
       frontend:
         update-types: [minor, patch]
     ignore:
       # LTS only: @types/node follows the Node major CI runs on, which moves by hand.
       - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+      # typescript-eslint (8.71.0) peers typescript <6.1.0, and typed linting needs a TypeScript
+      # JS API that 7 does not ship yet (typescript-eslint#10940). Lift this once a
+      # typescript-eslint release's peer range admits 7. frontend/CLAUDE.md lists it.
+      - dependency-name: typescript
         update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
