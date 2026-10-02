@@ -296,6 +296,11 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(connectionString);
 
+// The outbox is delivered from here and nowhere else: its handlers include the notifiers, and
+// the push transport they hand a new notification to (SignalRNotificationPush, below) exists only
+// in this host. The worker writes outbox rows but never claims them. ADR 0028.
+builder.Services.AddOutboxPumps();
+
 // The key ring goes to Postgres, not to each host's memory. Two replicas with separate
 // rings reject each other's session cookies, which surfaces as an intermittent 401 rather
 // than an obvious failure. SetApplicationName is load-bearing, not decoration: the purpose

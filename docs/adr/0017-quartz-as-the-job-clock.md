@@ -114,6 +114,10 @@ used to call directly. The outbox pumps themselves (`OutboxPollerService`, `Outb
 are unchanged and still run in both the API and the worker; only the retention sweep left the
 loop.
 
+> **Superseded in part by [ADR 0028](0028-the-outbox-is-delivered-only-where-the-push-transport-lives.md)
+> (2026-10-02).** The pumps now run only in the API. The prune job is unaffected: it still runs in
+> the worker, through `OutboxPoller.PruneAsync`, which `AddOutbox` registers in every host.
+
 ## Consequences
 
 **What this makes easy.** Adding a scheduled job is one `.Scheduled(cron)` on its registration.
