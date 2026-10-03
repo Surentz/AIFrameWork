@@ -110,3 +110,15 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+
+      # The counts ci.yml's test-report job shows, flaky tests included. Like the backend and
+      # frontend jobs' uploads, it never fails this required check on its own.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-e2e
+          path: frontend/e2e-results.json
+          if-no-files-found: ignore
+          retention-days: 14

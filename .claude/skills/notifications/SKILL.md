@@ -43,6 +43,13 @@ a notification is whichever one's outbox pump claimed the row and is unrelated t
 that user's connection; the ingress cookie affinity of ADR 0010 does not help, since the pump is
 not serving that user's request. See ADR 0019.
 
+**Only the API delivers the outbox, because only the API can push.** `SignalRNotificationPush` is
+registered in `src/Api/Program.cs`, so a notifier running anywhere else writes the row and pushes
+to nobody. The pumps therefore come from `AddOutboxPumps()`, which only the API calls; the worker
+writes outbox rows but never claims them. Until 2026-10-02 it did, and every event it claimed was
+a silent 30-second-stale badge. If a new host ever wants to run the pumps, it needs a push path
+first. See ADR 0028.
+
 **It is ON in two places, for two different reasons.** In Development
 (`src/Api/appsettings.Development.json`) with **no** backplane: a developer's `dotnet run` is a
 single process, the one configuration where push cannot reach the wrong replica. And in the

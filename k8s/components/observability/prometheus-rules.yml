@@ -1,0 +1,110 @@
+# Alert rules for the cluster (ADR 0027), evaluated by Prometheus. Unit-tested by
+# prometheus-rules.test.yml with the pinned image's promtool - run it after any change here.
+#
+# Nothing routes these yet: there is no Alertmanager on a rehearsal cluster. Firing alerts show at
+# Prometheus's /alerts (port-forward svc/prometheus 9090), and in Grafana's Alerting view.
+#
+# Rate windows are 5m, not less: metrics are PUSHED once a minute over OTLP, and rate() needs at
+# least two samples in its window. Metric names are what Prometheus holds, suffixes and all.
+groups:
+  - name: aiframework
+    rules:
+      - alert: ApiHighServerErrorRate
+        # 5xx only: a 4xx is the caller's to fix, and a burst of wrong passwords is not an outage.
+        # With a traffic guard (about 15 requests in 5 minutes): probes and the SignalR hub are
+        # excluded from this metric (DisableHttpMetrics in Program.cs), so on a quiet API one
+        # failure in three requests would otherwise page as a 33% error rate.
+        expr: |
+          (
+            sum(rate(http_server_request_duration_seconds_count{job="aiframework-api", http_response_status_code=~"5.."}[5m]))
+            or vector(0)
+          )
+          /
+          sum(rate(http_server_request_duration_seconds_count{job="aiframework-api"}[5m]))
+          > 0.05
+          and
+          sum(rate(http_server_request_duration_seconds_count{job="aiframework-api"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: More than 5% of API requests are failing with a 5xx.
+          description: >-
+            {{ $value | humanizePercentage }} of requests failed over the last 5 minutes. Each one
+            left a trace id in its ProblemDetails and its log lines; the monitoring page's Traffic
+            view shows which routes.
+
+      - alert: ApiSlowRequests
+        # With a traffic guard: a p95 over a handful of requests is one slow request, not a trend.
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job="aiframework-api"}[5m])))
+          > 1
+          and
+          sum(rate(http_server_request_duration_seconds_count{job="aiframework-api"}[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: API p95 latency has been over one second for 10 minutes.
+          description: p95 is {{ $value | humanizeDuration }}. The Grafana dashboard breaks it down by route.
+
+      - alert: MessagesDeadLettered
+        # Any dead letter at all. Each one is a job or an inbound message that will not be retried
+        # again without an operator (the monitoring page's Jobs view can retry it).
+        #
+        # Two halves, because a message type's FIRST dead letter creates its series already at 1.
+        # increase() only sees that step when Prometheus has the 0 that
+        # created-timestamp-zero-ingestion writes at the counter's start time - and that start time
+        # is the worker's, so an hour or more into its life the 0 is too old to be accepted and the
+        # first dead letter would pass unseen. The second half catches a series that did not exist
+        # 15 minutes ago. Its one false positive: right after Prometheus itself restarts (empty
+        # storage), every existing dead-letter series looks new for 15 minutes.
+        expr: |
+          sum by (job, message_type) (increase(wolverine_dead_letter_queue_Messages_total[15m])) > 0
+          or
+          sum by (job, message_type) (
+            wolverine_dead_letter_queue_Messages_total
+            unless wolverine_dead_letter_queue_Messages_total offset 15m
+          ) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.message_type }} was dead-lettered.'
+          description: >-
+            Dead letters live in Postgres (wolverine.wolverine_dead_letters). Retry them from the
+            monitoring page's Jobs view.
+
+      - alert: BrokerBacklog
+        # Ready messages nobody is taking. The worker has no autoscaler (see the kubernetes skill),
+        # so this is the signal that it is stuck or outpaced.
+        expr: sum by (rabbitmq_queue_name) (rabbitmq_message_current{state="ready"}) > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.rabbitmq_queue_name }} has had over 1000 ready messages for 10 minutes.'
+
+      - alert: DatabasePoolSaturated
+        # Per process: each API replica and the worker has its own Npgsql pool. On a small managed
+        # Postgres the server's own connection limit is hit long before any pool's maximum is.
+        expr: |
+          sum by (job, instance) (db_client_connection_count{db_client_connection_state="used"})
+          /
+          max by (job, instance) (db_client_connection_max)
+          > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.instance }} is using over 80% of its database connection pool.'
+
+      - alert: TelemetryMissing
+        # The alert that notices the others have gone quiet for the wrong reason: no export from
+        # the API at all (the API, the collector or the pipeline is down).
+        expr: absent_over_time(target_info{job="aiframework-api"}[5m])
+        for: 2m
+        labels:
+          severity: critical
+          job: aiframework-api
+        annotations:
+          summary: No telemetry from the API for over 5 minutes.

@@ -217,3 +217,12 @@
   padding: 0.05rem 0.4rem;
   white-space: nowrap;
 }
+
+/* A 32-hex trace id (TraceLink). Selected in one go, so it pastes whole into a log-store search
+   even where no link template is configured. */
+.trace-id {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  user-select: all;
+  white-space: nowrap;
+}

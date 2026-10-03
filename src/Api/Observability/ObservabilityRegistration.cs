@@ -1,6 +1,7 @@
 using AiFramework.Infrastructure.Observability;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -50,26 +51,72 @@ public static class ObservabilityRegistration
 
             if (options.Otlp.Enabled)
             {
-                logging.AddOtlpExporter(exporter =>
-                {
-                    exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
-                    exporter.Endpoint = OtlpEndpoint.Build(options.Otlp.Endpoint, OtlpEndpoint.LogsPath);
-                });
+                logging.AddOtlpExporter(
+                    exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.LogsPath));
             }
         });
 
         builder.Services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource.AddService(
-                serviceName: options.ServiceName,
-                serviceInstanceId: string.IsNullOrWhiteSpace(instanceId) ? null : instanceId))
-            .WithTracing(tracing => ConfigureTracing(tracing, options));
+            .ConfigureResource(resource => resource
+                .AddService(
+                    serviceName: options.ServiceName,
+                    serviceVersion: ObservabilityResource.ServiceVersionOf(typeof(ObservabilityRegistration).Assembly),
+                    serviceInstanceId: string.IsNullOrWhiteSpace(instanceId) ? null : instanceId)
+                .AddAttributes(ObservabilityResource.DeploymentAttributes(builder.Environment.EnvironmentName)))
+            .WithTracing(tracing => ConfigureTracing(tracing, options))
+            .WithMetrics(metrics => ConfigureMetrics(metrics, options));
 
         return builder;
+    }
+
+    /// <summary>
+    /// Every exporter this host creates goes through here, so logs, traces and metrics cannot
+    /// disagree about where they go or how they authenticate. Public so it can be tested
+    /// directly; OtlpEndpoint.Build's remarks record why the protocol is set explicitly and why
+    /// the signal path is appended here rather than left to the SDK.
+    /// </summary>
+    public static void ConfigureExporter(OtlpExporterOptions exporter, OtlpOptions otlp, string signalPath)
+    {
+        ArgumentNullException.ThrowIfNull(exporter);
+        ArgumentNullException.ThrowIfNull(otlp);
+
+        exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
+        exporter.Endpoint = OtlpEndpoint.Build(otlp.Endpoint, signalPath);
+
+        // Blank means unset: an unfilled secret arrives as "", which the exporter would try to
+        // parse as key=value pairs.
+        if (!string.IsNullOrWhiteSpace(otlp.Headers))
+        {
+            exporter.Headers = otlp.Headers;
+        }
+    }
+
+    /// <summary>
+    /// Parent-based ratio sampling from <see cref="OtlpOptions.TraceSampleRatio"/> (see its remarks for
+    /// what it does and does not affect). Public so it can be tested directly; a ratio outside
+    /// (0, 1] stops the host at startup rather than quietly recording everything or nothing.
+    /// </summary>
+    public static Sampler SamplerFor(OtlpOptions otlp)
+    {
+        ArgumentNullException.ThrowIfNull(otlp);
+
+        var ratio = otlp.TraceSampleRatio;
+        if (double.IsNaN(ratio) || ratio <= 0 || ratio > 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(otlp),
+                ratio,
+                "Observability:Otlp:TraceSampleRatio must be greater than 0 and at most 1. To record no traces, set Observability:Otlp:Traces to false.");
+        }
+
+        return new ParentBasedSampler(new TraceIdRatioBasedSampler(ratio));
     }
 
     /// <summary>Split out of AddObservability purely to stay under MA0051's line limit.</summary>
     private static void ConfigureTracing(TracerProviderBuilder tracing, ObservabilityOptions options)
     {
+        tracing.SetSampler(SamplerFor(options.Otlp));
+
         tracing.AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             // Wolverine 6 already tags the current span in its generated handlers (see
@@ -84,11 +131,35 @@ public static class ObservabilityRegistration
 
         if (options.Otlp.Enabled && options.Otlp.Traces)
         {
-            tracing.AddOtlpExporter(exporter =>
-            {
-                exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
-                exporter.Endpoint = OtlpEndpoint.Build(options.Otlp.Endpoint, OtlpEndpoint.TracesPath);
-            });
+            tracing.AddOtlpExporter(
+                exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.TracesPath));
+        }
+    }
+
+    /// <summary>
+    /// ADR 0027. Registered unconditionally, like the tracer provider: the SDK aggregates in
+    /// process and costs nothing per request, and only the OTLP exporter is gated. Every meter
+    /// here tags by route template or pool name, never by a user, an order or a raw path —
+    /// the cardinality rule a new meter must keep.
+    /// </summary>
+    private static void ConfigureMetrics(MeterProviderBuilder metrics, ObservabilityOptions options)
+    {
+        // ASP.NET Core's and HttpClient's built-in .NET 8+ meters (http.server.request.duration,
+        // Kestrel connections, SignalR connections, http.client.request.duration).
+        metrics.AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            // The runtime's built-in meter (GC, thread pool, exceptions). On .NET 9+ this is all
+            // OpenTelemetry.Instrumentation.Runtime would do, so that package is not referenced.
+            .AddMeter("System.Runtime")
+            // Wolverine names its meter "Wolverine:<ServiceName>", and ServiceName defaults to the
+            // entry assembly's name — a wildcard keeps this true if either ever changes.
+            .AddMeter("Wolverine:*")
+            .AddInfrastructureMetrics();
+
+        if (options.Otlp.Enabled && options.Otlp.Metrics)
+        {
+            metrics.AddOtlpExporter(
+                exporter => ConfigureExporter(exporter, options.Otlp, OtlpEndpoint.MetricsPath));
         }
     }
 }

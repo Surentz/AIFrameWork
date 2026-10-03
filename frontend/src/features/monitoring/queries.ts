@@ -76,6 +76,15 @@ export function useMonitoringAccess(): UseQueryResult<MonitoringAccess, ApiError
   });
 }
 
+/**
+ * Where a trace id links to, from the same access response every monitoring page can ask for.
+ * Undefined while it loads, when it fails, and when no template is configured — in each case the
+ * tables show the id as text rather than a link.
+ */
+export function useTraceLinkTemplate(): string | undefined {
+  return useMonitoringAccess().data?.traceLinkTemplate ?? undefined;
+}
+
 export function useJobHealth(): UseQueryResult<JobHealth, ApiError> {
   return useQuery({
     queryKey: monitoringKeys.jobHealth(),
@@ -164,9 +173,7 @@ export function useSignInEvents(
  */
 const TrafficRefreshMs = 30_000;
 
-export function useTrafficSummary(
-  windowMinutes: number,
-): UseQueryResult<TrafficSummary, ApiError> {
+export function useTrafficSummary(windowMinutes: number): UseQueryResult<TrafficSummary, ApiError> {
   return useQuery({
     queryKey: monitoringKeys.trafficSummary(windowMinutes),
     queryFn: () => getTrafficSummary(windowMinutes),

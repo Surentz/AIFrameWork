@@ -2439,6 +2439,13 @@ export interface components {
              *     operator role has somewhere to appear without a contract change.
              */
             readonly role: components["schemas"]["UserRole"];
+            /**
+             * @description The log store's URL for one trace, with `{traceId}` where the 32-hex id goes; null
+             *     when none is configured, in which case trace ids are shown as text. Carried here because
+             *     every monitoring page already asks this endpoint, and because it is admin-only: a member
+             *     never learns where the log store is.
+             */
+            readonly traceLinkTemplate?: null | string;
         };
         /**
          * @description What a notification is about. Persisted by name rather than by number (see the EF

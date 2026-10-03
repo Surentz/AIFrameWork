@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { TrafficChart } from './TrafficChart';
 import type { ChartPoint, ChartSeries } from './TrafficChart';
 import { useTrafficSeries, useTrafficSummary } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './monitoring.css';
 
 const Windows = [15, 60, 240, 1440] as const;
@@ -69,16 +70,8 @@ export function TrafficPage(): React.JSX.Element {
         </label>
       </div>
 
-      {summary.error && (
-        <p className="alert" role="alert">
-          {summary.error.message}
-        </p>
-      )}
-      {series.error && (
-        <p className="alert" role="alert">
-          {series.error.message}
-        </p>
-      )}
+      {summary.error && <ErrorPanel error={summary.error} />}
+      {series.error && <ErrorPanel error={series.error} />}
 
       {summary.isSuccess && (
         <ul className="tiles">
@@ -87,7 +80,9 @@ export function TrafficPage(): React.JSX.Element {
             <span className="tile__label">Per minute</span>
           </li>
           <li className={Number(summary.data.errorRate) > 0 ? 'tile tile--attention' : 'tile'}>
-            <span className="tile__value">{(Number(summary.data.errorRate) * 100).toFixed(1)}%</span>
+            <span className="tile__value">
+              {(Number(summary.data.errorRate) * 100).toFixed(1)}%
+            </span>
             <span className="tile__label">Error rate</span>
           </li>
           <li className="tile">

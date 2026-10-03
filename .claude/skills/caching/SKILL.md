@@ -7,10 +7,12 @@ description: Use when making a query cacheable, adding cache eviction to a comma
 
 Queries opt in by implementing `ICacheable` (`src/Application/Abstractions/Caching.cs`); commands
 opt in to eviction with `IInvalidatesCache`. `GetOrders` and `GetOrder` are cached at thirty
-seconds; `PlaceOrder` evicts both for the caller who placed the order. `GetProducts` and
-`GetProduct` are cached the same way, and `CreateProduct`/`UpdateProduct` evict them. Nothing on
-the auth path is cached, deliberately and permanently — ADR 0008's lockout state must be read
-every time.
+seconds; `PlaceOrder`, `ShipOrder` and `CancelOrder` evict both for the caller. `GetProducts` and
+`GetProduct` are cached the same way, and `CreateProduct`/`UpdateProduct` evict them.
+`GetExchangeRate` is cached for a minute. Nothing on the auth path is cached, deliberately and
+permanently — ADR 0008's lockout state must be read every time — and neither are the
+notification feed, the fulfilment queue or the monitoring reads, each for reasons on its own
+query.
 
 Four things that will cost you time:
 
@@ -29,7 +31,8 @@ Four things that will cost you time:
   implementation of the port that re-reads its source reintroduces the bug silently.
 - **The cache is OFF under test.** `ApiFactory` sets `Cache:Enabled=false` and
   `frontend/playwright.config.ts`'s `webServer` env sets `Cache__Enabled=false` — not
-  `docker-compose.e2e.yml`, which runs only Postgres. `Orders/OrderCachingTests` turns it back on
+  `docker-compose.e2e.yml`, which runs only Postgres and RabbitMQ. The worker runs with it off
+  everywhere. `Orders/OrderCachingTests` turns it back on
   for itself — `WithWebHostBuilder` over the shared `ApiFactory`, so it keeps the one Postgres
   container — the same split `AuthRateLimitTests` uses for the rate limiter.
 
@@ -39,6 +42,12 @@ who made the write — everyone else keeps their cached pages until the thirty s
 TTL, not the eviction, is what bounds how long an edit stays invisible to other people. That is
 accepted rather than worked around: an unscoped cache path would give up the one property that
 makes this cache safe to use without thinking. See ADR 0013.
+
+**The same scoping applies when someone else changes your order.** An administrator shipping
+from the fulfilment queue evicts the *administrator's* entries, not the buyer's, and a warehouse's
+`RecordShipment` runs in the worker with no caller at all — so the buyer's cached `GetOrder`/
+`GetOrders` can show the old status for up to thirty seconds. That is accepted in ADR 0024; the
+notification, which is never cached, is what tells the buyer promptly.
 
 `PlaceOrder` snapshots the product's name and price onto the order, so a later `UpdateProduct`
 cannot change what an existing order says it cost — and cannot stale a cached order page either.

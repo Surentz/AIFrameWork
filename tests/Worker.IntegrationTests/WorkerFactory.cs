@@ -1,7 +1,9 @@
+using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
 
@@ -137,6 +139,44 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // A test asserting a job's failure path must not first sit through the retry pipeline's
         // own backoff delays — the same reason ApiFactory sets it. ADR 0014.
         builder.UseSetting("Resilience:Enabled", "false");
+    }
+
+    /// <summary>
+    /// Delivers every outbox row currently due, by hand. The worker runs no outbox pump — only the
+    /// Api does, because the notifiers those pumps run need the push transport that lives there —
+    /// so a domain event the worker raises waits for an Api replica unless a test drains it.
+    /// The same claim-and-process loop as <c>ApiFactory.DrainOutboxUntilEmptyAsync</c>, which has
+    /// the full reasoning; MaxBatches turns a bug that keeps producing due rows into a failure
+    /// rather than a hang.
+    /// </summary>
+    public async Task DrainOutboxUntilEmptyAsync()
+    {
+        const int MaxBatches = 1_000;
+
+        for (var batch = 0; batch < MaxBatches; batch++)
+        {
+            IReadOnlyList<OutboxWorkItem> claimed;
+            await using (var pollScope = Services.CreateAsyncScope())
+            {
+                var poller = pollScope.ServiceProvider.GetRequiredService<OutboxPoller>();
+                claimed = await poller.ClaimAsync(CancellationToken.None);
+            }
+
+            if (claimed.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var item in claimed)
+            {
+                await using var itemScope = Services.CreateAsyncScope();
+                var processor = itemScope.ServiceProvider.GetRequiredService<OutboxWorkItemProcessor>();
+                await processor.ProcessAsync(item, CancellationToken.None);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"DrainOutboxUntilEmptyAsync claimed {MaxBatches} batches without the outbox emptying.");
     }
 }
 

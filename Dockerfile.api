@@ -15,11 +15,17 @@ RUN dotnet restore src/Api/AiFramework.Api.csproj
 RUN dotnet restore src/Worker/AiFramework.Worker.csproj
 
 COPY src/ src/
-RUN dotnet publish src/Api/AiFramework.Api.csproj -c Release -o /app/publish --no-restore
+# The commit this image was built from, for service.version on every span and log record
+# (ObservabilityResource). The build context has no .git, so the SDK cannot find it for itself;
+# deploy/deploy.ps1 passes it. Empty is valid and leaves the version as a bare "1.0.0".
+ARG SOURCE_REVISION=
+RUN dotnet publish src/Api/AiFramework.Api.csproj -c Release -o /app/publish --no-restore \
+      -p:SourceRevisionId=$SOURCE_REVISION
 # The worker, from the same build stage. Release for the same reason the API is: it is what loads
 # the pre-generated Wolverine adapters committed under src/Worker/Internal/Generated, and a Debug
 # image would compile its own at startup and diverge from what CI validates. ADR 0016.
-RUN dotnet publish src/Worker/AiFramework.Worker.csproj -c Release -o /app/publish-worker --no-restore
+RUN dotnet publish src/Worker/AiFramework.Worker.csproj -c Release -o /app/publish-worker --no-restore \
+      -p:SourceRevisionId=$SOURCE_REVISION
 
 # A self-contained migration bundle, so the EF Design package never reaches a runtime image.
 # CLAUDE.md records what that package costs when it leaks into a publish: 7.9MB to 37MB.

@@ -1,10 +1,13 @@
 using AiFramework.Application.Maintenance;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Jobs.Scheduling;
+using AiFramework.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using Npgsql;
 using Quartz;
 using Wolverine.Tracking;
 
@@ -12,8 +15,8 @@ namespace AiFramework.Worker.IntegrationTests.Jobs;
 
 /// <summary>
 /// The scheduler, against the real worker host and the migrated schema. That the host starts at
-/// all is the first assertion: Quartz runs in SchemaProvisioning.Validate, so a vendored script that
-/// does not match 4.1.0 fails WorkerFactory's startup before any test body runs.
+/// all is the first assertion: Quartz runs in SchemaProvisioning.Validate, so migrations that do
+/// not match the referenced Quartz package fail WorkerFactory's startup before any test body runs.
 /// </summary>
 [Collection(nameof(WorkerFactoryCollection))]
 public sealed class SchedulingTests(WorkerFactory factory)
@@ -194,5 +197,41 @@ public sealed class SchedulingTests(WorkerFactory factory)
             key => key.Contains("quartz", StringComparison.OrdinalIgnoreCase),
             "AddQuartzHealthChecks() must register a check the worker's own HealthCheckService " +
             "reports, or /health/ready never actually reflects the scheduler's state");
+    }
+
+    /// <summary>
+    /// Quartz 4.2 reads and writes three continuation columns on every trigger it stores, and a
+    /// 4.2 node refuses to start without them. Validate at startup already proves they exist; this
+    /// pins what that cannot: that they are in the `quartz` schema this repo uses, not the
+    /// unqualified table Quartz's own upgrade script names, and that their types are Quartz's.
+    /// </summary>
+    [Fact]
+    public async Task TheTriggersTable_HasQuartz42sContinuationColumns()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+        await using var connection = new NpgsqlConnection(context.Database.GetConnectionString());
+        await connection.OpenAsync(CancellationToken.None);
+
+        await using var command = new NpgsqlCommand(
+            "select column_name, data_type, is_nullable from information_schema.columns " +
+            "where table_schema = 'quartz' and table_name = 'qrtz_triggers' " +
+            "and column_name in ('continues_trigger_name', 'continues_trigger_group', 'continuation_condition') " +
+            "order by column_name",
+            connection);
+
+        var columns = new List<string>();
+        await using (var reader = await command.ExecuteReaderAsync(CancellationToken.None))
+        {
+            while (await reader.ReadAsync(CancellationToken.None))
+            {
+                columns.Add($"{reader.GetString(0)} {reader.GetString(1)} {reader.GetString(2)}");
+            }
+        }
+
+        columns.Should().Equal(
+            "continuation_condition integer YES",
+            "continues_trigger_group text YES",
+            "continues_trigger_name text YES");
     }
 }

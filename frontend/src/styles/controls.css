@@ -179,6 +179,14 @@
   font-size: var(--text-sm);
 }
 
+/* A server failure's trace id (ErrorPanel). Selectable in one go, so it can be pasted into a
+   report or a log-store search whole. */
+.alert__reference code {
+  font-family: ui-monospace, monospace;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
 /* The success counterpart to .alert. Same shape, so a form's two outcomes do not jump about. */
 .alert--success {
   border-color: var(--color-success-border);

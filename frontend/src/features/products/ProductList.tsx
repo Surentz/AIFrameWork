@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useCanManageCatalogue, useProducts } from './queries';
 import { formatPrice } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import '../orders/orders.css';
 import './products.css';
 
@@ -60,9 +61,7 @@ export function ProductList(): React.JSX.Element {
     return (
       <>
         <Header />
-        <p className="alert" role="alert">
-          {error.message}
-        </p>
+        <ErrorPanel error={error} />
       </>
     );
   }
@@ -107,20 +106,14 @@ export function ProductList(): React.JSX.Element {
                 </td>
                 <td className="products__sku">{product.sku}</td>
                 <td className="products__num">{formatPrice(product.price)}</td>
-                <td className="products__when">
-                  {new Date(product.createdAt).toLocaleString()}
-                </td>
+                <td className="products__when">{new Date(product.createdAt).toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {error && (
-        <p className="alert products__error" role="alert">
-          {error.message}
-        </p>
-      )}
+      {error && <ErrorPanel error={error} className="products__error" />}
 
       {hasNextPage && (
         <div className="products__more">
