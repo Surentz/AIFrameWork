@@ -184,6 +184,16 @@ builder.Services.AddAuthorization(options =>
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection("Admin"));
 builder.Services.AddAdministratorRoles();
 
+// The monitoring page's link into the log store. Validated at startup, not on first read: the
+// template ends up as an href in an administrator's browser, so a javascript: or relative value
+// must stop the host rather than wait for someone to click it. Unset is valid and means "no link".
+builder.Services.AddOptions<MonitoringPageOptions>()
+    .Bind(builder.Configuration.GetSection("Monitoring"))
+    .Validate(
+        options => MonitoringPageOptions.IsValidTemplate(options.TraceLinkTemplate),
+        "Monitoring:TraceLinkTemplate must be an absolute http(s) URL containing {traceId}.")
+    .ValidateOnStart();
+
 // The caller, as an Application port. HttpContextAccessor is what makes the claims reachable
 // from a handler; scoped because "who is calling" is per-request.
 builder.Services.AddHttpContextAccessor();
@@ -285,6 +295,11 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(connectionString);
+
+// The outbox is delivered from here and nowhere else: its handlers include the notifiers, and
+// the push transport they hand a new notification to (SignalRNotificationPush, below) exists only
+// in this host. The worker writes outbox rows but never claims them. ADR 0028.
+builder.Services.AddOutboxPumps();
 
 // The key ring goes to Postgres, not to each host's memory. Two replicas with separate
 // rings reject each other's session cookies, which surfaces as an intermittent 401 rather
@@ -407,20 +422,26 @@ app.MapControllers();
 
 // Only when realtime is on - mapping a hub whose INotificationPush was never registered would
 // accept connections that can never receive anything.
+//
+// DisableHttpMetrics on this and both probes below (ADR 0027): none of them is a request a user
+// made. The hub's WebSocket "request" lasts as long as the tab is open, and kubelet probes are
+// ~0.4 req/s of 1 ms 200s across two pods - counted, they would drag the p95 up or down and dilute
+// the 5xx share the alert rules read. MetricsPipelineTests pins the probes; Realtime is off under
+// test, so the hub's exclusion is on this comment's word.
 if (realtime.Enabled)
 {
-    app.MapHub<NotificationHub>("/hubs/notifications");
+    app.MapHub<NotificationHub>("/hubs/notifications").DisableHttpMetrics();
 }
 
 // No fallback authorization policy is registered, so this stays anonymous without an attribute -
 // a readiness probe that needs credentials is not a readiness probe.
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).DisableHttpMetrics();
 
 // Readiness, distinct from the liveness check above: this one answers "may this pod receive
 // traffic", which needs Postgres. It stays a separate endpoint because /health must remain
 // database-free — HealthTests boots a host with no database at all and asserts 200 on it.
 // Anonymous for the same reason /health is: no fallback authorization policy is registered.
-app.MapHealthChecks("/health/ready");
+app.MapHealthChecks("/health/ready").DisableHttpMetrics();
 
 // Development only, deliberately: a deployed instance must not publish its endpoint surface.
 // Asserted in both directions by OpenApiDocumentTests, because a missing environment check

@@ -16,7 +16,7 @@ frontend/src/features/<feature-name>/
   <FeatureName>Detail.tsx        detail view
   <FeatureName>Detail.test.tsx
   queries.ts                     query keys + useQuery/useMutation hooks
-  types.ts                       interfaces matching the Api DTOs
+  types.ts                       aliases over src/api/schema.d.ts — never hand-written
 frontend/src/api/<feature-name>.ts    typed fetch calls
 frontend/src/test/handlers.ts         MSW handlers for the new endpoints
 ```
@@ -27,7 +27,9 @@ frontend/src/test/handlers.ts         MSW handlers for the new endpoints
 - Server state through TanStack Query; query keys in one exported `<feature>Keys` object
 - Every query and mutation renders its error state
 - A mutation that changes a list invalidates that list's key in `onSuccess`
-- Register the route in `frontend/src/routes.tsx`
+- Register the route in `frontend/src/routes.tsx` — inside `RequireRole allow="Admin"` if the
+  endpoints behind it need an administrator
+- If the backend endpoints are new, regenerate `schema.d.ts` first (`npm run generate:api`)
 - No `any`, no `!`
 - MSW handlers added for every new endpoint, because `onUnhandledRequest: 'error'` will
   otherwise fail the test rather than silently pass it

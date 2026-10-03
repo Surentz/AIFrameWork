@@ -185,6 +185,17 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
                 && (descriptor.ImplementationType == typeof(OutboxPollerService)
                     || descriptor.ImplementationType == typeof(OutboxWorkerService)))
             .ToList();
+
+        // Both, or the host under test is not the one that ships: the Api is the only host that
+        // calls AddOutboxPumps, so a Program.cs that lost the call would deliver nothing in
+        // production while every drained test here still passed.
+        if (outboxHostedServices.Count != 2)
+        {
+            throw new InvalidOperationException(
+                $"Expected the Api to register both outbox pumps, found {outboxHostedServices.Count}. "
+                + "Program.cs must call AddOutboxPumps.");
+        }
+
         foreach (var descriptor in outboxHostedServices)
         {
             services.Remove(descriptor);

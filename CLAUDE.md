@@ -15,7 +15,7 @@ Rationale lives in `docs/adr/`.
 | Target framework | net10.0 | `Directory.Build.props`, alongside `LangVersion` 14.0 |
 | Node | 24.20.0 | `.github/workflows/ci.yml` and `e2e.yml`. 24.15.0 is the hard floor — see below |
 | React | 19.3.0 | `frontend/package-lock.json`, declared `^19.2.8` |
-| Vite | 8.3.0 | `frontend/package-lock.json`, declared `^8.2.2` |
+| Vite | 8.3.1 | `frontend/package-lock.json`, declared `^8.3.1` |
 | TypeScript | 6.0.3 | `frontend/package-lock.json`, declared `~6.0.2` |
 
 Read resolved versions from the *lockfile*, not `package.json` — the declared ranges are carets.
@@ -121,10 +121,10 @@ generated-code tree, and keeping them apart is what makes each host's `codegen w
 | `caching` | Making a query cacheable, adding eviction, stale or cross-user data |
 | `auth` | Sign-in, sessions, the security stamp, the `Admin` role, the sign-in audit |
 | `notifications` | The notification feed, handlers that write to it, SignalR push |
-| `observability` | Logging, tracing, OTLP, traffic metrics and their charts |
+| `observability` | Logging, tracing, OTLP, OpenTelemetry metrics, sampling, trace links from the UI, traffic metrics and their charts |
 | `resilience` | Outbound HTTP clients, retry/timeouts, explicit DB transactions |
 | `local-dev` | The dev loop scripts, Seq, ports, `dotnet ef` vs user-secrets, the control panel |
-| `kubernetes` | The kind cluster, `deploy.ps1`, HPAs, ingress affinity, `-WithObservability` |
+| `kubernetes` | The kind cluster, `deploy.ps1`, HPAs, ingress affinity, `-WithObservability` (OpenSearch, Prometheus, Grafana, alert rules) |
 
 Agents: `dotnet-reviewer` and `react-reviewer` before committing; `test-runner` for test
 results without logs in the conversation.
@@ -197,7 +197,9 @@ commands carry plaintext passwords).
 
 **Outbox handlers** (`notifications`, `src/Application/CLAUDE.md`) — Delivery is at-least-once,
 so handlers are idempotent, and a domain event handler runs outside the command pipeline, so it
-**must call `SaveChangesAsync` itself**.
+**must call `SaveChangesAsync` itself**. **Only the API runs the outbox pumps** (ADR 0028): the
+notifiers push through SignalR, which exists only there, so a pump in the worker writes
+notifications nobody is pushed. The worker writes outbox rows; it never calls `AddOutboxPumps()`.
 
 **Resilience** (`resilience`, ADR 0014) — Polly cannot see a failed `Result<T>`: the pipeline
 sits under the port, never around it. With `EnableRetryOnFailure` on, an explicit transaction
@@ -235,5 +237,22 @@ same workflow runs by hand from the Actions tab, with optional `grep` and `repea
 `backend (Release)`, `generated code is current`, `api contract is current`, `frontend`,
 `e2e / e2e`, and `pr title and labels` from `.github/workflows/pr-labels.yml`. Renaming a job, or adding a path filter to the `pull_request` trigger, leaves a
 required check that never reports, and every PR blocks — update the ruleset in the same change.
+
+**Every PR gets one test-and-coverage comment**, from `ci.yml`'s last job, `test report`: every
+suite's results (flaky e2e tests included), the failed tests by name, and backend and frontend
+line, branch and method coverage against main. It is report only and is **not** a required check.
+The jobs above it upload TRX files, Vitest's and Playwright's JSON, ReportGenerator's summary and
+Vitest's coverage summary as artifacts, and `.github/scripts/pr-report.js` turns them into the
+comment. That script is tested by `node --test ".github/scripts/*.test.js"` in the `frontend` job.
+Two things fail silently:
+
+- **Every reporting step is `continue-on-error`.** A broken report shows up as "not run" or "not
+  measured" in the comment and never turns a required check red. Keep any new upload step the same.
+- **Renaming an artifact** silently turns its suite into "not run": `collect()` in the script
+  finds each one by its folder name.
+
+`test report` is the only job with write permissions (`pull-requests: write`). That raises the
+read-only token Dependabot's PRs get by default. A PR from a fork stays read-only whatever the
+workflow asks for, so it gets no comment, but the report is still in the job summary.
 
 Design rationale for this setup: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`

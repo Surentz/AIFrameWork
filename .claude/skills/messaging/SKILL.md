@@ -68,7 +68,7 @@ domain event may change shape freely, an integration event is someone else's dep
 ## What the durable outbox guarantees — and what it does not
 
 ```
-command commits → hand-built outbox row → pump (API or worker) → fan-out: audit │ notifiers │ jobs │ integration publishers
+command commits → hand-built outbox row → pump (API only, ADR 0028) → fan-out: audit │ notifiers │ jobs │ integration publishers
   integration publisher → IIntegrationEventPublisher → Wolverine durable outbox (Postgres) → aiframework.events (publisher confirms)
 ```
 

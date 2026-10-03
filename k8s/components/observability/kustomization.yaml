@@ -11,6 +11,31 @@ resources:
   - opensearch.yaml
   - opensearch-dashboards.yaml
   - ism-policy-job.yaml
+  - dashboards-index-pattern-job.yaml
+  - prometheus.yaml
+  - grafana.yaml
+
+# The dashboard as a real .json file rather than a string inside YAML, so it stays diffable and
+# can be exported from Grafana and pasted back. disableNameSuffixHash keeps the ConfigMap name
+# fixed for grafana.yaml's volume; Grafana re-reads the file on its own, no restart needed.
+configMapGenerator:
+  - name: grafana-dashboards
+    files:
+      - aiframework.json=grafana-dashboard.json
+    options:
+      disableNameSuffixHash: true
+  # Prometheus's config and alert rules (the rules file is what prometheus-rules.test.yml
+  # unit-tests; the test file itself is not shipped). Both keep kustomize's content-hash suffix,
+  # deliberately unlike the dashboard above: a changed file gets a new ConfigMap name, kustomize
+  # rewrites the Deployment's volume to it, and the pod rolls - which is how a changed rule takes
+  # effect. An unchanged file changes nothing, so deploy.ps1 does not restart Prometheus and its
+  # emptyDir history survives the deploy.
+  - name: prometheus-config
+    files:
+      - prometheus.yml
+  - name: prometheus-rules
+    files:
+      - prometheus-rules.yml
 
 # Adds the two Otlp keys to the SAME app-config ConfigMap k8s/overlays/local/config.yaml already
 # defines, rather than this component declaring its own ConfigMap - one ConfigMap, one envFrom on
@@ -29,3 +54,11 @@ patches:
       - op: add
         path: /data/Observability__Otlp__Endpoint
         value: 'http://otel-collector.aiframework:4318'
+      # The monitoring page's trace links: Discover over the otel-logs index pattern
+      # (dashboards-index-pattern-job.yaml), filtered to the trace, last seven days - the ISM
+      # retention. localhost:5601 because Dashboards is reached by the port-forward deploy.ps1
+      # prints. Checked by loading it in a browser against a real sign-in row's trace id: Discover
+      # showed exactly that request's log lines.
+      - op: add
+        path: /data/Monitoring__TraceLinkTemplate
+        value: "http://localhost:5601/app/data-explorer/discover#?_a=(discover:(columns:!(_source),isDirty:!f,sort:!()),metadata:(indexPattern:otel-logs,view:discover))&_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:now-7d,to:now))&_q=(filters:!(),query:(language:kuery,query:'traceId:%22{traceId}%22'))"

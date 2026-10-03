@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  useMarkAllNotificationsRead,
-  useMarkNotificationRead,
-  useNotifications,
-} from './queries';
+import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from './queries';
 import type { Notification, NotificationKind } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './notifications.css';
 
 /**
@@ -180,9 +177,7 @@ export function NotificationList(): React.JSX.Element {
     return (
       <>
         {header}
-        <p className="alert" role="alert">
-          {error.message}
-        </p>
+        <ErrorPanel error={error} />
       </>
     );
   }
@@ -221,21 +216,9 @@ export function NotificationList(): React.JSX.Element {
       )}
 
       {/* Every query and mutation renders its error state - three of them here. */}
-      {error && (
-        <p className="alert notifications__error" role="alert">
-          {error.message}
-        </p>
-      )}
-      {markRead.error && (
-        <p className="alert notifications__error" role="alert">
-          {markRead.error.message}
-        </p>
-      )}
-      {markAll.error && (
-        <p className="alert notifications__error" role="alert">
-          {markAll.error.message}
-        </p>
-      )}
+      {error && <ErrorPanel error={error} className="notifications__error" />}
+      {markRead.error && <ErrorPanel error={markRead.error} className="notifications__error" />}
+      {markAll.error && <ErrorPanel error={markAll.error} className="notifications__error" />}
 
       {hasNextPage && (
         <div className="notifications__more">

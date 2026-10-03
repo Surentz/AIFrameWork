@@ -121,9 +121,9 @@ spec:
 # the right signal needs a queue-depth metric this cluster does not collect. Until it does, the
 # replica count stays an explicit decision in worker.yaml.
 #
-# Nothing about the worker forbids more replicas: OutboxPoller claims rows with FOR UPDATE SKIP
-# LOCKED and Quartz runs clustered, so a second worker is safe by construction (ADR 0010,
-# ADR 0017). The gap is the trigger, not the safety.
+# Nothing about the worker forbids more replicas: its queues are competing consumers and Quartz
+# runs clustered, so a second worker is safe by construction (ADR 0010, ADR 0017). It runs no
+# outbox pump (ADR 0028). The gap is the trigger, not the safety.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

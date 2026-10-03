@@ -18,6 +18,9 @@ public static class OtlpEndpoint
     /// <summary>The traces signal's path, appended to the receiver root.</summary>
     public const string TracesPath = "v1/traces";
 
+    /// <summary>The metrics signal's path, appended to the receiver root.</summary>
+    public const string MetricsPath = "v1/metrics";
+
     /// <summary>
     /// Public and pure — no host, no exporter, no network — specifically so this can be unit
     /// tested directly.

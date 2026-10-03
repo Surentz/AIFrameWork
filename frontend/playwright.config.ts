@@ -48,8 +48,16 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   timeout: target.managesStack ? 30_000 : 60_000,
 
+  // CI also writes a JSON report for the PR comment (.github/scripts/pr-report.js): it is the one
+  // format that tells a flaky test (passed on retry) from a passing one. Its own file, not inside
+  // playwright-report/, which the html reporter clears.
   reporter: isCI
-    ? [['list'], ['html', { open: 'never' }], ['github']]
+    ? [
+        ['list'],
+        ['html', { open: 'never' }],
+        ['github'],
+        ['json', { outputFile: 'e2e-results.json' }],
+      ]
     : [['list'], ['html', { open: 'never' }]],
 
   use: {

@@ -24,16 +24,13 @@
   </ItemGroup>
 
   <!--
-    OpenTelemetry, matching src/Api/AiFramework.Api.csproj's set minus two, each for its own
-    reason:
+    OpenTelemetry, matching src/Api/AiFramework.Api.csproj's set minus ASP.NET instrumentation:
+    this host's only HTTP surface is two probe endpoints, and a span or a request metric per
+    kubelet probe every ten seconds is noise, not telemetry. Runtime metrics come from the
+    built-in "System.Runtime" meter via AddMeter, as in the API (ADR 0027), so no runtime package.
 
-      - ASP.NET instrumentation: this host's only HTTP surface is two probe endpoints, and a span
-        per kubelet probe every ten seconds is noise, not telemetry.
-      - Runtime instrumentation: WorkerObservability registers no WithMetrics, so it would be a
-        package that ships and does nothing. Add it back together with the meter, not before.
-
-    These track their own release counter (1.18.0), independent of the shared framework's 10.0.11
-    patch line, and are released together — keep them on one version. See ADR 0015.
+    These track their own release counter (1.19.x), independent of the shared framework's 10.0.x
+    patch line, and are released together — keep them on one version. See ADRs 0015 and 0027.
   -->
   <ItemGroup>
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />

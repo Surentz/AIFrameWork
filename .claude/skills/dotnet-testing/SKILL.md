@@ -13,8 +13,9 @@ Stack: xUnit + FluentAssertions + NSubstitute.
 |---|---|---|
 | `Domain.Tests` | invariants, value objects, pure logic | mocks, I/O, fixtures |
 | `Application.Tests` | handlers with ports substituted | real database |
-| `Infrastructure.Tests` | repositories, EF mapping, query translation | business rules |
-| `Api.IntegrationTests` | HTTP contract, status codes, `ProblemDetails` | unit-level logic |
+| `Infrastructure.Tests` | repositories, EF mapping, query translation, the outbox | business rules |
+| `Api.IntegrationTests` | HTTP contract, status codes, `ProblemDetails`, authorization policies | unit-level logic |
+| `Worker.IntegrationTests` | jobs reaching their handlers, lanes, scheduling, inbound broker messages | anything the API host does |
 
 If a `Domain` test needs a mock, the logic is in the wrong layer. That is the signal, not an
 inconvenience to work around.
@@ -23,14 +24,14 @@ inconvenience to work around.
 
 ```csharp
 [Fact]
-public void Cancel_WhenAlreadyShipped_ThrowsConflict()
+public void Cancel_OnAShippedOrder_ThrowsAStateException()
 {
-    var order = OrderBuilder.Shipped();
+    var order = Placed();
+    order.Ship(ShippedAt);
 
-    var act = () => order.Cancel();
+    var act = () => order.Cancel("Changed my mind.", CancelledAt);
 
-    act.Should().Throw<ConflictException>()
-       .WithMessage("*already shipped*");
+    act.Should().Throw<OrderStateException>();
 }
 ```
 
@@ -51,6 +52,11 @@ public void Cancel_WhenAlreadyShipped_ThrowsConflict()
 
 ## Integration tests
 
-`WebApplicationFactory<Program>` for the Api. Testcontainers for a real database where query
-translation matters — the in-memory provider does not reproduce it faithfully, and a test that
-passes against it can still fail in production.
+`WebApplicationFactory<Program>` for the Api (`ApiFactory`) and the worker (`WorkerFactory`).
+Testcontainers for a real database where query translation matters — the in-memory provider does
+not reproduce it faithfully, and a test that passes against it can still fail in production.
+
+Both factories also start a RabbitMQ container, because a durable host cannot boot without a
+broker, so `dotnet test` needs a running Docker daemon. Join the project's one collection rather
+than declaring a fixture, and simulate a broker outage with `StopBrokerAppAsync()`, never
+`PauseAsync` — `tests/CLAUDE.md` has both rules and why.

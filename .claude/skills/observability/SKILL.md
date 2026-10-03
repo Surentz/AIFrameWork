@@ -1,6 +1,6 @@
 ---
 name: observability
-description: Use when touching logging, tracing, OTLP export, or the traffic (RED) metrics and their charts - Behaviors.LoggedAsync levels, what must never be logged, Observability__Otlp__* config, TrafficMiddleware, histogram percentiles, and traffic_buckets.
+description: Use when touching logging, tracing, OTLP export, OpenTelemetry metrics, sampling, trace links from the UI into the log store, or the traffic (RED) metrics and their charts - Monitoring__TraceLinkTemplate, ErrorPanel references, Observability__Otlp__Headers, service.version, Behaviors.LoggedAsync levels, what must never be logged, Observability__Otlp__* config, TrafficMiddleware, histogram percentiles, and traffic_buckets.
 ---
 
 # Logging, tracing and traffic metrics
@@ -46,15 +46,95 @@ everywhere — appsettings.json, every test host, CI — so nothing tries to exp
 that was never started; the tracer provider itself is still registered unconditionally, which is
 what makes `Activity.Current` non-null and the `traceId` already written into every
 `ProblemDetails` resolve to a real, correlatable value. `Observability:Otlp:Endpoint` is the OTLP
-receiver's **root**, with no `/v1/logs`/`/v1/traces` suffix —
-`ObservabilityRegistration.BuildOtlpEndpoint` appends the right one per signal, and does not rely
-on the SDK to (confirmed empirically that it will not: see that method's own remarks for what
-that cost to discover).
+receiver's **root**, with no `/v1/logs`/`/v1/traces` suffix — `OtlpEndpoint.Build` appends the
+right one per signal, and does not rely on the SDK to (confirmed empirically that it will not:
+see that method's own remarks for what that cost to discover).
+
+**Every exporter goes through its host's `ConfigureExporter`** (`ObservabilityRegistration` and
+`WorkerObservability` each have one — the hosts compose separately, ADR 0016). A new signal's
+exporter that sets `Protocol`/`Endpoint` itself will miss the auth headers.
+
+**`Observability__Otlp__Headers` is a secret.** OTLP's `key=value,key2=value2` form, for a hosted
+backend's API key (`Authorization=Basic …`). Environment or secret store only — never an
+appsettings file. Blank is treated as unset. Seq and the in-cluster collector need none.
+
+**Every record carries `service.version` and `deployment.environment.name`**
+(`ObservabilityResource`). The version is the assembly's informational version,
+`1.0.0+<commit>`: a local build gets the commit from `.git` via the SDK; the image build has no
+`.git`, so `Dockerfile.api` takes `SOURCE_REVISION` and `deploy/deploy.ps1` passes it. An image
+built without it reports a bare `1.0.0`.
 
 See `docs/superpowers/plans/2026-09-13-centralized-logging.md` for the full design and the
 phased rollout, and ADR 0015 for the decision itself — MEL + a pipeline behavior over Serilog or
 a base class, OTLP export over a store-specific sink.
 
+
+## Trace links
+
+The trace id is how every other record reaches the log store, so the UI hands it out in two
+places.
+
+- **Monitoring tables.** Job runs, sign-in attempts and admin actions each have a Trace column
+  (`TraceLink`). `Monitoring__TraceLinkTemplate` turns it into a link: a URL with `{traceId}`
+  where the 32-hex id goes, carried to the SPA on `GET /api/monitoring/access` (admin-only, so a
+  member never learns where the log store is). Unset, the id is selectable text. The API
+  **refuses to start** on a template that is not an absolute http(s) URL containing
+  `{traceId}` (`MonitoringPageOptions.IsValidTemplate`) — it becomes an `href`.
+- **Errors.** `ErrorPanel` renders every failed query and mutation, and for a **5xx only**
+  appends `Reference: <trace id>`. A 4xx is the caller's to fix; a reference there reads as
+  "contact support".
+
+**Two id shapes, one normaliser.** `ProblemDetails.traceId` is `Activity.Id` — the full W3C
+traceparent `00-<trace>-<span>-<flags>`, ASP.NET Core's own convention, pinned by
+`ObservabilityRegistrationTests`. The audit tables store the bare 32-hex `TraceId`. Do not
+"fix" either: `frontend/src/api/traceId.ts`'s `normaliseTraceId` reads both, and rejects
+`HttpContext.TraceIdentifier`'s `0HN…:1` fallback, which appears in no log record.
+
+Verified templates:
+
+| Store | Template |
+|---|---|
+| Seq (dev, `-WithSeq`) | `http://localhost:55341/#/events?filter=@TraceId%20%3D%20'{traceId}'` |
+| OpenSearch Dashboards (kind, `-WithObservability`) | Discover over the `otel-logs` index pattern, `traceId:"{traceId}"`, last 7 days — the full string is in `k8s/components/observability/kustomization.yaml` |
+
+Seq has no separate trace route — traces live in the events view, and `#/events?filter=` is the
+shape Seq's own UI links use. OpenSearch Dashboards' link needs an index pattern, which
+`dashboards-index-pattern-job.yaml` creates **with its field list** (the saved-objects API does
+not fill one in; without it every load raises "Could not locate that index-pattern-field").
+It covers logs only: the collector's exporter leaves spans' `@timestamp` at 0001-01-01. Both
+templates were checked by loading them in a browser against a real stored trace id.
+
+## Metrics (ADR 0027)
+
+OpenTelemetry metrics for the **runtime and the infrastructure**, beside — never instead of —
+the Postgres traffic rollup below, which stays the monitoring page's source.
+
+- **Meters, in both hosts:** HttpClient, `System.Runtime` (`dotnet.gc.*`,
+  `dotnet.thread_pool.*`), Npgsql (`db.client.operation.duration`, `db.client.connection.count`
+  by state against `db.client.connection.max`), and `Wolverine:*` (`wolverine-execution-time`,
+  `wolverine-messages-received`/`-succeeded`, `wolverine-dead-letter-queue`, inbox/outbox counts).
+  **API only:** ASP.NET Core's built-in meters (`http.server.request.duration`, Kestrel, auth,
+  rate limiting). The worker skips them for the reason it skips ASP.NET tracing.
+- **No `OpenTelemetry.Instrumentation.Runtime`.** On .NET 9+ it only subscribes to
+  `System.Runtime`, which `AddMeter` does directly.
+- **Gate:** exported when `Otlp:Enabled` **and** `Otlp:Metrics` (default `true`). The meter
+  provider itself is always registered; `MetricsPipelineTests`/`WorkerMetricsTests` prove the
+  meters with an in-memory reader and export off.
+- **Where it lands:** Seq 2026.1 (`-WithSeq`) takes OTLP metrics — its Metrics view lists every
+  name above. On the cluster, Prometheus + Grafana (see the `kubernetes` skill).
+- **Cardinality is a review item.** Every tag here is a route template, a pool or a queue name.
+  A tag carrying a user id, an order id or a raw path multiplies the series count.
+
+## Sampling
+
+- **Head, in the app:** `Observability__Otlp__TraceSampleRatio`, parent-based, default `1`
+  (keep everything). Lower it only when exporting straight to a backend billed per span. A trace
+  a caller kept is always kept, so a job never drops the request that enqueued it. It decides
+  what is **recorded**, never whether a trace id exists: ProblemDetails, the audit tables and
+  every log record still carry one (`ARequest_WithSamplingAlmostOff_StillCarriesAW3CTraceId`),
+  and **logs are never sampled** — a trace link always finds the request's log lines. `0` is
+  refused at startup; "no traces" is `Otlp:Traces=false`.
+- **Tail, in the collector** (cluster only): see the `kubernetes` skill.
 
 ## Traffic
 

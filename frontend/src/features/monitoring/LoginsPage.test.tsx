@@ -27,6 +27,16 @@ describe('LoginsPage', () => {
     expect(attempts.getByText('203.0.113.7')).toBeInTheDocument();
   });
 
+  it('links each attempt to its trace in the log store', async () => {
+    renderPage();
+
+    const attempts = within(await screen.findByRole('table', { name: /sign-in attempts/i }));
+
+    expect(
+      await attempts.findByRole('link', { name: /open trace 4bf92f3577b34da6a3ce929d0e0e4736/i }),
+    ).toHaveAttribute('href', 'https://logs.test/trace/4bf92f3577b34da6a3ce929d0e0e4736');
+  });
+
   it('shows who is locked out', async () => {
     renderPage();
 

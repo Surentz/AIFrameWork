@@ -79,8 +79,53 @@ jobs:
 
       # Testcontainers needs a Docker daemon; ubuntu-latest runners ship one already running,
       # which is why there is no service container or setup step here.
+      #
+      # Both legs write TRX for the test-report job below. Only Debug collects coverage: one
+      # leg is enough, and optimised Release code maps to source lines less faithfully.
       - name: Test
-        run: dotnet test -c ${{ matrix.configuration }} --no-build
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+        run: |
+          args=(--logger trx --results-directory TestResults)
+          if [ "$CONFIGURATION" = Debug ]; then
+            args+=(--settings tests/coverage.runsettings --collect "XPlat Code Coverage")
+          fi
+          dotnet test -c "$CONFIGURATION" --no-build "${args[@]}"
+
+      # Everything from here on feeds the PR report, and runs whether or not the tests passed -
+      # a red run is the one most worth reporting. None of it may turn this required check red on
+      # its own: a reporting fault shows up in the comment as "not run" or "not measured".
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-backend-${{ matrix.configuration }}
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # One Cobertura file per test project, merged so a line counts as covered if any project
+      # ran it. JsonSummary is what the PR report reads; Html is for a person.
+      - name: Merge coverage
+        if: ${{ !cancelled() && matrix.configuration == 'Debug' }}
+        continue-on-error: true
+        run: |
+          dotnet tool restore
+          dotnet reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:coverage-backend -reporttypes:"JsonSummary;Html"
+
+      # Kept 90 days, not 14: a PR's "vs main" column reads the latest main run's copy, and a quiet
+      # main could otherwise outlive its baseline.
+      - name: Upload coverage
+        if: ${{ !cancelled() && matrix.configuration == 'Debug' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-backend
+          path: coverage-backend/
+          if-no-files-found: ignore
+          retention-days: 90
 
   codegen:
     # The failure this job exists for is invisible everywhere else: generated code that no
@@ -224,7 +269,36 @@ jobs:
       - run: npm run build --prefix frontend
 
       # --run because `npm test` is bare `vitest`, which otherwise sits in watch mode forever.
-      - run: npm test --prefix frontend -- --run
+      # --coverage and the json reporter feed the PR report; the default reporter keeps the log
+      # readable. The coverage settings live in vite.config.ts.
+      - run: >-
+          npm test --prefix frontend -- --run --coverage
+          --reporter=default --reporter=json --outputFile.json=test-results/vitest.json
+
+      # The PR report's own parser. Here because this is the job with Node; it needs no install.
+      - name: Test the PR report script
+        run: node --test ".github/scripts/*.test.js"
+
+      # As in the backend job: feeds the PR report, runs on red, and never fails this check.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-frontend
+          path: frontend/test-results/vitest.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-frontend
+          path: frontend/coverage/
+          if-no-files-found: ignore
+          retention-days: 90
 
   e2e:
     # Gated behind the fast jobs: e2e is by far the slowest and the most environmentally
@@ -235,3 +309,102 @@ jobs:
     # name a branch-protection rule has to require.
     needs: [backend, frontend]
     uses: ./.github/workflows/e2e.yml
+
+  # One comment on the pull request with every suite's results and both coverage numbers, edited in
+  # place on each push; .github/scripts/pr-report.js builds it from the artifacts the jobs above
+  # uploaded. It runs whether or not they passed - a red run is the one most worth reporting - and
+  # it is report only: not a required check, and nothing in it can fail one.
+  #
+  # These are the only write permissions in the workflow, and only this job has them. Dependabot's
+  # PRs get a read-only token by default, but a `permissions` key raises it; a PR from a fork stays
+  # read-only whatever this says, so there the comment is skipped and the job summary still holds
+  # the report.
+  test-report:
+    name: test report
+    needs: [backend, frontend, e2e]
+    if: ${{ always() && !cancelled() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Each artifact lands in a folder named after it, which is the layout pr-report.js reads. A
+      # job that never reached its upload left nothing, and its suite shows as "not run".
+      - name: Download test results
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: test-results-*
+          path: artifacts/current
+
+      - name: Download coverage
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          path: artifacts/current
+
+      # "vs main" compares against main's newest green CI run. A docs-only push skips CI
+      # (paths-ignore above), so that is the last commit that changed anything measured.
+      - name: Find main's last green run
+        id: baseline
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
+            --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Download main's coverage
+        if: ${{ steps.baseline.outputs.id != '' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ steps.baseline.outputs.id }}
+          github-token: ${{ github.token }}
+          pattern: coverage-*
+          path: artifacts/baseline
+
+      - name: Build the report
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          baseline=()
+          if [ -d artifacts/baseline ]; then baseline=(artifacts/baseline); fi
+          node .github/scripts/pr-report.js artifacts/current "${baseline[@]}" > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Finds its own earlier comment by the marker and edits it, so a PR carries one report, not
+      # one per push. ci.yml's cancel-in-progress means an older run never outlives a newer one.
+      - name: Post or update the PR comment
+        continue-on-error: true
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { MARKER } = require('./.github/scripts/pr-report.js');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const body = fs.readFileSync('report.md', 'utf8');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100 });
+            const existing = comments.find((c) =>
+              c.user?.login === 'github-actions[bot]' && c.body?.startsWith(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

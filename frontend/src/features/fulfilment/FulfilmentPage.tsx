@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useOrdersToFulfil, useShipOrder } from './queries';
 import type { FulfilmentOrder } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import '../orders/orders.css';
 
 function Header(): React.JSX.Element {
@@ -44,9 +45,7 @@ export function FulfilmentPage(): React.JSX.Element {
     return (
       <>
         <Header />
-        <p className="alert" role="alert">
-          {error.message}
-        </p>
+        <ErrorPanel error={error} />
       </>
     );
   }
@@ -90,11 +89,7 @@ export function FulfilmentPage(): React.JSX.Element {
         </table>
       </div>
 
-      {error && (
-        <p className="alert orders__error" role="alert">
-          {error.message}
-        </p>
-      )}
+      {error && <ErrorPanel error={error} className="orders__error" />}
 
       {hasNextPage && (
         <div className="orders__more">
@@ -184,9 +179,7 @@ function QueueRow({ order }: QueueRowProps): React.JSX.Element {
         <tr>
           {/* role="alert" on a <p> inside the cell, not the <td>: see UsersPage. */}
           <td colSpan={5}>
-            <p className="alert" role="alert">
-              {ship.error.message}
-            </p>
+            <ErrorPanel error={ship.error} />
           </td>
         </tr>
       )}

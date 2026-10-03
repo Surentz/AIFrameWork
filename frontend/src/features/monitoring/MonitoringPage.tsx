@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useJobHealth, useMonitoringAccess, useSignInHealth, useTrafficSummary } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './monitoring.css';
 
 /**
@@ -21,11 +22,7 @@ export function MonitoringPage(): React.JSX.Element {
   }
 
   if (access.error) {
-    return (
-      <p className="alert" role="alert">
-        {access.error.message}
-      </p>
-    );
+    return <ErrorPanel error={access.error} />;
   }
 
   return (
@@ -37,11 +34,7 @@ export function MonitoringPage(): React.JSX.Element {
 
       <h2>Jobs</h2>
 
-      {health.error && (
-        <p className="alert" role="alert">
-          {health.error.message}
-        </p>
-      )}
+      {health.error && <ErrorPanel error={health.error} />}
 
       {health.isSuccess ? (
         <ul className="tiles" aria-label="Job health">
@@ -60,11 +53,7 @@ export function MonitoringPage(): React.JSX.Element {
 
       <h2>Sign-ins</h2>
 
-      {signIns.error && (
-        <p className="alert" role="alert">
-          {signIns.error.message}
-        </p>
-      )}
+      {signIns.error && <ErrorPanel error={signIns.error} />}
 
       {signIns.isSuccess && (
         <ul className="tiles" aria-label="Sign-in health">
@@ -81,18 +70,12 @@ export function MonitoringPage(): React.JSX.Element {
 
       <h2>Traffic</h2>
 
-      {traffic.error && (
-        <p className="alert" role="alert">
-          {traffic.error.message}
-        </p>
-      )}
+      {traffic.error && <ErrorPanel error={traffic.error} />}
 
       {traffic.isSuccess && (
         <ul className="tiles" aria-label="Traffic">
           <li className="tile">
-            <span className="tile__value">
-              {Number(traffic.data.requestsPerMinute).toFixed(1)}
-            </span>
+            <span className="tile__value">{Number(traffic.data.requestsPerMinute).toFixed(1)}</span>
             <span className="tile__label">Requests per minute</span>
           </li>
           <li className={Number(traffic.data.errorRate) > 0 ? 'tile tile--attention' : 'tile'}>
@@ -139,8 +122,11 @@ function Tile({ label, value }: TileProps): React.JSX.Element {
   // A count that is not zero when zero is the healthy value. Colour is not the only signal: the
   // label beside it says what it counts, so this reads the same without relying on hue.
   const attention =
-    (label === 'Failed' || label === 'Dead-lettered' || label === 'Bad credentials' ||
-      label === 'Unknown user') && count > 0;
+    (label === 'Failed' ||
+      label === 'Dead-lettered' ||
+      label === 'Bad credentials' ||
+      label === 'Unknown user') &&
+    count > 0;
 
   return (
     <li className={attention ? 'tile tile--attention' : 'tile'}>

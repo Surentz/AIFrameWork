@@ -164,7 +164,10 @@ event, it is persisted with the aggregate, and it is delivered at least once aft
   lost over a trace id that cannot be reconstructed.
 - The two `BackgroundService` pumps in `OutboxHostedServices.cs` (`OutboxPollerService`,
   `OutboxWorkerService`) are deliberately thin: they own scope creation and the channel hop, and
-  delegate the actual work to `OutboxPoller`/`OutboxWorkItemProcessor` above. `OutboxHostedServices.cs`
+  delegate the actual work to `OutboxPoller`/`OutboxWorkItemProcessor` above. **`AddOutbox()`
+  does not register them**: they come from `AddOutboxPumps()`, which only the Api's `Program.cs`
+  calls, because the notifiers they run can push only from there (ADR 0028). Every host can
+  write outbox rows; only the Api delivers them. `OutboxHostedServices.cs`
   holds the repo's only CA1031 exemption; the reasoning lives in the file-scoped comment above
   `[src/Infrastructure/Outbox/OutboxHostedServices.cs]` in `.editorconfig`, and only there.
 

@@ -6,23 +6,24 @@ the reference; the script and the IDE sections build on it.
 ## The script
 
 ```powershell
-./scripts/dev.ps1                  # database, migrations, API, dev server
+./scripts/dev.ps1                  # database, broker, migrations, API, job worker, dev server
 ./scripts/dev.ps1 -SkipMigrations  # when you know the schema is current
 ./scripts/dev.ps1 -WithSeq         # same, plus Seq (structured logs) at localhost:55341
 ```
 
-It checks Docker is running and that 5234 and 5173 are free, starts Postgres and RabbitMQ and
-waits for their healthchecks, applies migrations, then launches the API and the dev server **each in its own
-window**. Both are long-running foreground processes with their own logs, so a window each keeps
-those readable and makes Ctrl-C mean "stop this one".
+It checks Docker is running and that 5234, 5235 and 5173 are free, starts Postgres and RabbitMQ
+and waits for their healthchecks, applies migrations, then launches the API, the job worker and
+the dev server **each in its own window**. All three are long-running foreground processes with
+their own logs, so a window each keeps those readable and makes Ctrl-C mean "stop this one".
+`./scripts/worker.ps1` restarts just the worker, which `codegen write` requires.
 
 The migration step is the part worth having: it sets `ConnectionStrings__Default` before calling
 `dotnet ef`, which is exactly the trap described under "The gotcha that will cost you an
 afternoon" in the `local-dev` skill (`.claude/skills/local-dev/SKILL.md`). Without it,
 `database update` aims at the `design_time_only` placeholder rather than your dev database.
 
-`scripts/stop-dev.ps1` stops the database and the broker (and Seq, if `-WithSeq` started it); the two windows
-are yours to Ctrl-C. A bare `docker compose down` also stops the database, but **not** Seq if it
+`scripts/stop-dev.ps1` stops the database and the broker (and Seq, if `-WithSeq` started it); the
+three windows are yours to Ctrl-C. A bare `docker compose down` also stops the database, but **not** Seq if it
 is running — Seq sits behind a compose profile, and `down` with no `--profile` flag only tears
 down the active profile set for that invocation, not whatever an earlier `up` left running. Use
 `docker compose --profile observability down` (what `stop-dev.ps1` always passes) to be sure.
@@ -32,6 +33,7 @@ down the active profile set for that invocation, not whatever an earlier `up` le
 ```bash
 docker compose up -d --wait                 # dev Postgres on 55433, RabbitMQ on 55672 (UI 55673)
 dotnet run --project src/Api                # API on 5234, opens the API reference
+dotnet run --project src/Worker             # job worker on 5235 (health endpoints only)
 npm start --prefix frontend                 # app on 5173, opens in a browser tab
 ```
 
@@ -42,7 +44,9 @@ dotnet ef database update --project src/Infrastructure --startup-project src/Inf
 ```
 
 **The backend must be running before the frontend is useful.** Vite proxies `/api` to
-`http://localhost:5234`, so the app loads without it but every data call fails.
+`http://localhost:5234`, so the app loads without it but every data call fails. **So must the
+worker, for anything asynchronous**: jobs run only there and the API listens to no queue, so
+without it an enqueued job sits on its RabbitMQ queue and nothing says so.
 
 ## What opens by itself, and why
 
@@ -75,11 +79,11 @@ Rider launches several configurations together with a **Compound**.
    - Name it `frontend`.
 2. **+ → Compound**
    - Name it `Backend + Frontend`.
-   - Add the `http` configuration (Rider generates this from `launchSettings.json`) and the
-     `frontend` configuration from step 1.
+   - Add the API's and the worker's `http` configurations (Rider generates both from their
+     `launchSettings.json`) and the `frontend` configuration from step 1.
 3. Select the Compound and press F5.
 
-You get the API, the dev server, and both browser tabs.
+You get the API, the job worker, the dev server, and both browser tabs.
 
 **These configurations are personal, not shared.** `.idea/` is in `.gitignore`, so what you
 create here stays on your machine. Rider also reads shared configurations from a committed
@@ -96,7 +100,7 @@ documents the steps instead of shipping the XML.
 > starting point and correct it once someone has actually followed it.
 
 Visual Studio's **multiple startup projects** cannot start the frontend here, and it is worth
-understanding why before trying: `AiFramework.slnx` contains the four `src` projects and the four
+understanding why before trying: `AiFramework.slnx` contains the five `src` projects and the five
 test projects, and nothing else. The frontend is an npm workspace, not a project in the solution,
 so there is nothing for that dialog to list.
 
@@ -104,9 +108,10 @@ so there is nothing for that dialog to list.
 
 No repository change, and the behaviour matches the command line.
 
-1. Set `AiFramework.Api` as the startup project.
-2. Press F5. Visual Studio honours `launchSettings.json`, so the API starts and the API
-   reference opens.
+1. **Solution Properties → Startup Project → Multiple startup projects**, and start both
+   `AiFramework.Api` and `AiFramework.Worker`.
+2. Press F5. Visual Studio honours `launchSettings.json`, so the API and the worker start and
+   the API reference opens.
 3. **View → Terminal**, then:
 
    ```bash
@@ -140,14 +145,18 @@ direction.
 | Port | What | Override |
 |---|---|---|
 | 5234 | API | `API_PORT` |
+| 5235 | Job worker (health endpoints only) | `WORKER_PORT` |
 | 5173 | Vite dev server | `DEV_PORT` |
 | 4173 | Vite preview (e2e only) | `PREVIEW_PORT` |
 | 55433 | Dev Postgres | `DEV_PG_PORT` |
 | 55432 | e2e Postgres | `PG_PORT` |
+| 55672/55673 | Dev RabbitMQ: AMQP / management UI | `RABBITMQ_PORT` / `RABBITMQ_UI_PORT` |
+| 55682/55683 | e2e RabbitMQ: AMQP / management UI | `E2E_RABBITMQ_PORT` / `E2E_RABBITMQ_UI_PORT` |
 
-The two *databases* are designed to run at the same time. The two *API processes* are not:
-`npm run e2e` starts its own API on 5234 with `reuseExistingServer: false`, so it collides with a
-running `dotnet run`. **Stop the dev API before an e2e run**, or set `API_PORT`.
+The two *databases* and the two *brokers* are designed to run at the same time. The API and
+worker processes are not: `npm run e2e` starts its own API on 5234 and worker on 5235 with
+`reuseExistingServer: false`, so it collides with a running dev loop. **Stop the dev loop before
+an e2e run**, or set `API_PORT` and `WORKER_PORT`.
 
 `API_PORT` is read by both `vite.config.ts` and the e2e setup, so moving the API keeps the proxy
 pointed at it.
