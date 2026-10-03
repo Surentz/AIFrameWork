@@ -8,8 +8,8 @@ architectural rules are enforced by tooling rather than by convention.
 
 The domain is deliberately small — users place orders against a catalogue — so that the
 interesting part is the scaffolding around it: a hook that blocks a layering violation at edit
-time, a transactional outbox, a durable event path on PostgreSQL with no broker, background jobs
-in a worker host of their own, an API contract generated from the application and committed to
+time, a transactional outbox, RabbitMQ for every asynchronous hop behind a durable Wolverine
+outbox, background jobs in a worker host of their own, an API contract generated from the application and committed to
 the repository, and a local Kubernetes cluster that runs the whole stack at two replicas to
 rehearse the failures that only appear above one.
 
@@ -119,14 +119,15 @@ Four mechanisms are worth knowing about before reading the code:
   failures return a failed `Result<T>` rather than throwing. See ADR 0003.
 - **A transactional outbox.** Domain events raised by an aggregate are captured by an EF Core
   interceptor and written in the same transaction as the aggregate itself, then pumped out by a
-  background service. A durable Wolverine event path runs alongside it on PostgreSQL, and
-  publishes integration events for other systems to RabbitMQ. See ADR 0005 and ADR 0026.
+  background service — in the API only, because the notifiers it runs push over SignalR, which
+  lives there (ADR 0028). A durable Wolverine outbox on PostgreSQL sits behind it, and publishes
+  integration events for other systems to RabbitMQ. See ADR 0005 and ADR 0026.
 - **Opt-in query caching, scoped to the caller.** A query implements `ICacheable`, a command
   implements `IInvalidatesCache`, and the behavior composes the cache key from the query type
   and the current user's id. Nothing on the authentication path is cached. See ADR 0009.
 - **Background jobs in a worker host of their own.** A job is a message with a lane
   (`Light`/`Heavy`, one RabbitMQ quorum queue each), enqueued through `IJobScheduler`. **The API
-  publishes and listens to nothing**; the worker is the only host with listeners, which is
+  publishes but listens to nothing**; the worker is the only host with listeners, which is
   asserted from the runtime's own endpoint list rather than intended. Scheduled jobs use Quartz
   as the clock and fire on exactly one worker. See ADR 0016 and ADR 0017.
 
@@ -144,9 +145,9 @@ Four mechanisms are worth knowing about before reading the code:
 | Caching | `HybridCache` (L1 only today) |
 | Realtime | SignalR, opt-in, with a Redis backplane above one replica |
 | Validation | FluentValidation |
-| Auth | Cookie session with a rotating security stamp; Data Protection key ring in PostgreSQL |
+| Auth | Cookie session with a rotating security stamp; Data Protection key ring in PostgreSQL; capability-named policies over a `Member`/`Admin` role |
 | Resilience | `Microsoft.Extensions.Http.Resilience` outbound; `EnableRetryOnFailure` on Npgsql |
-| Observability | `Microsoft.Extensions.Logging` + OpenTelemetry over OTLP; Seq locally, OpenSearch in-cluster |
+| Observability | `Microsoft.Extensions.Logging` + OpenTelemetry logs, traces and metrics over OTLP; Seq locally; OpenSearch, Prometheus and Grafana in-cluster |
 | API docs | `Microsoft.AspNetCore.OpenApi` rendered by Scalar |
 | Analysis | .NET analyzers, SonarAnalyzer, Meziantou.Analyzer, AsyncFixer — all as errors |
 
@@ -186,7 +187,7 @@ Exact pins live in [`CLAUDE.md`](CLAUDE.md), `Directory.Build.props`, the `.cspr
 │   ├── Infrastructure/    EF Core, repositories, outbox, caching, Wolverine, jobs, security
 │   ├── Api/               Controllers, DTOs, the SignalR hub, the outbox pumps, exception handling, composition root
 │   │   └── Internal/Generated/    Wolverine adapters for the event path — committed
-│   └── Worker/            The job host: handlers, Quartz scheduling
+│   └── Worker/            The job host: handlers, Quartz scheduling, the inbound shipments listener
 │       └── Internal/Generated/    Wolverine adapters for the jobs — committed, and its own
 ├── tests/
 │   ├── Domain.Tests/
@@ -196,8 +197,8 @@ Exact pins live in [`CLAUDE.md`](CLAUDE.md), `Directory.Build.props`, the `.cspr
 │   └── Worker.IntegrationTests/  Job delivery, scheduling, and the worker's codegen
 ├── frontend/              Vite + React workspace, Vitest specs, Playwright e2e
 ├── k8s/
-│   ├── base/              api, web, worker, postgres, redis, ingress, autoscaling
-│   ├── components/        observability — the OTel Collector and OpenSearch, opt-in
+│   ├── base/              api, web, worker, postgres, rabbitmq, redis, ingress, autoscaling
+│   ├── components/        observability — OTel Collector, OpenSearch, Prometheus, Grafana; opt-in
 │   └── overlays/          local, and local-observability
 ├── deploy/                kind cluster definition and deployment scripts
 ├── scripts/               Development loop and prerequisite scripts
@@ -298,7 +299,7 @@ by the other pod. Docker Compose remains the inner development loop; this is add
 ```powershell
 ./deploy/start-cluster.ps1     # creates the cluster if missing, otherwise redeploys
 ./deploy/deploy.ps1            # rebuild, migrate, roll out onto an existing cluster
-./deploy/deploy.ps1 -WithObservability   # same, plus the OTel Collector -> OpenSearch stack
+./deploy/deploy.ps1 -WithObservability   # same, plus OTel Collector -> OpenSearch, Prometheus, Grafana
 ./deploy/teardown.ps1          # deletes the cluster, and the data inside it
 ```
 
@@ -311,7 +312,7 @@ CPU would scale it down exactly when it is blocked and falling behind. See ADR 0
 
 `-WithObservability` is opt-in and is by a wide margin the largest thing in the cluster
 (OpenSearch wants real JVM heap, Dashboards is a second Node process) — reach for it only when
-the logging pipeline itself is what you are rehearsing. It is deliberately **not** part of the
+the telemetry pipeline itself is what you are rehearsing. It is deliberately **not** part of the
 `e2e-k8s.ps1` readiness gate: a log store has no business in the readiness path of an e2e run.
 
 The deployment is three phases in a fixed order, because Kustomize has no hook mechanism:
@@ -375,19 +376,31 @@ defence, so no antiforgery token is issued.
 | `POST` | `/api/orders` | cookie | Place an order |
 | `GET` | `/api/orders` | cookie | List your orders, paged |
 | `GET` | `/api/orders/{id}` | cookie | One of your orders |
-| `POST` | `/api/orders/{id}/ship` | cookie | Mark one of your orders shipped; 409 on an illegal transition |
-| `POST` | `/api/orders/{id}/cancel` | cookie | Cancel one of your orders; 409 on an illegal transition |
-| `POST` | `/api/products` | cookie | Add a product to the catalogue |
+| `POST` | `/api/orders/{id}/cancel` | cookie | Cancel one of your orders; 409 if it has already shipped |
+| `GET` | `/api/fulfilment/orders` | `Orders.Fulfil` | Every buyer's orders in one status, oldest first |
+| `POST` | `/api/fulfilment/orders/{id}/ship` | `Orders.Fulfil` | Ship any buyer's order — the only way an order ships over HTTP; 409 on an illegal transition |
+| `POST` | `/api/products` | `Catalogue.Manage` | Add a product to the catalogue |
 | `GET` | `/api/products` | cookie | List the catalogue, paged |
 | `GET` | `/api/products/{id}` | cookie | One product |
-| `PUT` | `/api/products/{id}` | cookie | Replace a product's editable fields — not the sku |
+| `PUT` | `/api/products/{id}` | `Catalogue.Manage` | Replace a product's editable fields — not the sku |
 | `GET` | `/api/notifications` | cookie | Your notification feed, newest first, paged |
 | `GET` | `/api/notifications/unread-count` | cookie | Your unread count, for the badge |
 | `POST` | `/api/notifications/{id}/read` | cookie | Mark one notification read |
 | `POST` | `/api/notifications/read-all` | cookie | Mark every unread notification read |
 | `GET` | `/api/rates?from=&to=` | cookie | An exchange rate; 503 once the provider's retry budget is spent |
+| `GET` | `/api/monitoring/*` | `Monitoring.Read` | The operator's views: access, sign-ins, traffic, job runs and dead letters |
+| `POST` | `/api/monitoring/jobs/trigger`, `…/dead-letters/{messageId}/retry` | `Monitoring.Operate` | Run a scheduled job now; put a dead letter back in play |
+| `GET`/`POST` | `/api/monitoring/users/*` | `Users.Manage` | List accounts, promote or demote, revoke sessions, an account's history |
 | `GET` | `/health` | anonymous | Liveness; never touches the database |
 | `GET` | `/health/ready` | anonymous | Readiness; checks PostgreSQL |
+
+**Auth** is `cookie` for any signed-in user, or a capability policy that only an `Admin` holds
+(ADRs 0020, 0024, 0025). Controllers name the capability, never the role, so a later permission
+model changes one mapping in `Program.cs` rather than every controller. Administrators are seeded
+from `Admin__Usernames` and managed from the monitoring page.
+
+Orders also ship without anyone calling the API: a warehouse publishes `shipment.confirmed.v1` to
+RabbitMQ and the worker records it (ADR 0026).
 
 The worker serves `/health` and `/health/ready` of its own on 5235, and nothing else — it is a
 web host only so that Kubernetes has something to probe.
@@ -406,7 +419,8 @@ someone else's order is a 404 rather than a 403.
 
 Failures are RFC 9457 `ProblemDetails` throughout, including the rate limiter's 429. Expected
 failures never throw: a handler returns a failed `Result`, and `ErrorKind` maps to a status code
-(`Validation` → 400, `Unauthorized` → 401, `NotFound` → 404, `Conflict` → 409). Thrown
+(`Validation` → 400, `Unauthorized` → 401, `NotFound` → 404, `Conflict` → 409, `Unavailable` →
+503 with `Retry-After`). Thrown
 `DomainException`s become 400 through the global `IExceptionHandler`; anything else is a logged
 500 whose message is not leaked.
 
@@ -434,10 +448,12 @@ directions.
 frontend/src/
 ├── api/            Generated schema, typed client, endpoint wrappers
 ├── features/
-│   ├── auth/           Login, register, change password, RequireAuth guard
+│   ├── auth/           Login, register, change password, RequireAuth and RequireRole guards
 │   ├── orders/         List, detail, place-order form, query hooks
 │   ├── products/       Catalogue list, detail, create and edit forms
-│   └── notifications/  The header bell, the feed, and the SignalR stream
+│   ├── notifications/  The header bell, the feed, and the SignalR stream
+│   ├── fulfilment/     The operator's queue of orders to ship
+│   └── monitoring/     Overview, jobs, sign-ins, traffic, and user management
 ├── components/
 ├── styles/         tokens.css, global.css, controls.css
 ├── test/           MSW handlers, setup, query-client helper
@@ -453,17 +469,22 @@ frontend/src/
 | `/orders/new` | `PlaceOrderForm` | authenticated |
 | `/orders/:id` | `OrderDetail` | authenticated |
 | `/products` | `ProductList` | authenticated |
-| `/products/new` | `CreateProductForm` | authenticated |
+| `/products/new` | `CreateProductForm` | administrator |
 | `/products/:id` | `ProductDetail` | authenticated |
-| `/products/:id/edit` | `EditProductForm` | authenticated |
+| `/products/:id/edit` | `EditProductForm` | administrator |
 | `/notifications` | `NotificationList` | authenticated |
 | `/account/password` | `ChangePasswordPage` | authenticated |
+| `/fulfilment` | `FulfilmentPage` | administrator |
+| `/monitoring` | `MonitoringPage` | administrator |
+| `/monitoring/jobs`, `/logins`, `/traffic`, `/users` | `JobsPage`, `LoginsPage`, `TrafficPage`, `UsersPage` | administrator |
 
 `/products/new` is declared before `/products/:id` so that `new` matches the literal route
 rather than being captured as an id.
 
 `RequireAuth` wraps the layout rather than the other way round, so a signed-out visitor is
-redirected before a header they cannot use is rendered. Server state is TanStack Query; there is
+redirected before a header they cannot use is rendered. `RequireRole allow="Admin"` nests inside
+it for the administrator routes; it only hides UI, and the API's policies are what refuse the
+request. Server state is TanStack Query; there is
 no client state library, because there is no client state worth the dependency.
 
 ```bash
@@ -491,9 +512,10 @@ ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Usern
 npm run generate:api --prefix frontend
 ```
 
-Generation runs the whole application, which is why both environment variables are required: the
-startup guard rejects an empty connection string, and a durable Wolverine dials PostgreSQL. The
-connection string is never actually opened. It is an explicit MSBuild target rather than part of
+Generation runs the whole application, which is why all three environment variables are required:
+the startup guard rejects an empty connection string, a durable Wolverine dials PostgreSQL, and so
+does the startup administrator reconciler. The connection string is never actually opened, and no
+broker is needed — RabbitMQ is configured only when Wolverine is durable. It is an explicit MSBuild target rather than part of
 `dotnet build`, so that an ordinary build stays ordinary.
 
 **Wolverine handler adapters — there are TWO trees, not one.** Wolverine builds its adapters
@@ -525,7 +547,7 @@ refused even if you delete the file first.
 ## Testing
 
 ```bash
-dotnet test                          # five projects, ~95 test files
+dotnet test                          # five projects; needs Docker for Postgres and RabbitMQ
 npm test --prefix frontend -- --run  # Vitest
 npm run e2e --prefix frontend        # Playwright
 ```
@@ -539,12 +561,13 @@ is not installed rather than reporting a false pass.
 | `Domain.Tests` | Invariants and domain events, no infrastructure |
 | `Application.Tests` | Handlers against substituted ports; architecture tests |
 | `Infrastructure.Tests` | Repositories, outbox, caching, against real PostgreSQL via Testcontainers |
-| `Api.IntegrationTests` | The real pipeline through `WebApplicationFactory` |
-| `Worker.IntegrationTests` | Job delivery, Quartz scheduling, and the worker's own codegen |
+| `Api.IntegrationTests` | The real pipeline through `WebApplicationFactory`, including authorization policies |
+| `Worker.IntegrationTests` | Job delivery, Quartz scheduling, inbound shipments, and the worker's own codegen |
 | `frontend/src/**/*.test.tsx` | Components and hooks, with MSW standing in for the API |
-| `frontend/e2e/*.spec.ts` | Browser journeys against a built preview bundle |
+| `frontend/e2e/specs/**/*.spec.ts` | Browser journeys against a built preview bundle, the worker and a real broker |
 
-Testcontainers needs a running Docker daemon. The caching behavior, the rate limiter, and the
+Testcontainers needs a running Docker daemon; both integration projects start a RabbitMQ
+container beside Postgres, because a durable host cannot boot without a broker. The caching behavior, the rate limiter, and the
 resilience pipeline's retries are all disabled by default under test and re-enabled by the
 specific suites that exercise them, so that none becomes an intermittent failure — or a source
 of backoff delay — in tests that are not about them.
@@ -567,7 +590,11 @@ pull request:
 | `generated code is current` | Re-runs `codegen write` for **both** trees and fails on any diff |
 | `api contract is current` | Regenerates the OpenAPI document and the TypeScript schema, and fails on any diff |
 | `frontend` | Lint, build, and Vitest |
-| `e2e` | Playwright, gated behind the fast jobs |
+| `e2e / e2e` | Playwright against the full stack, gated behind `backend` and `frontend`; also runnable by hand from the Actions tab |
+| `pr title and labels` | From `pr-labels.yml`: the title is a Conventional Commit, and the PR is labelled from it and the files changed |
+
+Every one of these must pass before a pull request can merge into `main`. The branch ruleset
+requires them **by name**, so renaming a job means updating the ruleset in the same change.
 
 Release is a separate matrix leg rather than an afterthought: Release was broken in this
 repository for the whole life of the Wolverine spike without anyone noticing, because
@@ -632,7 +659,15 @@ All accepted, in [`docs/adr/`](docs/adr/).
 | [0017](docs/adr/0017-quartz-as-the-job-clock.md) | Quartz.NET as the job clock |
 | [0018](docs/adr/0018-load-balancing-within-the-affinity-constraint.md) | Load balancing within the affinity constraint |
 | [0019](docs/adr/0019-realtime-notifications-over-signalr.md) | Realtime notifications over SignalR, with a Redis backplane |
+| [0020](docs/adr/0020-an-administrator-role.md) | An administrator role |
+| [0021](docs/adr/0021-operational-telemetry-in-postgres.md) | Operational telemetry in Postgres |
+| [0022](docs/adr/0022-configuration-seeds-the-administrator-list.md) | Configuration seeds the administrator list, rather than mirroring it |
+| [0023](docs/adr/0023-the-e2e-stack-starts-the-job-worker.md) | The e2e stack starts the job worker |
+| [0024](docs/adr/0024-capability-policies-and-operator-fulfilment.md) | Capability-named policies, and the operator ships |
+| [0025](docs/adr/0025-the-catalogue-is-managed-by-administrators.md) | The catalogue is managed by administrators |
 | [0026](docs/adr/0026-rabbitmq-for-asynchronous-work.md) | RabbitMQ is the broker for all asynchronous work |
+| [0027](docs/adr/0027-opentelemetry-metrics-beside-operational-telemetry.md) | OpenTelemetry metrics beside operational telemetry |
+| [0028](docs/adr/0028-the-outbox-is-delivered-only-where-the-push-transport-lives.md) | The outbox is delivered only where the push transport lives |
 
 Record a new one with `/adr <title>`. **Check the open branches as well as `docs/adr/` before
 taking a number** — two branches that each take "the next one" produce a duplicate, which has

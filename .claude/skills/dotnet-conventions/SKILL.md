@@ -26,7 +26,8 @@ This is the easiest rule in the repo to get backwards.
 | Layer | Use | Never |
 |---|---|---|
 | `Domain` | C# `required` keyword, non-nullable types, private setters | `[Required]`, `[MaxLength]`, any DataAnnotations |
-| `Api` DTOs | `required` + `init`, FluentValidation | business logic |
+| `Api` DTOs | `required` + `init`; DataAnnotations only for HTTP shape | business logic, a rule a validator owns |
+| `Application` commands | a FluentValidation validator, registered in `AddMessaging()` | — |
 | `Infrastructure` | `IEntityTypeConfiguration<T>` for constraints | annotations on Domain types |
 
 ```csharp
@@ -51,22 +52,27 @@ The dependency-rule hook blocks `System.ComponentModel.DataAnnotations` in `Doma
 
 ## Exception handling
 
-Hierarchy:
+**Not-found, conflict and validation are not exceptions here** — they are a failed `Result<T>`
+with an `ErrorKind`. Exceptions are only for a broken domain invariant:
 
 ```csharp
-public abstract class DomainException(string message) : Exception(message);
-public sealed class NotFoundException(string message)   : DomainException(message);
-public sealed class ConflictException(string message)   : DomainException(message);
-public sealed class ValidationException(string message) : DomainException(message);
+public class DomainException : Exception;              // src/Domain — any broken invariant → 400
+public class OrderStateException : DomainException;    // an illegal transition (ship twice, cancel shipped)
 ```
 
-Analyzer-enforced as errors — CA1031 and CA2200, globally, with no per-file exemption:
+A subtype exists only when one call can fail two ways that need different statuses:
+`Order.Cancel` throws `OrderStateException` for "already shipped" and a plain `DomainException` for
+a bad reason, and `CancelOrderHandler` catches the former and returns `ErrorKind.Conflict` (409).
+Do not add `NotFoundException`/`ConflictException`; return the `Result`.
+
+Analyzer-enforced as errors — CA1031 and CA2200:
 
 - **Do not write `catch (Exception)` anywhere.** `IExceptionHandler.TryHandleAsync` receives the
   exception as a parameter, so the global handler needs no catch block of its own. If some other
   code genuinely requires one — a long-running background loop, say — it needs an explicit
-  `#pragma warning disable CA1031` with a comment justifying it. CA1031 is `error` in
-  `.editorconfig` with no scoping, so an unsuppressed one fails the build wherever it appears.
+  `#pragma warning disable CA1031` with a comment justifying it (`NotificationHub` has one).
+  The only file-scoped exemption is `src/Infrastructure/Outbox/OutboxHostedServices.cs` in
+  `.editorconfig`, reasoned there; do not add another.
 - `throw;` never `throw ex;` — the second erases the stack trace. CA2200.
 
 Also analyzer-enforced, via SonarAnalyzer (active since 2026-08-28):
@@ -82,9 +88,11 @@ Enforced by review, not by any analyzer:
   not found" during a lookup is expected. A database being unreachable is not. No Roslyn rule
   can judge which is which.
 
-At the Api boundary, one `IExceptionHandler` maps the hierarchy to RFC 9457 `ProblemDetails`:
-`ValidationException` → 400, `NotFoundException` → 404, `ConflictException` → 409, everything
-else → 500, logged, message not leaked to the client.
+At the Api boundary, two paths produce RFC 9457 `ProblemDetails` (`src/Api/CLAUDE.md` has both
+tables). `ResultExtensions.Problem` maps a failed `Result`'s `ErrorKind`: `Validation` → 400,
+`Unauthorized` → 401, `NotFound` → 404, `Conflict` → 409, `Unavailable` → 503 with `Retry-After`.
+`GlobalExceptionHandler` maps a thrown `DomainException` → 400, and everything else → 500,
+logged, message not leaked to the client.
 
 ## EF Core
 

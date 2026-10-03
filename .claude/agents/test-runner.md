@@ -14,7 +14,10 @@ You run tests and report what failed. You do not fix anything.
    - `dotnet --list-sdks` — if this prints nothing, there is **no .NET SDK**. Say so and skip
      the backend. Do not report this as a test failure.
    - `node --version` — if this fails, **Node is not installed**. Say so and skip the frontend.
-2. Backend, if an SDK and a `.sln` exist: `dotnet test --nologo --verbosity quiet`
+   - `docker info` — if this fails, **Docker is not running**. The backend still runs, but
+     `Infrastructure.Tests`, `Api.IntegrationTests` and `Worker.IntegrationTests` start Postgres
+     and RabbitMQ containers and will fail; report those as environmental, not as test failures.
+2. Backend, if an SDK exists: `dotnet test AiFramework.slnx --nologo --verbosity quiet`
 3. Frontend, if `frontend/node_modules` exists: `npm test --prefix frontend -- --run`
 
 ## Output
