@@ -238,18 +238,21 @@ same workflow runs by hand from the Actions tab, with optional `grep` and `repea
 `e2e / e2e`, and `pr title and labels` from `.github/workflows/pr-labels.yml`. Renaming a job, or adding a path filter to the `pull_request` trigger, leaves a
 required check that never reports, and every PR blocks — update the ruleset in the same change.
 
-**Every PR gets one test-and-coverage comment**, from `.github/workflows/pr-report.yml`: every
-suite's counts (flaky e2e tests included), the failed tests by name, and backend and frontend
-coverage against main. It is report only and is **not** a required check. The CI jobs upload TRX
-files, Vitest's and Playwright's JSON, ReportGenerator's summary and Vitest's coverage summary as
-artifacts, and `.github/scripts/pr-report.js` turns them into the comment. That script is tested by
-`node --test ".github/scripts/*.test.js"` in the `frontend` job. Two things fail silently:
+**Every PR gets one test-and-coverage comment**, from `ci.yml`'s last job, `test report`: every
+suite's results (flaky e2e tests included), the failed tests by name, and backend and frontend
+line, branch and method coverage against main. It is report only and is **not** a required check.
+The jobs above it upload TRX files, Vitest's and Playwright's JSON, ReportGenerator's summary and
+Vitest's coverage summary as artifacts, and `.github/scripts/pr-report.js` turns them into the
+comment. That script is tested by `node --test ".github/scripts/*.test.js"` in the `frontend` job.
+Two things fail silently:
 
 - **Every reporting step is `continue-on-error`.** A broken report shows up as "not run" or "not
   measured" in the comment and never turns a required check red. Keep any new upload step the same.
-- **`pr-report.yml` runs from `main` only** (`workflow_run`, which also gives Dependabot's PRs
-  a write token), so editing it changes nothing until it merges. Check it afterwards with
-  *Actions → PR report → Run workflow* and a CI run's id. Renaming an artifact needs the matching
-  folder name changed in `collect()` too.
+- **Renaming an artifact** silently turns its suite into "not run": `collect()` in the script
+  finds each one by its folder name.
+
+`test report` is the only job with write permissions (`pull-requests: write`). That raises the
+read-only token Dependabot's PRs get by default. A PR from a fork stays read-only whatever the
+workflow asks for, so it gets no comment, but the report is still in the job summary.
 
 Design rationale for this setup: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`

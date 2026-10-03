@@ -305,13 +305,19 @@ test('parsePlaywright counts a run-level error, such as a failed global setup, a
   );
 });
 
-test('backendCoverage reads line and branch coverage, total and per assembly', () => {
+test('backendCoverage reads line, branch and method coverage, total and per assembly', () => {
   const result = backendCoverage({
-    summary: { linecoverage: 84.1, branchcoverage: 71, coveredlines: 841, coverablelines: 1000 },
+    summary: {
+      linecoverage: 84.1,
+      branchcoverage: 71,
+      methodcoverage: 90,
+      coveredlines: 841,
+      coverablelines: 1000,
+    },
     coverage: {
       assemblies: [
-        { name: 'AiFramework.Domain', coverage: 96.1, branchcoverage: 100 },
-        { name: 'AiFramework.Api', coverage: 80.25, branchcoverage: null },
+        { name: 'AiFramework.Domain', coverage: 96.1, branchcoverage: 100, methodcoverage: 93.4 },
+        { name: 'AiFramework.Api', coverage: 80.25, branchcoverage: null, methodcoverage: 75 },
       ],
     },
   });
@@ -319,22 +325,33 @@ test('backendCoverage reads line and branch coverage, total and per assembly', (
   assert.deepEqual(result, {
     lines: 84.1,
     branches: 71,
+    methods: 90,
+    coveredLines: 841,
+    coverableLines: 1000,
     parts: [
-      { name: 'AiFramework.Api', lines: 80.25, branches: null },
-      { name: 'AiFramework.Domain', lines: 96.1, branches: 100 },
+      { name: 'AiFramework.Api', lines: 80.25, branches: null, methods: 75 },
+      { name: 'AiFramework.Domain', lines: 96.1, branches: 100, methods: 93.4 },
     ],
   });
 });
 
-test('frontendCoverage reads the total line and branch percentages', () => {
+test('frontendCoverage reads lines, branches and functions as methods', () => {
   const result = frontendCoverage({
     total: {
       lines: { total: 200, covered: 157, skipped: 0, pct: 78.5 },
       branches: { total: 100, covered: 66, skipped: 0, pct: 66.2 },
+      functions: { total: 50, covered: 40, skipped: 0, pct: 80 },
     },
   });
 
-  assert.deepEqual(result, { lines: 78.5, branches: 66.2, parts: [] });
+  assert.deepEqual(result, {
+    lines: 78.5,
+    branches: 66.2,
+    methods: 80,
+    coveredLines: 157,
+    coverableLines: 200,
+    parts: [],
+  });
 });
 
 test('escapeCell keeps untrusted test names from becoming markup, mentions or table breaks', () => {
@@ -360,7 +377,7 @@ const passing = {
   failures: [],
   flakyTests: [],
 };
-const meta = { sha: 'abc1234def', runUrl: 'https://github.com/o/r/actions/runs/1', runNumber: 412 };
+const meta = { sha: 'abc1234def', runUrl: 'https://github.com/o/r/actions/runs/1' };
 
 function suites(overrides = {}) {
   return {
@@ -376,14 +393,18 @@ test('render starts with the marker the workflow finds its own comment by', () =
   assert.ok(render({ suites: suites(), coverage: {}, baseline: null, meta }).startsWith(MARKER));
 });
 
-test('render says all passed when every suite ran and none failed', () => {
+test('render gives each suite that passed a tick, its counts, total and duration', () => {
   const md = render({ suites: suites(), coverage: {}, baseline: null, meta });
 
-  assert.match(md, /## Tests — ✅ all passed/);
-  assert.match(md, /\| Backend \(Debug\) \| 10 \| 0 \| 1 \| – \| 2m 10s \|/);
+  assert.match(md, /## Test results/);
+  assert.match(
+    md,
+    /\| Suite \| Result \| Passed \| Failed \| Skipped \| Total \| Duration \|\n\|---\|---\|--:\|--:\|--:\|--:\|--:\|/,
+  );
+  assert.match(md, /\| Backend \(Debug\) \| ✅ \| 10 \| 0 \| 1 \| 11 \| 2m 10s \|/);
 });
 
-test('render leads with the failure count when any suite failed', () => {
+test('render marks a suite with failures and lists them', () => {
   const failing = {
     ...passing,
     failed: 2,
@@ -400,12 +421,24 @@ test('render leads with the failure count when any suite failed', () => {
     meta,
   });
 
-  assert.match(md, /## Tests — ❌ 2 failed/);
+  assert.match(md, /\| Frontend \(Vitest\) \| ❌ \| 10 \| 2 \| 1 \| 13 \|/);
   assert.match(md, /<summary>Failed tests \(2\)<\/summary>/);
   assert.match(md, /\| Frontend \(Vitest\) \| A\.B\.C \| boom \|/);
 });
 
-test('render shows a suite with no results as not run, and never claims all passed', () => {
+test('render counts a test that passed on retry as passed, and says so in the result', () => {
+  const md = render({
+    suites: suites({ 'E2E (Playwright)': { ...passing, flaky: 1, flakyTests: ['a › b'] } }),
+    coverage: {},
+    baseline: null,
+    meta,
+  });
+
+  assert.match(md, /\| E2E \(Playwright\) \| ✅ 1 flaky \| 11 \| 0 \| 1 \| 12 \|/);
+  assert.match(md, /<summary>Passed only on retry \(1\)<\/summary>/);
+});
+
+test('render shows a suite with no results as not run, never as passed', () => {
   const md = render({
     suites: suites({ 'E2E (Playwright)': null }),
     coverage: {},
@@ -413,8 +446,22 @@ test('render shows a suite with no results as not run, and never claims all pass
     meta,
   });
 
-  assert.match(md, /\| E2E \(Playwright\) \| not run \|/);
-  assert.match(md, /## Tests — ⚠️ 1 suite not run/);
+  assert.match(md, /\| E2E \(Playwright\) \| ⏭️ not run \| \| \| \| \| \|/);
+});
+
+test('render pads the seconds of a duration over a minute', () => {
+  const md = render({
+    suites: suites({
+      'Backend (Debug)': { ...passing, durationMs: 61_000 },
+      'Frontend (Vitest)': { ...passing, durationMs: 2_000 },
+    }),
+    coverage: {},
+    baseline: null,
+    meta,
+  });
+
+  assert.match(md, /\| Backend \(Debug\) \| ✅ \| 10 \| 0 \| 1 \| 11 \| 1m 01s \|/);
+  assert.match(md, /\| Frontend \(Vitest\) \| ✅ \| 10 \| 0 \| 1 \| 11 \| 2s \|/);
 });
 
 test('render caps the failed-test list and says how many it left out', () => {
@@ -431,41 +478,67 @@ test('render caps the failed-test list and says how many it left out', () => {
   assert.match(md, /…and 10 more/);
 });
 
-test('render compares line coverage against main', () => {
+const backend = {
+  lines: 84.13,
+  branches: 71,
+  methods: 90,
+  coveredLines: 4_772,
+  coverableLines: 5_672,
+  parts: [{ name: 'AiFramework.Api', lines: 80.26, branches: null, methods: 75 }],
+};
+const frontend = {
+  lines: 78.5,
+  branches: 66.2,
+  methods: 80,
+  coveredLines: 157,
+  coverableLines: 200,
+  parts: [],
+};
+
+test("render summarises each side's coverage on one line, compared against main", () => {
   const md = render({
     suites: suites(),
-    coverage: {
-      backend: { lines: 84.13, branches: 71, parts: [] },
-      frontend: { lines: 78.5, branches: 66.2, parts: [] },
-    },
-    baseline: {
-      backend: { lines: 83.8, branches: 70, parts: [] },
-      frontend: { lines: 78.6, branches: 66, parts: [] },
-    },
+    coverage: { backend, frontend },
+    baseline: { backend: { ...backend, lines: 83.8 }, frontend: { ...frontend, lines: 78.6 } },
     meta,
   });
 
-  assert.match(md, /\| Backend \| 84\.1 % \| 71\.0 % \| \+0\.3 \|/);
-  assert.match(md, /\| Frontend \| 78\.5 % \| 66\.2 % \| −0\.1 \|/);
+  assert.match(md, /### Coverage/);
+  assert.match(
+    md,
+    /\*\*Backend\*\* — \*\*Line 84\.1%\*\* \(4,772 of 5,672 lines, \+0\.3 vs main\) · \*\*Branch 71\.0%\*\* · \*\*Method 90\.0%\*\*/,
+  );
+  assert.match(
+    md,
+    /\*\*Frontend\*\* — \*\*Line 78\.5%\*\* \(157 of 200 lines, −0\.1 vs main\) · \*\*Branch 66\.2%\*\* · \*\*Method 80\.0%\*\*/,
+  );
 });
 
-test('render shows no comparison when main has no baseline yet', () => {
-  const md = render({
-    suites: suites(),
-    coverage: { backend: { lines: 84.1, branches: null, parts: [] } },
-    baseline: null,
-    meta,
-  });
+test('render leaves out the comparison when main has no baseline yet', () => {
+  const md = render({ suites: suites(), coverage: { backend }, baseline: null, meta });
 
-  assert.match(md, /\| Backend \| 84\.1 % \| – \| – \|/);
-  assert.match(md, /\| Frontend \| not measured \|/);
+  assert.match(md, /\*\*Line 84\.1%\*\* \(4,772 of 5,672 lines\) ·/);
+  assert.match(md, /\*\*Frontend\*\* — not measured/);
 });
 
-test('render links the commit and the run', () => {
+test('render breaks backend coverage down per assembly, folded away', () => {
+  const md = render({ suites: suites(), coverage: { backend }, baseline: null, meta });
+
+  assert.match(
+    md,
+    /<details><summary>Backend coverage per assembly \(unit \+ integration merged\)<\/summary>/,
+  );
+  assert.match(md, /\| Assembly \| Line \| Branch \| Method \|\n\|---\|--:\|--:\|--:\|/);
+  assert.match(md, /\| AiFramework\.Api \| 80\.3% \| – \| 75\.0% \|/);
+});
+
+test('render ends with the commit and the run, in small print', () => {
   const md = render({ suites: suites(), coverage: {}, baseline: null, meta });
 
-  assert.match(md, /`abc1234`/);
-  assert.match(md, /\[run #412\]\(https:\/\/github\.com\/o\/r\/actions\/runs\/1\)/);
+  assert.match(
+    md,
+    /<sub>Commit `abc1234` · \[workflow run\]\(https:\/\/github\.com\/o\/r\/actions\/runs\/1\) · TRX, JSON and Cobertura files are attached to the run as artifacts\.<\/sub>$/,
+  );
 });
 
 test('collect reads every artifact it finds and leaves the rest as not run', () => {
@@ -488,7 +561,13 @@ test('collect reads every artifact it finds and leaves the rest as not run', () 
   write('test-results-frontend/vitest.json', vitestReport);
   write('test-results-e2e/e2e-results.json', playwrightReport);
   write('coverage-backend/Summary.json', {
-    summary: { linecoverage: 80, branchcoverage: 60 },
+    summary: {
+      linecoverage: 80,
+      branchcoverage: 60,
+      methodcoverage: 70,
+      coveredlines: 8,
+      coverablelines: 10,
+    },
     coverage: { assemblies: [] },
   });
 
@@ -499,7 +578,14 @@ test('collect reads every artifact it finds and leaves the rest as not run', () 
   assert.equal(result.suites['Frontend (Vitest)'].failed, 2);
   assert.equal(result.suites['E2E (Playwright)'].flaky, 1);
   assert.deepEqual(result.coverage, {
-    backend: { lines: 80, branches: 60, parts: [] },
+    backend: {
+      lines: 80,
+      branches: 60,
+      methods: 70,
+      coveredLines: 8,
+      coverableLines: 10,
+      parts: [],
+    },
     frontend: null,
   });
 });

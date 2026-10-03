@@ -111,7 +111,7 @@ jobs:
           path: frontend/playwright-report/
           retention-days: 7
 
-      # The counts the PR report (pr-report.yml) shows, flaky tests included. Like the backend and
+      # The counts ci.yml's test-report job shows, flaky tests included. Like the backend and
       # frontend jobs' uploads, it never fails this required check on its own.
       - name: Upload test results
         if: ${{ !cancelled() }}

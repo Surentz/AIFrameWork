@@ -1,11 +1,11 @@
-// The PR comment behind .github/workflows/pr-report.yml: every test suite's results and both
-// coverage numbers, built from the artifacts a CI run uploaded. Kept apart from the workflow so it
-// can be tested (`node --test ".github/scripts/*.test.js"`) and run locally against a downloaded
-// run: `node .github/scripts/pr-report.js <artifacts-dir> [baseline-artifacts-dir]`.
+// The PR comment that ci.yml's test-report job posts: every test suite's results and both coverage
+// numbers, built from the artifacts the run's jobs uploaded. Kept apart from the workflow so it can
+// be tested (`node --test ".github/scripts/*.test.js"`) and run locally against a downloaded run:
+// `gh run download <run-id> --dir runs/x`, then
+// `node .github/scripts/pr-report.js runs/x [baseline-artifacts-dir]`.
 //
-// Everything read here was produced by the pull request's own code, so it is untrusted: it is only
-// ever parsed as data, and anything that reaches the comment goes through escapeCell. The workflow
-// runs this with a read-only token; a separate job posts the result.
+// Test names and messages come from whatever the tests printed, so anything that reaches the
+// comment goes through escapeCell: it can neither break the markdown nor @-mention anyone.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -182,15 +182,31 @@ function backendCoverage(summary) {
   return {
     lines: summary.summary.linecoverage,
     branches: summary.summary.branchcoverage ?? null,
+    methods: summary.summary.methodcoverage ?? null,
+    coveredLines: summary.summary.coveredlines,
+    coverableLines: summary.summary.coverablelines,
     parts: summary.coverage.assemblies
-      .map((a) => ({ name: a.name, lines: a.coverage, branches: a.branchcoverage ?? null }))
+      .map((a) => ({
+        name: a.name,
+        lines: a.coverage,
+        branches: a.branchcoverage ?? null,
+        methods: a.methodcoverage ?? null,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
-// Vitest's (istanbul's) json-summary.
+// Vitest's (istanbul's) json-summary. Istanbul's "functions" is the nearest thing to a method.
 function frontendCoverage(summary) {
-  return { lines: summary.total.lines.pct, branches: summary.total.branches.pct, parts: [] };
+  const { lines, branches, functions } = summary.total;
+  return {
+    lines: lines.pct,
+    branches: branches.pct,
+    methods: functions.pct,
+    coveredLines: lines.covered,
+    coverableLines: lines.total,
+    parts: [],
+  };
 }
 
 // --- Rendering ----------------------------------------------------------------------------------
@@ -214,17 +230,21 @@ function duration(ms) {
     return '–';
   }
   const seconds = Math.round(ms / 1000);
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
 }
 
 function percent(value) {
-  return value === null || value === undefined ? '–' : `${value.toFixed(1)} %`;
+  return value === null || value === undefined ? '–' : `${value.toFixed(1)}%`;
+}
+
+function count(value) {
+  return value.toLocaleString('en-US');
 }
 
 function delta(current, baseline) {
-  if (baseline === null || baseline === undefined) {
-    return '–';
-  }
   const change = Math.round((current - baseline) * 10) / 10;
   if (change === 0) {
     return '±0.0';
@@ -232,36 +252,46 @@ function delta(current, baseline) {
   return change > 0 ? `+${change.toFixed(1)}` : `−${Math.abs(change).toFixed(1)}`;
 }
 
-function headline(results) {
-  const failed = results.reduce((sum, r) => sum + (r?.failed ?? 0), 0);
-  const notRun = results.filter((r) => r === null).length;
-  const notRunText = `${notRun} ${notRun === 1 ? 'suite' : 'suites'} not run`;
-  if (failed > 0) {
-    return `❌ ${failed} failed${notRun ? `, ${notRunText}` : ''}`;
+// A flaky test failed and then passed on retry, so it counts as passed - but the Result cell says
+// so, because a test that needs a retry is a test that will one day need two.
+function resultCell(r) {
+  if (r.failed > 0) {
+    return '❌';
   }
-  if (notRun > 0) {
-    return `⚠️ ${notRunText}`;
+  return r.flaky > 0 ? `✅ ${r.flaky} flaky` : '✅';
+}
+
+function coverageLine(label, c, base) {
+  if (!c) {
+    return `**${label}** — not measured`;
   }
-  return '✅ all passed';
+  const vsMain = base ? `, ${delta(c.lines, base.lines)} vs main` : '';
+  return (
+    `**${label}** — **Line ${percent(c.lines)}** ` +
+    `(${count(c.coveredLines)} of ${count(c.coverableLines)} lines${vsMain}) · ` +
+    `**Branch ${percent(c.branches)}** · **Method ${percent(c.methods)}**`
+  );
 }
 
 function render({ suites, coverage, baseline, meta }) {
   const results = SUITES.map((name) => suites[name] ?? null);
   const lines = [
     MARKER,
-    `## Tests — ${headline(results)}`,
+    '## Test results',
     '',
-    `\`${meta.sha.slice(0, 7)}\` · [run #${meta.runNumber}](${meta.runUrl})`,
-    '',
-    '| Suite | Passed | Failed | Skipped | Flaky | Time |',
-    '|---|---:|---:|---:|---:|---:|',
+    '| Suite | Result | Passed | Failed | Skipped | Total | Duration |',
+    '|---|---|--:|--:|--:|--:|--:|',
   ];
   SUITES.forEach((name, i) => {
     const r = results[i];
+    if (r === null) {
+      lines.push(`| ${name} | ⏭️ not run | | | | | |`);
+      return;
+    }
+    const passed = r.passed + r.flaky;
+    const total = passed + r.failed + r.skipped;
     lines.push(
-      r === null
-        ? `| ${name} | not run | | | | |`
-        : `| ${name} | ${r.passed} | ${r.failed} | ${r.skipped} | ${r.flaky || '–'} | ${duration(r.durationMs)} |`,
+      `| ${name} | ${resultCell(r)} | ${count(passed)} | ${count(r.failed)} | ${count(r.skipped)} | ${count(total)} | ${duration(r.durationMs)} |`,
     );
   });
 
@@ -297,48 +327,43 @@ function render({ suites, coverage, baseline, meta }) {
     lines.push('', '</details>');
   }
 
+  // Two paragraphs rather than one table: each side is one line of headline numbers.
   lines.push(
     '',
-    '## Coverage — unit and integration tests, Debug',
+    '### Coverage',
     '',
-    '| | Lines | Branches | Lines vs main |',
-    '|---|---:|---:|---:|',
+    coverageLine('Backend', coverage.backend, baseline?.backend),
+    '',
+    coverageLine('Frontend', coverage.frontend, baseline?.frontend),
   );
-  for (const [key, label] of [
-    ['backend', 'Backend'],
-    ['frontend', 'Frontend'],
-  ]) {
-    const c = coverage[key];
-    lines.push(
-      c
-        ? `| ${label} | ${percent(c.lines)} | ${percent(c.branches)} | ${delta(c.lines, baseline?.[key]?.lines)} |`
-        : `| ${label} | not measured | | |`,
-    );
-  }
 
   const parts = coverage.backend?.parts ?? [];
   if (parts.length > 0) {
     lines.push(
       '',
-      '<details><summary>Backend by assembly</summary>',
+      '<details><summary>Backend coverage per assembly (unit + integration merged)</summary>',
       '',
-      '| Assembly | Lines | Branches |',
-      '|---|---:|---:|',
+      '| Assembly | Line | Branch | Method |',
+      '|---|--:|--:|--:|',
     );
     for (const p of parts) {
-      lines.push(`| ${escapeCell(p.name)} | ${percent(p.lines)} | ${percent(p.branches)} |`);
+      lines.push(
+        `| ${escapeCell(p.name)} | ${percent(p.lines)} | ${percent(p.branches)} | ${percent(p.methods)} |`,
+      );
     }
     lines.push('', '</details>');
   }
-  lines.push(
-    '',
-    `The full HTML coverage report is the \`coverage-backend\` artifact of [run #${meta.runNumber}](${meta.runUrl}).`,
-  );
 
+  const footer =
+    `<sub>Commit \`${meta.sha.slice(0, 7)}\` · [workflow run](${meta.runUrl}) · ` +
+    'TRX, JSON and Cobertura files are attached to the run as artifacts.</sub>';
   const body = lines.join('\n');
-  return body.length > MAX_BODY
-    ? `${body.slice(0, MAX_BODY)}\n\n…truncated — see the run for the rest.`
-    : body;
+  // GitHub rejects an over-long comment; cut the body but always keep the footer's run link.
+  const trimmed =
+    body.length > MAX_BODY
+      ? `${body.slice(0, MAX_BODY)}\n\n…truncated — see the run for the rest.`
+      : body;
+  return `${trimmed}\n\n${footer}`;
 }
 
 // --- Reading a downloaded run -------------------------------------------------------------------
@@ -416,7 +441,6 @@ if (require.main === module) {
       meta: {
         sha: process.env.HEAD_SHA ?? 'unknown',
         runUrl: process.env.RUN_URL ?? '',
-        runNumber: process.env.RUN_NUMBER ?? '?',
       },
     }),
   );

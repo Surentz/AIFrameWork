@@ -608,12 +608,15 @@ leg.
 **Every pull request gets one comment with its test results and coverage.** It is edited in place
 on each push, and shows:
 
-- every suite's passed, failed, skipped and flaky counts;
+- a result per suite (✅, ❌, or the number of tests that passed only on retry), with passed,
+  failed, skipped, total and duration;
 - the failed tests by name;
-- backend and frontend line and branch coverage, against main's last green run.
+- backend and frontend line, branch and method coverage, against main's last green run, and the
+  backend per assembly.
 
-[`pr-report.yml`](.github/workflows/pr-report.yml) builds it from the CI run's artifacts once the
-run finishes. It reports and never blocks: it is not a required check. Backend coverage covers unit
+CI's last job, `test report`, builds it from the artifacts the other jobs uploaded, using
+[`pr-report.js`](.github/scripts/pr-report.js). It reports and never blocks: it is not a required
+check. Backend coverage covers unit
 and integration tests together and leaves out generated code (the Wolverine adapters, EF
 migrations). The full HTML report is the `coverage-backend` artifact. To get the same numbers
 locally:
