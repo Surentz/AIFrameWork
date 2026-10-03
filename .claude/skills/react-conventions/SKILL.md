@@ -16,7 +16,7 @@ interface OrderRowProps {
   readonly order: Order;
 }
 
-export function OrderRow({ order }: OrderRowProps): JSX.Element {
+export function OrderRow({ order }: OrderRowProps): React.JSX.Element {
   return <tr><td>{order.sku}</td><td>{order.quantity}</td></tr>;
 }
 ```
@@ -60,8 +60,10 @@ branch is incomplete.
 ## Types
 
 - No `any`. No `!`.
-- Explicit return types on exported functions.
-- Models mirror the Api DTOs; keep them in `<feature>/types.ts`.
+- Explicit return types on exported functions. A component returns `React.JSX.Element` — React
+  19's types no longer declare a global `JSX` namespace.
+- Models are aliases over the generated `src/api/schema.d.ts`, never hand-written restatements of
+  the Api DTOs; keep them in `<feature>/types.ts` (`features/orders/types.ts` is the model).
 
 ## Accessibility
 
