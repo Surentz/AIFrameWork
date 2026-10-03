@@ -37,5 +37,15 @@ export default defineConfig({
     // e2e/specs/ (e.g. e2e/specs/orders/place-order.spec.ts) - Playwright specs, not Vitest
     // ones. Excluding e2e/ keeps the two runners from fighting over the same files.
     exclude: [...configDefaults.exclude, 'e2e/**'],
+    // Off unless asked for (`npm test -- --run --coverage`), which is what CI's frontend job does
+    // for the PR report. Measured over the app's own source only: the generated API schema and the
+    // test helpers would otherwise count as code the tests are supposed to cover.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/api/schema.d.ts', 'src/**/*.d.ts'],
+      reporter: ['text-summary', 'json-summary', 'html'],
+      reportsDirectory: 'coverage',
+    },
   },
 });

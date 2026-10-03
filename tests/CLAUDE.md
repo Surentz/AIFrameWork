@@ -86,6 +86,16 @@ deterministically, with no waiting — not "one poll cycle runs." It does not ex
 hop (`ChannelWriter`/`ChannelReader`), backpressure, or `WorkerCount` parallelism; those are
 `Infrastructure.Tests/Outbox/OutboxRegistrationTests.cs`'s job instead.
 
+## Coverage
+
+`tests/coverage.runsettings` is the one definition of backend coverage, used by CI's
+`backend (Debug)` leg for the PR report and runnable locally (the command is in its header). Each
+test project writes its own Cobertura file and ReportGenerator merges them, so a line counts as
+covered if a unit **or** an integration test ran it. It leaves out the generated Wolverine
+adapters and the EF migrations, so a regenerated adapter or a new migration never moves the
+number. Code that is excluded on purpose takes `[ExcludeFromCodeCoverage]` with a reason, not a
+new pattern in the runsettings.
+
 ## Rules
 
 - Name tests `MethodName_Scenario_ExpectedOutcome`. Architecture and convention tests

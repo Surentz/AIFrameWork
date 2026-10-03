@@ -1,0 +1,189 @@
+# One comment on every pull request with each test suite's results and both coverage numbers,
+# built from the artifacts the CI run uploaded, and edited in place on every push. Report only:
+# nothing here is a required check, and nothing here can turn one red.
+#
+# Why a workflow of its own, on workflow_run, rather than a step in ci.yml: ci.yml runs on
+# pull_request, where Dependabot's PRs (about half of all PRs here) get a read-only token, so a
+# comment step there would fail on them. workflow_run runs from main with this file's permissions,
+# whoever opened the PR. The price is that GitHub only ever runs it from the default branch: a
+# change to this file takes effect once it has merged, and the manual trigger below is how to check
+# it then.
+#
+# Nothing from the pull request is checked out or executed. Its artifacts were written by the PR's
+# own code, so they are read as data only: `build` parses them with a read-only token and produces
+# markdown, and `post` - the only job that can write - reads nothing but that markdown.
+name: PR report
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The CI run to report on - the number at the end of its URL.
+        required: true
+        type: string
+
+permissions: {}
+
+# A newer CI run for the same branch supersedes an older one's report.
+concurrency:
+  group: pr-report-${{ github.event.workflow_run.head_branch || inputs.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build the report
+    # A cancelled CI run was superseded by a newer push (ci.yml cancels in progress), which reports
+    # for itself.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.run.outputs.pr }}
+      sha: ${{ steps.run.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # main's copy of the script, never the PR's - the same posture as pr-labels.yml.
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Find the run, its pull request, and main's baseline
+        id: run
+        uses: actions/github-script@v9
+        env:
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: Number(process.env.RUN_ID) });
+
+            core.setOutput('id', String(run.id));
+            core.setOutput('sha', run.head_sha);
+            core.setOutput('url', run.html_url);
+            core.setOutput('number', String(run.run_number));
+
+            // A push to main has no PR to comment on; its report goes to the job summary only.
+            let pr = '';
+            if (run.event === 'pull_request') {
+              pr = run.pull_requests[0]?.number ?? '';
+              if (!pr) {
+                // pull_requests is empty for a PR from a fork; find it by the commit instead.
+                const { data } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner, repo, commit_sha: run.head_sha });
+                pr = data.find((p) => p.state === 'open')?.number ?? '';
+              }
+            }
+            core.setOutput('pr', String(pr));
+
+            // "vs main" compares against the newest green CI run on main. A docs-only push skips CI
+            // (ci.yml's paths-ignore), so this is the last commit that changed anything measured.
+            let baseline = '';
+            if (pr) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: run.workflow_id, branch: 'main', event: 'push',
+                status: 'success', per_page: 1 });
+              baseline = String(data.workflow_runs[0]?.id ?? '');
+            }
+            core.setOutput('baseline', baseline);
+
+      # Each artifact lands in a folder named after it, which is the layout pr-report.js reads. A
+      # job that did not run uploaded nothing, and the report shows that suite as "not run".
+      - name: Download test results
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+          pattern: test-results-*
+          path: artifacts/current
+
+      - name: Download coverage
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+          pattern: coverage-*
+          path: artifacts/current
+
+      - name: Download main's coverage
+        if: steps.run.outputs.baseline != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ steps.run.outputs.baseline }}
+          github-token: ${{ github.token }}
+          pattern: coverage-*
+          path: artifacts/baseline
+
+      - name: Render
+        env:
+          HEAD_SHA: ${{ steps.run.outputs.sha }}
+          RUN_URL: ${{ steps.run.outputs.url }}
+          RUN_NUMBER: ${{ steps.run.outputs.number }}
+        run: |
+          baseline=()
+          if [ -d artifacts/baseline ]; then baseline=(artifacts/baseline); fi
+          node .github/scripts/pr-report.js artifacts/current "${baseline[@]}" > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pr-report
+          path: report.md
+          retention-days: 1
+
+  post:
+    name: post the comment
+    needs: build
+    if: needs.build.outputs.pr != ''
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: pr-report
+
+      - uses: actions/github-script@v9
+        env:
+          PR: ${{ needs.build.outputs.pr }}
+          SHA: ${{ needs.build.outputs.sha }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            // Must match MARKER in .github/scripts/pr-report.js: it is how the comment is found.
+            const MARKER = '<!-- pr-test-report -->';
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.PR);
+
+            const body = fs.readFileSync('report.md', 'utf8');
+            if (!body.startsWith(MARKER)) {
+              core.setFailed('report.md does not start with the marker; refusing to post it.');
+              return;
+            }
+
+            // A run that finishes after a newer push must not overwrite the newer run's report.
+            const { data: pull } = await github.rest.pulls.get({ owner, repo, pull_number: issue_number });
+            if (pull.head.sha !== process.env.SHA) {
+              core.notice(`PR #${issue_number} has moved on to ${pull.head.sha}; leaving its comment alone.`);
+              return;
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100 });
+            const mine = comments.find((c) =>
+              c.user?.login === 'github-actions[bot]' && c.body?.startsWith(MARKER));
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

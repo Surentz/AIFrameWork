@@ -79,8 +79,53 @@ jobs:
 
       # Testcontainers needs a Docker daemon; ubuntu-latest runners ship one already running,
       # which is why there is no service container or setup step here.
+      #
+      # Both legs write TRX for the PR report (pr-report.yml). Only Debug collects coverage: one
+      # leg is enough, and optimised Release code maps to source lines less faithfully.
       - name: Test
-        run: dotnet test -c ${{ matrix.configuration }} --no-build
+        env:
+          CONFIGURATION: ${{ matrix.configuration }}
+        run: |
+          args=(--logger trx --results-directory TestResults)
+          if [ "$CONFIGURATION" = Debug ]; then
+            args+=(--settings tests/coverage.runsettings --collect "XPlat Code Coverage")
+          fi
+          dotnet test -c "$CONFIGURATION" --no-build "${args[@]}"
+
+      # Everything from here on feeds the PR report, and runs whether or not the tests passed -
+      # a red run is the one most worth reporting. None of it may turn this required check red on
+      # its own: a reporting fault shows up in the comment as "not run" or "not measured".
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-backend-${{ matrix.configuration }}
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # One Cobertura file per test project, merged so a line counts as covered if any project
+      # ran it. JsonSummary is what the PR report reads; Html is for a person.
+      - name: Merge coverage
+        if: ${{ !cancelled() && matrix.configuration == 'Debug' }}
+        continue-on-error: true
+        run: |
+          dotnet tool restore
+          dotnet reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:coverage-backend -reporttypes:"JsonSummary;Html"
+
+      # Kept 90 days, not 14: a PR's "vs main" column reads the latest main run's copy, and a quiet
+      # main could otherwise outlive its baseline.
+      - name: Upload coverage
+        if: ${{ !cancelled() && matrix.configuration == 'Debug' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-backend
+          path: coverage-backend/
+          if-no-files-found: ignore
+          retention-days: 90
 
   codegen:
     # The failure this job exists for is invisible everywhere else: generated code that no
@@ -224,7 +269,36 @@ jobs:
       - run: npm run build --prefix frontend
 
       # --run because `npm test` is bare `vitest`, which otherwise sits in watch mode forever.
-      - run: npm test --prefix frontend -- --run
+      # --coverage and the json reporter feed the PR report; the default reporter keeps the log
+      # readable. The coverage settings live in vite.config.ts.
+      - run: >-
+          npm test --prefix frontend -- --run --coverage
+          --reporter=default --reporter=json --outputFile.json=test-results/vitest.json
+
+      # The PR report's own parser. Here because this is the job with Node; it needs no install.
+      - name: Test the PR report script
+        run: node --test ".github/scripts/*.test.js"
+
+      # As in the backend job: feeds the PR report, runs on red, and never fails this check.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-frontend
+          path: frontend/test-results/vitest.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-frontend
+          path: frontend/coverage/
+          if-no-files-found: ignore
+          retention-days: 90
 
   e2e:
     # Gated behind the fast jobs: e2e is by far the slowest and the most environmentally
