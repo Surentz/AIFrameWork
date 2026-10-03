@@ -125,9 +125,9 @@ no caller and no arguments, so a job needing an owner is enqueued, never schedul
 - **Never start a scheduler in the API.** `ApiHasNoSchedulerTests` keeps it that way.
 - **Quartz's tables live in the `quartz` schema, created by an EF migration.** A Quartz upgrade
   that changes its schema is a new migration.
-- **Every node needs its own instance id.** With clustering on and nothing configured, Quartz 4.1
-  names every node `NON_CLUSTERED` and two pods look like one. `ProcessInstanceIdGenerator`
-  supplies one, because the built-in generators are `internal`.
+- **Every node needs its own instance id.** With clustering on and nothing configured, Quartz 4
+  (still so in 4.2.1) names every node `NON_CLUSTERED` and two pods look like one.
+  `ProcessInstanceIdGenerator` supplies one, because the built-in generators are `internal`.
 - **The last build to start wins.** An old-build pod restarting mid-rollout re-syncs the store to
   *its* schedules. If a schedule is wrong after a rollout, restart a worker.
 

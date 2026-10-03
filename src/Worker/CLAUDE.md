@@ -137,8 +137,8 @@ scheduler over the `quartz` schema. The API registers no Quartz at all, and
   it stays that way until a new-build worker starts. If a schedule is missing or wrong after a
   rollout, restart a worker. ADR 0017.
 - **Every node needs its own instance id.** `ProcessInstanceIdGenerator` supplies one; with
-  clustering on and no generator configured, Quartz 4.1 names every node `NON_CLUSTERED` and two
-  pods look like one. `SchedulingTests` asserts both halves.
+  clustering on and no generator configured, Quartz 4 (still so in 4.2.1) names every node
+  `NON_CLUSTERED` and two pods look like one. `SchedulingTests` asserts both halves.
 - **`SchemaProvisioning.Validate` means a missing migration stops the worker.** If the worker
   refuses to start naming a `qrtz_` table, run `dotnet ef database update`; do not switch to
   `CreateIfMissing`.

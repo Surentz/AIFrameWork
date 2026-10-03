@@ -1,7 +1,8 @@
 # End-to-end tests
 
-Playwright, against a real API, a real job worker and a real Postgres. See ADR 0012 for why it is
-shaped this way, and ADR 0023 for why the worker is part of it.
+Playwright, against a real API, a real job worker, a real Postgres and a real RabbitMQ. See ADR
+0012 for why it is shaped this way, ADR 0023 for why the worker is part of it, and ADR 0026 for
+the broker.
 
 ## The one import
 
@@ -160,7 +161,7 @@ the test host's limit is raised out of the way (ADR 0008).
 
 | Command | Runs against |
 |---|---|
-| `npm run e2e` | A stack Playwright starts: compose Postgres, the API, the worker, the preview build |
+| `npm run e2e` | A stack Playwright starts: compose Postgres and RabbitMQ, the API, the worker, the preview build |
 | `npm run e2e:ui` | The same, in UI mode; keeps the database between runs |
 | `npm run e2e:kind` | The deployed kind cluster |
 | `npm run e2e:url -- https://…` | Any URL — including a dev loop already running on 5173 |
@@ -187,8 +188,9 @@ Playwright launches them in parallel, and two `dotnet run` builds of the project
 on the same `obj/` files. A consequence: `npx playwright test` run directly, bypassing `run.ts`,
 starts whatever was last built.
 
-The managed stack uses ports 5234 (API), 5235 (worker), 4173 (preview) and 55432 (Postgres) —
-the first two are also the dev loop's. Stop it first, or set `API_PORT` / `WORKER_PORT`.
+The managed stack uses ports 5234 (API), 5235 (worker), 4173 (preview), 55432 (Postgres) and
+55682/55683 (RabbitMQ, AMQP and management UI) — the first two are also the dev loop's. Stop it
+first, or set `API_PORT` / `WORKER_PORT`.
 
 ## What is covered
 

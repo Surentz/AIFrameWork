@@ -15,7 +15,7 @@ Rationale lives in `docs/adr/`.
 | Target framework | net10.0 | `Directory.Build.props`, alongside `LangVersion` 14.0 |
 | Node | 24.20.0 | `.github/workflows/ci.yml` and `e2e.yml`. 24.15.0 is the hard floor — see below |
 | React | 19.3.0 | `frontend/package-lock.json`, declared `^19.2.8` |
-| Vite | 8.3.0 | `frontend/package-lock.json`, declared `^8.2.2` |
+| Vite | 8.3.1 | `frontend/package-lock.json`, declared `^8.3.1` |
 | TypeScript | 6.0.3 | `frontend/package-lock.json`, declared `~6.0.2` |
 
 Read resolved versions from the *lockfile*, not `package.json` — the declared ranges are carets.
@@ -197,7 +197,9 @@ commands carry plaintext passwords).
 
 **Outbox handlers** (`notifications`, `src/Application/CLAUDE.md`) — Delivery is at-least-once,
 so handlers are idempotent, and a domain event handler runs outside the command pipeline, so it
-**must call `SaveChangesAsync` itself**.
+**must call `SaveChangesAsync` itself**. **Only the API runs the outbox pumps** (ADR 0028): the
+notifiers push through SignalR, which exists only there, so a pump in the worker writes
+notifications nobody is pushed. The worker writes outbox rows; it never calls `AddOutboxPumps()`.
 
 **Resilience** (`resilience`, ADR 0014) — Polly cannot see a failed `Result<T>`: the pipeline
 sits under the port, never around it. With `EnableRetryOnFailure` on, an explicit transaction

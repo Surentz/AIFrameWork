@@ -71,6 +71,9 @@ Two projects cover the outbox, joining different collections for a reason:
   `PostgresCollection` like every other database test in that project.
 - `Api.IntegrationTests/Orders/OutboxDeliveryTests.cs` joins `ApiFactoryCollection` instead — it
   needs the host (to place an order over HTTP), not just the database.
+- `Worker.IntegrationTests/OutboxPumpTests.cs` pins that the worker runs **no** pump (ADR 0028),
+  and `OutboxRegistrationTests.AddOutbox_Alone_StartsNoPump` that Infrastructure alone starts
+  none. `ApiFactory` throws at build time if the Api lost its `AddOutboxPumps()` call.
 
 Timing throughout is driven by an injected `IClock`/`TestClock`, never by waiting on a poll
 interval — see the "no `Thread.Sleep`" rule below.
@@ -108,7 +111,9 @@ collection (`WorkerFactoryCollection`) exactly as `ApiFactoryCollection` and `Po
 do — one container for the whole project, never one per class.
 
 Unlike `ApiFactory`, this factory does **not** strip its background machinery out: the Wolverine
-listeners are the thing under test, so both lanes stay on.
+listeners are the thing under test, so both lanes stay on. The worker has no outbox pump to strip
+(ADR 0028), so a test whose job is enqueued by a domain event handler drains the outbox itself
+with `WorkerFactory.DrainOutboxUntilEmptyAsync()`, the same loop as `ApiFactory`'s.
 
 Two rules specific to this project, both learned from failing tests rather than reasoned out:
 

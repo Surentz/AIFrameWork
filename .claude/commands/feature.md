@@ -9,7 +9,8 @@ Working outward in this order is what stops Clean Architecture degrading into on
 edited and the other three forgotten. Do not skip ahead.
 
 Read the `CLAUDE.md` of each layer as you reach it, and load
-any skill the feature touches (`caching`, `auth`, `jobs`, `notifications`, `resilience`, `regenerate`).
+any skill the feature touches (`caching`, `auth`, `jobs`, `messaging`, `notifications`,
+`resilience`, `observability`, `regenerate`).
 
 ## 1. Domain — `src/Domain/`
 
@@ -30,6 +31,8 @@ Reference `Domain` only.
 
 - `IEntityTypeConfiguration<T>` for any new entity — all mapping, lengths, indexes here
 - The port implementation
+- Register the command or query, and its validator, in `AddMessaging()`.
+  `RegistrationCompletenessTests` fails the build on one that is missing
 - **Do not hand-write a migration.** Tell the user the exact `dotnet ef migrations add`
   command to run.
 
@@ -37,7 +40,10 @@ Reference `Domain` only.
 
 - Request/response DTOs, `required` + `init`, distinct from Domain types
 - A thin controller action: bind, delegate, map `Result` to a status code
+- `[Authorize]` at least; a privileged action takes a capability policy from
+  `AuthorizationPolicies`, never a role
 - DI registration if a new port was added
+- Regenerate the API contract (the `regenerate` skill) — CI fails on a stale one
 
 ## 5. Tests
 
@@ -47,6 +53,7 @@ Write these as you go, not at the end:
 |---|---|
 | `tests/Domain.Tests` | invariants, pure logic — no mocks |
 | `tests/Application.Tests` | the handler, ports substituted with NSubstitute |
+| `tests/Infrastructure.Tests` | the repository against real Postgres, if it has new queries |
 | `tests/Api.IntegrationTests` | the endpoint via `WebApplicationFactory` |
 
 ## 6. Finish

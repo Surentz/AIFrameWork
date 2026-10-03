@@ -23,6 +23,10 @@ dotnet test --nologo --verbosity quiet
 Warnings are errors here, so a warning is a build failure. Report every diagnostic with
 `file:line`.
 
+The three Testcontainers projects (`Infrastructure.Tests`, `Api.IntegrationTests`,
+`Worker.IntegrationTests`) need a running Docker daemon for Postgres and RabbitMQ. If
+`docker info` fails, say so: their failures are environmental, not assertion failures.
+
 ## 2. Frontend
 
 ```
@@ -81,12 +85,15 @@ Skip this half if step 2 found no Node or no `frontend/node_modules` — it need
 ```
 dotnet restore src/Api
 ConnectionStrings__Default='Host=localhost;Port=55433;Database=placeholder;Username=x;Password=y' \
-  Wolverine__Durable=false \
+  Wolverine__Durable=false Admin__ReconcileOnStart=false \
   dotnet msbuild src/Api -t:"Build;GenerateOpenApiDocuments"
 npm run generate:api --prefix frontend
 git diff --exit-code -- openapi/ frontend/src/api/schema.d.ts
 ```
 
+All three variables are required, exactly as in CI's `contract` job: without
+`Admin__ReconcileOnStart=false` the startup administrator reconciler dials Postgres and the
+generator fails with an `ObjectDisposedException` that names nothing (ADR 0020).
 `dotnet restore` is a separate first step on purpose: `dotnet msbuild` does not restore
 implicitly, and folding it in as `-t:"Restore;Build;..."` fails with CS9137 instead. A non-empty
 diff means a controller, DTO, or `[ProducesResponseType]` changed without the contract being
@@ -116,8 +123,9 @@ Otherwise:
 npm run e2e --prefix frontend
 ```
 
-This starts a Postgres container, applies migrations, and runs the API and a preview build
-under Playwright. It is the slowest step and the one most likely to fail environmentally —
+This starts Postgres and RabbitMQ containers, applies migrations, and runs the API, the job
+worker and a preview build under Playwright. It binds 5234 and 5235, so a running dev loop
+(`scripts/dev.ps1`) has to be stopped first or this fails to start rather than failing a test. It is the slowest step and the one most likely to fail environmentally —
 report the distinction between an environmental failure and an assertion failure.
 
 ## 5. Hooks
@@ -149,5 +157,6 @@ A table: step, ran or skipped, result. Then the failures with `file:line`. State
 steps were skipped and why. Never summarise a skipped step as passing.
 
 Steps 1, 2, 3 and 4 correspond to CI's `backend`, `frontend`, `codegen`+`contract`, and `e2e`
-jobs. The one thing CI does that this command does not is **build and test Release as well as
-Debug** — so a clean `/verify` is not by itself evidence that Release starts.
+jobs. CI does two things this command does not: it **builds and tests Release as well as
+Debug** — so a clean `/verify` is not by itself evidence that Release starts — and it checks the
+PR title is a Conventional Commit (`pr title and labels`).
