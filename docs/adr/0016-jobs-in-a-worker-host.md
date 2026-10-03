@@ -123,6 +123,11 @@ signal unrelated to request rate. Deploying the API stops killing in-flight work
   enqueues a job can be delivered by the process that will run it. But "the outbox runs inside the
   API process", above, is now incomplete: moving those pumps OFF the API is still the open
   follow-on.
+
+  > **Superseded in part by [ADR 0028](0028-the-outbox-is-delivered-only-where-the-push-transport-lives.md)
+  > (2026-10-02).** The worker no longer polls. The notifiers the pumps run push through a
+  > transport only the API has, so every event the worker claimed reached the user with no push.
+  > Moving the pumps off the API now needs a push path that works from any process first.
 - **A second Deployment, image stage, log stream, probe set and set of manifests.** Plus
   `terminationGracePeriodSeconds: 300` on the worker and a matching `HostOptions.ShutdownTimeout`,
   because .NET's 30s default would abandon work long before Kubernetes was willing to.

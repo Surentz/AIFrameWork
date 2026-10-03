@@ -18,6 +18,10 @@ path with no test at all.
 The outbox pump is registered in `AddInfrastructure` and so runs in the API as well. Notifications
 therefore never depended on the worker, and that stays true.
 
+> **Amended by [ADR 0028](0028-the-outbox-is-delivered-only-where-the-push-transport-lives.md)
+> (2026-10-02).** The pumps are now registered by `AddOutboxPumps`, which only the API calls. The
+> conclusion holds more strongly: notifications are delivered by the API alone.
+
 ## Decision
 
 `playwright.config.ts` starts `src/Worker` as a third `webServer` on the managed (`local`) target.

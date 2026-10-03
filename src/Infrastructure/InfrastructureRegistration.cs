@@ -283,7 +283,11 @@ public static class InfrastructureRegistration
         services.AddScoped<IAdminAudit, AdminAudit>();
     }
 
-    /// <summary>The outbox pipeline. Called from AddInfrastructure; the hosted services start with the app.</summary>
+    /// <summary>
+    /// The outbox pipeline's services: options, channel, poller and processor. Called from
+    /// AddInfrastructure, so every host can write to the outbox and drain it by hand; nothing here
+    /// delivers until a host also calls <see cref="AddOutboxPumps"/>.
+    /// </summary>
     public static IServiceCollection AddOutbox(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -317,6 +321,26 @@ public static class InfrastructureRegistration
         services.AddSingleton(sp => sp.GetRequiredService<Channel<OutboxWorkItem>>().Reader);
         services.AddScoped<OutboxPoller>();
         services.AddScoped<OutboxWorkItemProcessor>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// The two pumps that deliver the outbox. Called from the Api's Program.cs only, never from
+    /// AddInfrastructure, for the same per-host reason ICurrentUser is registered per host.
+    /// </summary>
+    /// <remarks>
+    /// The pumps run every domain event handler, the notifiers among them, and a notifier pushes
+    /// through <c>INotificationPush</c> — whose only implementation is SignalR's, in the Api. A
+    /// host polling here without it writes notifications that nobody is pushed: when the worker
+    /// joined the poll, every event it happened to claim reached the user's badge only on their
+    /// next poll. Moving the pumps off the Api therefore needs a push relay that works from any
+    /// process first. ADR 0028.
+    /// </remarks>
+    public static IServiceCollection AddOutboxPumps(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
         services.AddHostedService<OutboxPollerService>();
         services.AddHostedService<OutboxWorkerService>();
 

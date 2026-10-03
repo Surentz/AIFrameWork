@@ -55,8 +55,8 @@ inward only.
 ```
      ┌─────────────────────────────┐   ┌─────────────────────────────┐
      │             Api             │   │           Worker            │
-     │  Controllers, DTOs, hub,    │   │  Job handlers, scheduler,   │
-     │  exception handler          │   │  outbox pumps               │
+     │  Controllers, DTOs, hub,    │   │  Job handlers and the       │
+     │  outbox pumps, exceptions   │   │  Quartz scheduler           │
      └──────┬───────────────┬──────┘   └──────┬───────────────┬──────┘
             │               │ DI only         │ DI only       │
             │               ▼                 ▼               │
@@ -184,9 +184,9 @@ Exact pins live in [`CLAUDE.md`](CLAUDE.md), `Directory.Build.props`, the `.cspr
 │   ├── Domain/            Entities, value objects, domain events, domain exceptions
 │   ├── Application/       Use cases, ports, Result<T>, validators
 │   ├── Infrastructure/    EF Core, repositories, outbox, caching, Wolverine, jobs, security
-│   ├── Api/               Controllers, DTOs, the SignalR hub, exception handling, composition root
+│   ├── Api/               Controllers, DTOs, the SignalR hub, the outbox pumps, exception handling, composition root
 │   │   └── Internal/Generated/    Wolverine adapters for the event path — committed
-│   └── Worker/            The job host: handlers, Quartz scheduling, the outbox pumps
+│   └── Worker/            The job host: handlers, Quartz scheduling
 │       └── Internal/Generated/    Wolverine adapters for the jobs — committed, and its own
 ├── tests/
 │   ├── Domain.Tests/
