@@ -1,0 +1,33 @@
+# Prometheus's own config (ADR 0027). A real file, turned into the prometheus-config ConfigMap by
+# kustomization.yaml's configMapGenerator WITH a content hash: a change here renames the ConfigMap,
+# which changes the Deployment and rolls the pod - and nothing else does, so the metric history
+# in its emptyDir survives every deploy that leaves this file and the rules alone.
+# Check with: promtool check config (see the kubernetes skill).
+global:
+  evaluation_interval: 30s
+
+# prometheus-rules.yml, mounted from the prometheus-rules ConfigMap that
+# kustomization.yaml generates - the same file prometheus-rules.test.yml unit-tests.
+rule_files:
+  - /etc/prometheus-rules/prometheus-rules.yml
+
+otlp:
+  # service.name and service.instance.id already become `job` and `instance`. These are the
+  # other resource attributes worth a label: which build and which environment (Task 5), and
+  # the broker's and database's own identities from the collector's receivers. Everything
+  # else stays on target_info, joinable but not multiplied into every series.
+  promote_resource_attributes:
+    - service.version
+    - deployment.environment.name
+    - rabbitmq.queue.name
+    - rabbitmq.node.name
+    - rabbitmq.vhost.name
+    - postgresql.database.name
+    - postgresql.table.name
+
+storage:
+  tsdb:
+    # OTLP pushes from two API replicas, the worker and the collector's own receivers arrive
+    # on their own clocks; without a window a sample a few seconds older than the newest one
+    # for its series is rejected.
+    out_of_order_time_window: 30m

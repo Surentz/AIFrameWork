@@ -8,8 +8,9 @@ using Microsoft.Extensions.Options;
 namespace AiFramework.Infrastructure.Tests.Outbox;
 
 /// <summary>
-/// Pure DI checks for AddOutbox - no database, no Docker. AddInfrastructure calls
-/// AddOutbox, but these resolve AddOutbox in isolation, backed only by AddLogging(): no test
+/// Pure DI checks for AddOutbox and AddOutboxPumps - no database, no Docker. AddInfrastructure
+/// calls AddOutbox and only the Api calls AddOutboxPumps, but these resolve both in isolation,
+/// backed only by AddLogging(): no test
 /// constructs a real OutboxPoller or OutboxWorkItemProcessor (both need a real
 /// AiFrameworkDbContext). The channel plumbing and the two BackgroundServices resolve their
 /// scoped dependencies lazily inside ExecuteAsync rather than through their own constructors,
@@ -29,6 +30,7 @@ public sealed class OutboxRegistrationTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddOutbox();
+        services.AddOutboxPumps();
 
         if (options is not null)
         {
@@ -81,7 +83,23 @@ public sealed class OutboxRegistrationTests
     }
 
     [Fact]
-    public void AddOutbox_RegistersOutboxPollerServiceAsAHostedServiceThatResolves()
+    public void AddOutbox_Alone_StartsNoPump()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddOutbox();
+        using var provider = services.BuildServiceProvider();
+
+        var hostedServices = provider.GetServices<IHostedService>();
+
+        // AddInfrastructure calls AddOutbox in every host, and the pumps run every domain event
+        // handler - the notifiers among them. A host with no push transport that polled the
+        // outbox would write notifications nobody is told about. See AddOutboxPumps.
+        hostedServices.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AddOutboxPumps_RegistersOutboxPollerServiceAsAHostedServiceThatResolves()
     {
         using var provider = BuildProvider();
 
@@ -91,7 +109,7 @@ public sealed class OutboxRegistrationTests
     }
 
     [Fact]
-    public void AddOutbox_RegistersOutboxWorkerServiceAsAHostedServiceThatResolves()
+    public void AddOutboxPumps_RegistersOutboxWorkerServiceAsAHostedServiceThatResolves()
     {
         using var provider = BuildProvider();
 
@@ -162,6 +180,7 @@ public sealed class OutboxRegistrationTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddOutbox();
+        services.AddOutboxPumps();
 
         var resolutionAttempts = 0;
 

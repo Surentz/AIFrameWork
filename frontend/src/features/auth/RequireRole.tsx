@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from './queries';
 import type { UserRole } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
 
 interface RequireRoleProps {
   /**
@@ -29,11 +30,7 @@ export function RequireRole({ allow }: RequireRoleProps): React.JSX.Element {
   }
 
   if (error) {
-    return (
-      <p className="alert" role="alert">
-        {error.message}
-      </p>
-    );
+    return <ErrorPanel error={error} />;
   }
 
   if (!session) {

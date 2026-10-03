@@ -18,7 +18,9 @@ before new adapters take effect, and which is otherwise a stop-everything-and-st
 `-WithSeq` starts `docker-compose.yml`'s `observability` profile alongside Postgres and points
 the launched API at it (`Observability__Otlp__Enabled`/`__Endpoint`, set on the API's own
 process environment, never baked into `appsettings.Development.json` — every developer's `dotnet
-run` would otherwise try to export to a collector nobody started). `scripts/stop-dev.ps1` always
+run` would otherwise try to export to a collector nobody started). It also sets
+`Monitoring__TraceLinkTemplate` on the API, so the monitoring tables' Trace column links into
+Seq. `scripts/stop-dev.ps1` always
 passes `--profile observability` to `docker compose down`, whether or not `-WithSeq` was used —
 confirmed empirically, not assumed, that a bare `docker compose down` does NOT stop a
 profile-started container even when it is currently running. See the `observability` skill.
@@ -85,6 +87,8 @@ rather not open a terminal — it has no logic of its own beyond the menu:
 | Start job worker only | `scripts/worker.ps1` — restarts just the worker, leaving a working API and Vite alone. Runs in the foreground, so you watch its log; `codegen write` needs a worker restart to take effect |
 | Stop dev loop | `scripts/stop-dev.ps1` — kills the API/worker/Vite ports, tears down the database and the broker (and Seq, if it was started). Messages waiting on a queue survive in the `rabbitmqdata` volume, as rows do in `pgdata` |
 | Start Kubernetes | `deploy/start-cluster.ps1` — creates the kind cluster if missing, else redeploys onto it |
+| Start Kubernetes + observability | `deploy/start-cluster.ps1 -WithObservability` — same, plus OpenSearch, Prometheus, Grafana and the alert rules. **Once a cluster has observability, redeploy it with this option every time**: plain "Start Kubernetes" drops the apps' OTLP settings, and the UIs keep running but stop receiving anything |
+| Open observability UIs | `deploy/observability-ui.ps1`, in a window of its own — port-forwards Grafana (3000), Prometheus (9090) and OpenSearch Dashboards (5601), each reconnecting on its own after a redeploy, and opens Grafana. Closing the window stops the forwards |
 | Stop Kubernetes | `deploy/teardown.ps1` — `kind delete cluster`; Postgres data inside it goes with it |
 | Run e2e tests (local stack) | `scripts/e2e.ps1` — stop the dev loop first, it uses ports 5234 and 5235 |
 | Run e2e tests (against Kubernetes) | `deploy/e2e-k8s.ps1` — deploy it first with "Start Kubernetes" |

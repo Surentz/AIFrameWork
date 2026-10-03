@@ -3,6 +3,7 @@ import type { SubmitEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthShell } from './AuthShell';
 import { useRegister } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 
 /** Mirrors PasswordPolicy.MinimumLength in src/Application/Users; the server is the authority. */
 const MinimumPasswordLength = 12;
@@ -137,9 +138,7 @@ export function RegisterPage(): React.JSX.Element {
         </button>
 
         {mutation.error && Object.keys(fieldErrors).length === 0 && (
-          <p className="alert" role="alert">
-            {mutation.error.message}
-          </p>
+          <ErrorPanel error={mutation.error} />
         )}
       </form>
     </AuthShell>

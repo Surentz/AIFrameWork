@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { formatPrice } from '../products/types';
 import { useOrder } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import './orders.css';
 
 export function OrderDetail(): React.JSX.Element {
@@ -17,11 +18,7 @@ export function OrderDetail(): React.JSX.Element {
   }
 
   if (error) {
-    return (
-      <p className="alert" role="alert">
-        {error.message}
-      </p>
-    );
+    return <ErrorPanel error={error} />;
   }
 
   return (

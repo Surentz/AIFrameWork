@@ -85,11 +85,11 @@
     <PackageReference Include="WolverineFx.Postgresql" Version="6.41.0" />
     <PackageReference Include="WolverineFx.RabbitMQ" Version="6.41.0" />
     <!--
-      Quartz 4.1 is the job CLOCK only: its one job type enqueues through IJobScheduler, and
+      Quartz is the job CLOCK only: its one job type enqueues through IJobScheduler, and
       Wolverine runs the work (ADR 0017). Referenced here and nowhere else — Application never
       sees a Quartz type, and only the worker starts a scheduler.
     -->
-    <PackageReference Include="Quartz" Version="4.1.0" />
+    <PackageReference Include="Quartz" Version="4.2.1" />
   </ItemGroup>
 
   <!--

@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useCanManageCatalogue, useProduct } from './queries';
 import { formatPrice } from './types';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import '../orders/orders.css';
 import './products.css';
 
@@ -19,11 +20,7 @@ export function ProductDetail(): React.JSX.Element {
   }
 
   if (error) {
-    return (
-      <p className="alert" role="alert">
-        {error.message}
-      </p>
-    );
+    return <ErrorPanel error={error} />;
   }
 
   return (
@@ -56,9 +53,7 @@ export function ProductDetail(): React.JSX.Element {
           </div>
           <div className="product-facts__wide">
             <dt>Description</dt>
-            <dd className="product-facts__description">
-              {data.description ?? 'No description.'}
-            </dd>
+            <dd className="product-facts__description">{data.description ?? 'No description.'}</dd>
           </div>
           <div>
             <dt>Added</dt>

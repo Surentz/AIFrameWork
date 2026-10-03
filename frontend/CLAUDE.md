@@ -34,12 +34,12 @@ the *dev server* for the hub and gets Vite's own 404, so realtime push silently 
 everything under `/api` keeps working normally. `ws: true` is what upgrades the connection instead
 of leaving it on the long-polling fallback. Both `server` and `preview` carry both entries.
 
-Ports are fixed (5173 dev, 4173 preview, 5234 API, 5235 the job worker, 55432 the e2e Postgres)
-and can collide on a busy machine. Each is overridable by environment variable: `DEV_PORT`,
-`PREVIEW_PORT`, `API_PORT`, `WORKER_PORT` and `PG_PORT` respectively. `vite.config.ts` reads the
+Ports are fixed (5173 dev, 4173 preview, 5234 API, 5235 the job worker, 55432 the e2e Postgres,
+55682/55683 the e2e RabbitMQ's AMQP and management UI) and can collide on a busy machine. Each is
+overridable by environment variable: `DEV_PORT`, `PREVIEW_PORT`, `API_PORT`, `WORKER_PORT`,
+`PG_PORT`, `E2E_RABBITMQ_PORT` and `E2E_RABBITMQ_UI_PORT` respectively. `vite.config.ts` reads the
 first three; `playwright.config.ts` and `e2e/setup/prepare-database.ts` (via the shared
-`e2e/support/env.ts`) and `docker-compose.e2e.yml` read the last four between them for the e2e
-run.
+`e2e/support/env.ts`) and `docker-compose.e2e.yml` read the rest between them for the e2e run.
 
 ## Commands
 
@@ -47,8 +47,11 @@ run.
 |---|---|
 | `npm start` | dev server |
 | `npm run build` | production build |
+| `npm run preview` | serve the production build on 4173 |
 | `npm test` | Vitest |
 | `npm run lint` | `eslint . --max-warnings 0` |
+| `npm run format` | Prettier, writing in place |
+| `npm run generate:api` | regenerate `src/api/schema.d.ts` — see "The API contract" below |
 | `npm run e2e` | Playwright, against a real API, job worker and Postgres |
 | `npm run e2e:ui` | The same, in UI mode; keeps the database between runs |
 | `npm run e2e:kind` | The deployed kind cluster |
@@ -89,8 +92,13 @@ See `frontend/e2e/CLAUDE.md` for the fixture and screen conventions — the fixt
 ## The API contract
 
 `src/api/schema.d.ts` is **generated** from `openapi/AiFramework.Api.json` at the repo root —
-never edit it. `features/orders/types.ts` is a thin set of aliases over it, which is why a
-backend rename now breaks the frontend build instead of breaking it at runtime.
+never edit it. Each feature's `types.ts` (`features/orders/types.ts` is the model) is a thin set
+of aliases over it, which is why a backend rename now breaks the frontend build instead of
+breaking it at runtime.
+
+Administrator screens (`/fulfilment`, `/monitoring/*`, the catalogue's create and edit forms) sit
+behind `RequireRole allow="Admin"` in `routes.tsx`. That only hides UI — the API's capability
+policies are what refuse the request.
 
 Regenerate after any backend contract change:
 

@@ -6,16 +6,17 @@ Use cases. Orchestrates Domain objects; owns no infrastructure.
 
 Use-case handlers, `ICommand<T>` / `IQuery<T>` requests and their handlers, **ports**
 (the interfaces Infrastructure implements — `IOrderRepository`, `IUnitOfWork`, `IClock`,
-`IEmailSender`), request and response models, FluentValidation validators, and `Result<T>`.
+`IIntegrationEventPublisher`), request and response models, FluentValidation validators, and
+`Result<T>`.
 
 ## Messaging rules
 
 - A type implements `ICommand<T>` / `IQuery<T>` **exactly once**. `TResponse` is inferred
   from the argument at the call site; a second implementation makes that ambiguous and
   breaks every caller. A test enforces this.
-- **Handlers never call `SaveChangesAsync`.** The unit-of-work behavior commits exactly
-  once after a successful command. A handler that commits turns one command into two
-  transactions.
+- **Command and query handlers never call `SaveChangesAsync`.** The unit-of-work behavior
+  commits exactly once after a successful command. A handler that commits turns one command into
+  two transactions. Domain event handlers are the opposite — see below.
 - Never inject a `DbContext`; depend on the port.
 - `Result.Success(value)` infers `T` from the argument. `Result.Failure<T>(error)` needs
   the explicit type argument — an `Error` carries no type information to infer from.
@@ -95,6 +96,11 @@ Blocked by the dependency-rule hook.
 `IDomainEventHandler<TEvent>` (`src/Application/Abstractions/DomainEventHandling.cs`) lives
 here, alongside `ICommand<T>`/`IQuery<T>`. Handlers go under `<Feature>/`, next to the command
 or query for that feature.
+
+**A domain event handler must save its own work.** It runs on the API's outbox pump, not through
+the command pipeline, so no unit-of-work behavior commits after it. Call
+`IUnitOfWork.SaveChangesAsync` explicitly (`NotificationFanOut` does); without it the tracked
+writes are disposed with the scope and the outbox row is still marked `Processed` — silently.
 
 **Handlers must be idempotent.** Delivery off the outbox is at-least-once, and retry granularity
 is the message rather than the handler: if one handler in a fan-out throws, the whole message is

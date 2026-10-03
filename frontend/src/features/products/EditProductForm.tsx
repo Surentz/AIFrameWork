@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ProductFields } from './ProductFields';
 import type { ProductFieldValues } from './ProductFields';
 import { useProduct, useUpdateProduct } from './queries';
+import { ErrorPanel } from '../../components/ErrorPanel';
 import '../orders/orders.css';
 import './products.css';
 
@@ -59,9 +60,7 @@ function EditProductFormFields({ id, sku, initial }: EditProductFieldsProps): Re
         </div>
 
         {mutation.error && Object.keys(fieldErrors).length === 0 && (
-          <p className="alert" role="alert">
-            {mutation.error.message}
-          </p>
+          <ErrorPanel error={mutation.error} />
         )}
       </div>
     </form>
@@ -82,11 +81,7 @@ export function EditProductForm(): React.JSX.Element {
   }
 
   if (error) {
-    return (
-      <p className="alert" role="alert">
-        {error.message}
-      </p>
-    );
+    return <ErrorPanel error={error} />;
   }
 
   return (

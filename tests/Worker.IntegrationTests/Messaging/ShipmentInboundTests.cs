@@ -195,8 +195,12 @@ public sealed class ShipmentInboundTests(WorkerFactory factory)
         var orderId = await PlaceOrderAsync();
 
         await PublishShipmentAsync(orderId, "WH-ROUNDTRIP");
+        (await WaitForStatusAsync(orderId, OrderStatus.Shipped, Delivery)).Should().BeTrue();
 
-        // The worker's own outbox pump runs the fan-out (WorkerFactory keeps its hosted services).
+        // Drained by hand: the worker runs no outbox pump (an Api replica would deliver this row in
+        // production), but the publisher it dispatches to is the same in both hosts.
+        await factory.DrainOutboxUntilEmptyAsync();
+
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
         var found = false;
         while (!found && DateTime.UtcNow < deadline)

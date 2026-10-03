@@ -94,23 +94,24 @@ useless as the place to write a failure outcome. And `Envelope` exposes no failu
 property at all (`Attempts`, `Id`, `MessageType` and `Status`, but nothing about the fault), so a
 `Finally` that only takes the envelope cannot tell success from failure.
 
-## It also runs the outbox pumps
+## It writes the outbox but never delivers it
 
-`AddInfrastructure` calls `AddOutbox()`, so `OutboxPollerService` and `OutboxWorkerService` — and
-every `IDomainEventHandler` they dispatch to — run **here as well as in both API replicas**. This
-host is a third poller, not a replacement for the two in the API.
+The worker raises domain events like any host — a warehouse's `RecordShipment` raises
+`OrderShipped` here, and `DomainEventsInterceptor` writes the outbox row in the same transaction —
+but it runs **no outbox pump**. `AddInfrastructure` registers the outbox's services through
+`AddOutbox()`; the two pumps come from `AddOutboxPumps()`, which only the Api's `Program.cs` calls.
+An API replica delivers the row, within one poll interval.
 
-That is safe rather than accidental: `OutboxPoller.ClaimAsync` claims with
-`FOR UPDATE SKIP LOCKED`, which is exactly the mechanism that already lets two API replicas poll
-the same table. The practical effect is more outbox capacity, and one useful side effect — a
-domain event that enqueues a job (`OrderPlacedConfirmationHandler`) can now be delivered by the
-same process that will run the job.
+The reason is the notifiers. The pumps run every `IDomainEventHandler`, and a notifier pushes the
+row it writes through `INotificationPush`, whose only implementation is SignalR's, in the Api. This
+host polled until 2026-10-02, and every event it claimed was written to the feed with nobody pushed.
+ADR 0028.
 
-Know it before it surprises you: ADR 0016 frames the outbox as running "inside the API process",
-which was true when it was written and is now incomplete. Moving those pumps **off** the API is the
-open follow-on; this host joining the poll is a step toward it, not the finished thing. If the
-intent ever becomes "only the worker polls", that is an explicit opt-out in `AddOutbox`, not a
-side effect to rely on.
+- **Do not call `AddOutboxPumps()` here** to get more outbox capacity or to move the pumps off the
+  API (ADR 0016's open follow-on). Either needs a push path that works from any process first —
+  ADR 0028 records `LISTEN`/`NOTIFY` as that path. `OutboxPumpTests` fails if the worker gains one.
+- **A worker test that needs an event delivered drains it by hand**:
+  `WorkerFactory.DrainOutboxUntilEmptyAsync()`, the same loop as `ApiFactory`'s.
 
 ## Scheduling
 
@@ -136,8 +137,8 @@ scheduler over the `quartz` schema. The API registers no Quartz at all, and
   it stays that way until a new-build worker starts. If a schedule is missing or wrong after a
   rollout, restart a worker. ADR 0017.
 - **Every node needs its own instance id.** `ProcessInstanceIdGenerator` supplies one; with
-  clustering on and no generator configured, Quartz 4.1 names every node `NON_CLUSTERED` and two
-  pods look like one. `SchedulingTests` asserts both halves.
+  clustering on and no generator configured, Quartz 4 (still so in 4.2.1) names every node
+  `NON_CLUSTERED` and two pods look like one. `SchedulingTests` asserts both halves.
 - **`SchemaProvisioning.Validate` means a missing migration stops the worker.** If the worker
   refuses to start naming a `qrtz_` table, run `dotnet ef database update`; do not switch to
   `CreateIfMissing`.
