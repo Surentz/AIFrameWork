@@ -605,6 +605,28 @@ tree build, test, and lint clean while CI rejects it. `/verify` runs both as its
 exactly that reason — so the one thing CI does that a local `/verify` does not is the Release
 leg.
 
+**Every pull request gets one comment with its test results and coverage.** It is edited in place
+on each push, and shows:
+
+- a result per suite (✅, ❌, or the number of tests that passed only on retry), with passed,
+  failed, skipped, total and duration;
+- the failed tests by name;
+- backend and frontend line, branch and method coverage, against main's last green run, and the
+  backend per assembly.
+
+CI's last job, `test report`, builds it from the artifacts the other jobs uploaded, using
+[`pr-report.js`](.github/scripts/pr-report.js). It reports and never blocks: it is not a required
+check. Backend coverage covers unit
+and integration tests together and leaves out generated code (the Wolverine adapters, EF
+migrations). The full HTML report is the `coverage-backend` artifact. To get the same numbers
+locally:
+
+```bash
+dotnet test --settings tests/coverage.runsettings --collect "XPlat Code Coverage" --results-directory TestResults
+dotnet reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" -targetdir:TestResults/coverage
+npm test --prefix frontend -- --run --coverage      # report in frontend/coverage/
+```
+
 ## Conventions
 
 Non-negotiable, and mostly machine-checked:
