@@ -24,6 +24,21 @@ registration compiles fine and only fails at dispatch time. These tests reflect 
 `IQuery<>`, or `AbstractValidator<T>` lacks its registration. Deleting them removes the only
 net catching that class of mistake.
 
+## Architecture tests
+
+Every test project has an `ArchitectureTests` class enforcing the root CLAUDE.md dependency
+table. They read compiled assemblies, never a host, so they join no collection and need no Docker.
+
+- **Domain, Application, Infrastructure** check assembly references by reflection.
+- **Api and Worker** add "DI only" with ArchUnitNET, which reads IL: only the types in
+  `CompositionTypes` (and the generated adapters under `Internal.Generated.`) may depend on an
+  Infrastructure type. A new controller, hub or service that needs Infrastructure is the
+  violation; a new composition file is added to that list deliberately, with a reason.
+- **Each has a `Scan_*` guard** proving the scan returns something real, so a broken loader
+  cannot turn the rule into a vacuous pass. Keep the guard when editing the rule.
+- Assert violations as one joined string, not a collection: FluentAssertions' `BeEmpty()` on a
+  collection prints only the first item.
+
 ## Testcontainers
 
 `Infrastructure.Tests` shares one Postgres container across its whole test run via

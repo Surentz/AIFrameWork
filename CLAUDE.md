@@ -63,15 +63,22 @@ warning about it.
 | **Api** | ✓ | ✓ | ✓ DI only | — | ✗ |
 | **Worker** | ✓ | ✓ | ✓ DI only | ✗ | — |
 
-What the hook does **not** catch, so review and `dotnet-reviewer` must:
+What the hook does **not** catch. The `ArchitectureTests` class in each test project does, in
+CI, for every commit and not only Claude's edits:
 
 - **"DI only"** — a controller reaching into a repository looks the same to the hook as a
-  `services.AddScoped<>()` registration.
+  `services.AddScoped<>()` registration. The Api and worker tests read the compiled IL
+  (ArchUnitNET) and fail on any type outside a short composition allowlist that depends on an
+  Infrastructure type, method bodies, lambdas and async methods included.
 - **`Domain`/`Application`/`Infrastructure → Worker`** — the hook's `$banned` table lists
-  `Worker` only under `Api`. The fix is adding `"$root.Worker"` to those three lists; nothing
-  violates them today.
-- **Fully-qualified inline references** with no `using`, and **`<ProjectReference>`** in a
-  `.csproj` (the hook gates on `\.cs$`).
+  `Worker` only under `Api`. The inner layers' tests reject every `AiFramework.*` reference the
+  table does not allow, Worker included. Adding `"$root.Worker"` to those three lists would also
+  stop it at edit time.
+- **Fully-qualified inline references** with no `using` (the hook reads `using` lines in `.cs`
+  files only).
+
+What nothing catches: a `<ProjectReference>` no code uses yet. The tests read the references the
+compiler emitted, so an unused one passes until the first type is named across it.
 
 **`Api` and `Worker` are sibling composition roots, not layers** (ADR 0016). Neither may
 reference the other — `Worker → Api` is exactly what would let them share one Wolverine
