@@ -10,6 +10,7 @@ using AiFramework.Infrastructure.Security;
 using AiFramework.Infrastructure.Resilience;
 using AiFramework.Worker.Observability;
 using JasperFx;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,6 +54,13 @@ builder.Services.Configure<JobOptions>(builder.Configuration.GetSection("Jobs"))
 // from a bare ServiceCollection in a unit test. Only this host needs it - the API reads the table
 // but never sweeps it. See ADR 0021.
 builder.Services.Configure<MonitoringOptions>(builder.Configuration.GetSection("Monitoring"));
+
+// How long order exports are kept, for the same reason and in the same place: PruneOrderExports
+// runs here and nowhere else. ADR 0029.
+builder.Services.Configure<OrderExportOptions>(
+    builder.Configuration.GetSection(OrderExportOptions.SectionName));
+builder.Services.AddSingleton<IValidateOptions<OrderExportOptions>, OrderExportOptionsValidator>();
+builder.Services.AddOptions<OrderExportOptions>().ValidateOnStart();
 
 // Bound here rather than in AddCaching/AddResilience, the same shape the Api uses: each host
 // reads its own configuration and hands the values to Infrastructure.

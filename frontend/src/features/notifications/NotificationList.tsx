@@ -34,6 +34,9 @@ function subjectPath(
       return `/orders/${subjectId}`;
     case 'ProductPriceChanged':
       return `/products/${subjectId}`;
+    // The subject is the export, but the download lives on the exports page, beside the others.
+    case 'OrderExportReady':
+      return '/orders/exports';
   }
 }
 

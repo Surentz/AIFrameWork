@@ -22,4 +22,10 @@ public enum NotificationKind
     /// receives it — see ProductPriceChangedNotifier in Application.
     /// </summary>
     ProductPriceChanged,
+
+    /// <summary>
+    /// An export of the caller's orders has been built and can be downloaded. Its subject is the
+    /// export, not an order.
+    /// </summary>
+    OrderExportReady,
 }

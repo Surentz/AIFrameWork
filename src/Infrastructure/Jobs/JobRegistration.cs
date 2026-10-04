@@ -83,7 +83,7 @@ public static class JobRegistration
     public static IReadOnlyList<JobDescriptor> Jobs { get; } =
     [
         JobDescriptor.For<SendOrderConfirmation>(),
-        JobDescriptor.For<RebuildOrderReport>(),
+        JobDescriptor.For<BuildOrderExport>(),
 
         // Hourly at :05. Retention is seven days, so hourly is already generous; the old
         // five-minute cadence existed only because the sweep piggy-backed on the poll loop.
@@ -103,6 +103,10 @@ public static class JobRegistration
         // table becoming an archive.
         JobDescriptor.Scheduled<PruneTrafficBuckets>("0 30 3 * * ?"),
         JobDescriptor.Scheduled<PruneAdminActions>("0 35 3 * * ?"),
+
+        // Daily at 03:40. Each export is a copy of someone's order history, so like the sign-in
+        // sweep this bounds how long personal data is kept rather than tidying a table. ADR 0029.
+        JobDescriptor.Scheduled<PruneOrderExports>("0 40 3 * * ?"),
     ];
 
     /// <summary>
@@ -169,12 +173,13 @@ public static class JobRegistration
         // fails the build on that, because nothing else would.
         opts.Discovery
             .IncludeType<SendOrderConfirmationHandler>()
-            .IncludeType<RebuildOrderReportHandler>()
+            .IncludeType<BuildOrderExportHandler>()
             .IncludeType<PruneProcessedOutboxHandler>()
             .IncludeType<PruneJobRunsHandler>()
             .IncludeType<PruneSignInEventsHandler>()
             .IncludeType<PruneTrafficBucketsHandler>()
-            .IncludeType<PruneAdminActionsHandler>();
+            .IncludeType<PruneAdminActionsHandler>()
+            .IncludeType<PruneOrderExportsHandler>();
 
         // Set on the WORKER only — the API keeps Wolverine 6's NotAllowed default, so this
         // relaxation reaches exactly the host that needs it.
@@ -184,8 +189,9 @@ public static class JobRegistration
         // ADR 0003's reflection-free dispatch resolves the handler from the container at dispatch
         // time. Wolverine reads that as service location and, under NotAllowed, refuses to
         // generate the adapter at all — "Found service locations while generating code for
-        // Message Handler for RebuildOrderReport". It fails only in `codegen write`; the code
-        // compiles perfectly well, which is exactly the class of trap ADR 0005 already records.
+        // Message Handler for RebuildOrderReport" (the job BuildOrderExport has since replaced). It
+        // fails only in `codegen write`; the code compiles perfectly well, which is exactly the
+        // class of trap ADR 0005 already records.
         //
         // The alternative was to have job handlers inject repositories directly and bypass the
         // dispatchers. That was rejected: going through the use case is what keeps validation and
@@ -233,6 +239,18 @@ public static class JobRegistration
     }
 
     /// <summary>
+    /// How long a failed job waits before each retry; after the last it is dead-lettered. Named
+    /// because something else depends on its total: <c>OrderExport.StaleAfter</c> must outlast it,
+    /// and <c>OrderExportStalenessTests</c> fails if it does not.
+    /// </summary>
+    public static IReadOnlyList<TimeSpan> JobRetryDelays { get; } =
+    [
+        TimeSpan.FromMinutes(1),
+        TimeSpan.FromMinutes(5),
+        TimeSpan.FromMinutes(30),
+    ];
+
+    /// <summary>
     /// Retry and dead-lettering, as policy. Nothing in <c>Jobs/</c> reimplements the
     /// <c>NextAttemptAt</c> backoff arithmetic <c>Outbox/</c> already carries — not writing it a
     /// second time is a large part of why jobs ride Wolverine at all.
@@ -249,10 +267,7 @@ public static class JobRegistration
         ArgumentNullException.ThrowIfNull(opts);
 
         opts.OnAnyException()
-            .ScheduleRetry(
-                TimeSpan.FromMinutes(1),
-                TimeSpan.FromMinutes(5),
-                TimeSpan.FromMinutes(30))
+            .ScheduleRetry([.. JobRetryDelays])
             .Then.MoveToErrorQueue();
 
         // Matches Behaviors.LoggedAsync's "success is Debug" convention (root CLAUDE.md's Logging
@@ -302,10 +317,9 @@ public static class JobRegistration
         // supplies the implementation and picks neither.
         services.AddScoped<JobCurrentUser>();
 
-        // The two reference jobs' ports. Logging adapters today; see JobAdapters.cs for what
-        // replacing them costs (one class each, no caller affected).
+        // The confirmation job's port. A logging adapter today; see JobAdapters.cs for what
+        // replacing it costs (one class, no caller affected).
         services.AddScoped<IOrderNotifier, LoggingOrderNotifier>();
-        services.AddScoped<IOrderReportWriter, LoggingOrderReportWriter>();
         services.AddScoped<IOutboxRetention, OutboxRetention>();
 
         // What JobRunMiddleware writes through. Scoped, because it holds the scoped DbContext -

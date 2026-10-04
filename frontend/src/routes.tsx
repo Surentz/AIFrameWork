@@ -13,6 +13,7 @@ import { TrafficPage } from './features/monitoring/TrafficPage';
 import { UsersPage } from './features/monitoring/UsersPage';
 import { NotificationList } from './features/notifications/NotificationList';
 import { OrderDetail } from './features/orders/OrderDetail';
+import { OrderExportsPage } from './features/orders/OrderExportsPage';
 import { OrderList } from './features/orders/OrderList';
 import { PlaceOrderForm } from './features/orders/PlaceOrderForm';
 import { CreateProductForm } from './features/products/CreateProductForm';
@@ -35,6 +36,8 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/" element={<Navigate to="/orders" replace />} />
           <Route path="/orders" element={<OrderList />} />
           <Route path="/orders/new" element={<PlaceOrderForm />} />
+          {/* Before /orders/:id, for the reason /products/new is: otherwise "exports" is an id. */}
+          <Route path="/orders/exports" element={<OrderExportsPage />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
           {/* /products/new is declared before /products/:id so "new" is matched as the literal
               route, not captured as an id. */}

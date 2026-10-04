@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import type { Session } from '../features/auth/types';
 import type { FulfilmentOrder } from '../features/fulfilment/types';
 import type { Notification } from '../features/notifications/types';
-import type { Order } from '../features/orders/types';
+import type { Order, OrderExport } from '../features/orders/types';
 import type { Product } from '../features/products/types';
 
 // Typed against the generated schema, not loose. An untyped fixture is how a renamed backend
@@ -18,6 +18,24 @@ export const anOrder: Order = {
   // 'Placed' | 'Shipped' | 'Cancelled'. Adding Status to the order reads is what makes the
   // ship/cancel endpoints observable at all — before that, a shipped order read back identically.
   status: 'Placed',
+};
+
+/** An export that has been built and can be downloaded. */
+export const anOrderExport: OrderExport = {
+  id: '55555555-5555-5555-5555-555555555555',
+  status: 'Ready',
+  requestedAt: '2026-10-03T10:00:00+00:00',
+  completedAt: '2026-10-03T10:01:00+00:00',
+  rowCount: 2,
+};
+
+/** An export still being built: the state the page polls on. */
+export const aBuildingExport: OrderExport = {
+  ...anOrderExport,
+  id: '66666666-6666-6666-6666-666666666666',
+  status: 'Requested',
+  completedAt: null,
+  rowCount: null,
 };
 
 /** Someone else's order, as the fulfilment queue shows it to an operator. */
@@ -260,6 +278,10 @@ export const handlers = [
       nextCursor: null,
     }),
   ),
+  // Before /api/orders/:id, which would otherwise answer for "exports" as an order id: MSW, like
+  // the router, takes the first handler whose pattern matches.
+  http.get('/api/orders/exports', () => HttpResponse.json([anOrderExport])),
+  http.post('/api/orders/exports', () => HttpResponse.json(aBuildingExport, { status: 202 })),
   http.get('/api/orders/:id', ({ params }) =>
     HttpResponse.json({ ...anOrder, id: String(params.id) }),
   ),

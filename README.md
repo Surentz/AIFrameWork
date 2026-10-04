@@ -377,6 +377,9 @@ defence, so no antiforgery token is issued.
 | `GET` | `/api/orders` | cookie | List your orders, paged |
 | `GET` | `/api/orders/{id}` | cookie | One of your orders |
 | `POST` | `/api/orders/{id}/cancel` | cookie | Cancel one of your orders; 409 if it has already shipped |
+| `POST` | `/api/orders/exports` | cookie | Ask for a CSV of all your orders; 202, built by the worker, notified when ready. Returns the one in progress instead of starting another |
+| `GET` | `/api/orders/exports` | cookie | Your exports, newest first, kept for seven days. One still building after 45 minutes reads as `Failed` |
+| `GET` | `/api/orders/exports/{id}/download` | cookie | The CSV; 404 if it is someone else's or not built yet |
 | `GET` | `/api/fulfilment/orders` | `Orders.Fulfil` | Every buyer's orders in one status, oldest first |
 | `POST` | `/api/fulfilment/orders/{id}/ship` | `Orders.Fulfil` | Ship any buyer's order — the only way an order ships over HTTP; 409 on an illegal transition |
 | `POST` | `/api/products` | `Catalogue.Manage` | Add a product to the catalogue |
@@ -449,7 +452,7 @@ frontend/src/
 ├── api/            Generated schema, typed client, endpoint wrappers
 ├── features/
 │   ├── auth/           Login, register, change password, RequireAuth and RequireRole guards
-│   ├── orders/         List, detail, place-order form, query hooks
+│   ├── orders/         List, detail, place-order form, exports page, query hooks
 │   ├── products/       Catalogue list, detail, create and edit forms
 │   ├── notifications/  The header bell, the feed, and the SignalR stream
 │   ├── fulfilment/     The operator's queue of orders to ship
@@ -467,6 +470,7 @@ frontend/src/
 | `/` | redirect to `/orders` | authenticated |
 | `/orders` | `OrderList` | authenticated |
 | `/orders/new` | `PlaceOrderForm` | authenticated |
+| `/orders/exports` | `OrderExportsPage` | authenticated |
 | `/orders/:id` | `OrderDetail` | authenticated |
 | `/products` | `ProductList` | authenticated |
 | `/products/new` | `CreateProductForm` | administrator |
@@ -478,8 +482,8 @@ frontend/src/
 | `/monitoring` | `MonitoringPage` | administrator |
 | `/monitoring/jobs`, `/logins`, `/traffic`, `/users` | `JobsPage`, `LoginsPage`, `TrafficPage`, `UsersPage` | administrator |
 
-`/products/new` is declared before `/products/:id` so that `new` matches the literal route
-rather than being captured as an id.
+`/products/new` and `/orders/exports` are declared before `/products/:id` and `/orders/:id`, so
+that `new` and `exports` match their literal routes rather than being captured as an id.
 
 `RequireAuth` wraps the layout rather than the other way round, so a signed-out visitor is
 redirected before a header they cannot use is rendered. `RequireRole allow="Admin"` nests inside
@@ -690,6 +694,7 @@ All accepted, in [`docs/adr/`](docs/adr/).
 | [0026](docs/adr/0026-rabbitmq-for-asynchronous-work.md) | RabbitMQ is the broker for all asynchronous work |
 | [0027](docs/adr/0027-opentelemetry-metrics-beside-operational-telemetry.md) | OpenTelemetry metrics beside operational telemetry |
 | [0028](docs/adr/0028-the-outbox-is-delivered-only-where-the-push-transport-lives.md) | The outbox is delivered only where the push transport lives |
+| [0029](docs/adr/0029-order-exports-are-stored-in-postgres-and-fail-by-staleness.md) | Order exports are stored in Postgres and fail by staleness |
 
 Record a new one with `/adr <title>`. **Check the open branches as well as `docs/adr/` before
 taking a number** — two branches that each take "the next one" produce a duplicate, which has

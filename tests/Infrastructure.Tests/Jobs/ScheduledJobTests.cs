@@ -45,7 +45,7 @@ public sealed class ScheduledJobTests
     [Fact]
     public void AnUnscheduledJob_HasNoCronAndNoFactory()
     {
-        var job = JobSchedules.Find(nameof(RebuildOrderReport))!;
+        var job = JobSchedules.Find(nameof(BuildOrderExport))!;
 
         job.IsScheduled.Should().BeFalse();
         job.EnqueueNew.Should().BeNull();
@@ -94,14 +94,14 @@ public sealed class ScheduledJobTests
     [Fact]
     public void Validate_WithAnOverrideForAnUnscheduledJob_Throws()
     {
-        // RebuildOrderReport exists but cannot be scheduled (it needs an owner), so a cron for it is
+        // BuildOrderExport exists but cannot be scheduled (it needs an owner), so a cron for it is
         // a configuration mistake, not a way to schedule it.
         var options = new JobOptions { Queues = "light,heavy" };
-        options.Schedules["RebuildOrderReport"] = "0 5 * * * ?";
+        options.Schedules["BuildOrderExport"] = "0 5 * * * ?";
 
         var act = options.Validate;
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*RebuildOrderReport*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*BuildOrderExport*");
     }
 
     [Fact]

@@ -41,6 +41,15 @@ describe('AppRoutes', () => {
     ).toBeInTheDocument();
   });
 
+  it('matches /orders/exports as the exports screen rather than as an order id', async () => {
+    // Were "exports" captured as :id, the detail screen would request /api/orders/exports as if
+    // it were one order.
+    renderAt('/orders/exports');
+
+    expect(await screen.findByRole('heading', { name: 'Exports' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Exports' })).toBeInTheDocument();
+  });
+
   it('matches /products/new as the create screen rather than as an id', async () => {
     // Were "new" captured as :id, the detail screen would request /api/products/new. As an
     // administrator, because the create screen is theirs (ADR 0025).

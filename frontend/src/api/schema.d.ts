@@ -327,6 +327,122 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/orders/exports": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The caller's exports, newest first. Kept for seven days. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": readonly components["schemas"]["OrderExportResponse"][];
+                        readonly "application/json": readonly components["schemas"]["OrderExportResponse"][];
+                        readonly "text/json": readonly components["schemas"]["OrderExportResponse"][];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        /**
+         * Asks for a CSV of every order the caller has placed. Built in the background; the caller is
+         *     notified when it is ready. While one is still being built, returns that one rather than
+         *     starting another.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description Accepted */
+                readonly 202: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["OrderExportResponse"];
+                        readonly "application/json": components["schemas"]["OrderExportResponse"];
+                        readonly "text/json": components["schemas"]["OrderExportResponse"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/orders/exports/{id}/download": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * The CSV of a Ready export. 404 if it is someone else's or not built yet — the same answer for
+         *     both, so an export id reveals nothing.
+         */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/csv": components["schemas"]["Stream"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/orders": {
         readonly parameters: {
             readonly query?: never;
@@ -2453,7 +2569,7 @@ export interface components {
          *     stored contract: renaming one orphans every row already written under the old name.
          * @enum {unknown}
          */
-        readonly NotificationKind: "OrderPlaced" | "OrderShipped" | "OrderCancelled" | "ProductPriceChanged";
+        readonly NotificationKind: "OrderPlaced" | "OrderShipped" | "OrderCancelled" | "ProductPriceChanged" | "OrderExportReady";
         readonly NotificationPageResponse: {
             readonly items: readonly components["schemas"]["NotificationResponse"][];
             readonly nextCursor: null | string;
@@ -2498,6 +2614,33 @@ export interface components {
              */
             readonly readAt?: null | string;
         };
+        readonly OrderExportResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            /**
+             * @description Serialized as its name. Failed is never stored: an export still Requested after 45 minutes
+             *     reads as Failed, because its build job has given up (ADR 0029).
+             */
+            readonly status: components["schemas"]["OrderExportState"];
+            /** Format: date-time */
+            readonly requestedAt: string;
+            /**
+             * Format: date-time
+             * @description Null until Ready.
+             */
+            readonly completedAt?: null | string;
+            /**
+             * Format: int32
+             * @description How many orders the file holds. Null until Ready.
+             */
+            readonly rowCount?: null | number | string;
+        };
+        /**
+         * @description An export as the caller sees it. OrderExportState.Failed is never stored: it is a
+         *     Requested export past TimeSpan OrderExport.StaleAfter, read at the time of asking.
+         * @enum {unknown}
+         */
+        readonly OrderExportState: "Requested" | "Ready" | "Failed";
         readonly OrderListItemResponse: {
             /** Format: uuid */
             readonly id: string;
@@ -2696,6 +2839,8 @@ export interface components {
          * @enum {unknown}
          */
         readonly SignInOutcome: "Succeeded" | "BadCredentials" | "LockedOut" | "UnknownUser" | "SignedOutEverywhere";
+        /** Format: binary */
+        readonly Stream: string;
         /**
          * @description What kind of work a traffic measurement counted.
          * @enum {unknown}

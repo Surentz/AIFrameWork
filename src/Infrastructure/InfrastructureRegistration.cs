@@ -93,6 +93,10 @@ public static class InfrastructureRegistration
         // have sent a confirmation. See ADR 0016 and IJobScheduler's remarks.
         services.AddScoped<IDomainEventHandler<OrderPlaced>, OrderPlacedConfirmationHandler>();
 
+        // The same shape for an export: the build is enqueued off the committed request, so a
+        // rolled-back request never starts one. ADR 0029.
+        services.AddScoped<IDomainEventHandler<OrderExportRequested>, OrderExportJobEnqueuer>();
+
         return services;
     }
 
@@ -111,6 +115,14 @@ public static class InfrastructureRegistration
         services.AddQuery<GetOrder, OrderView, GetOrderHandler>();
         services.AddQuery<GetOrders, OrderPage, GetOrdersHandler>();
         services.AddQuery<GetOrdersToFulfil, FulfilmentQueuePage, GetOrdersToFulfilHandler>();
+
+        // Order exports (ADR 0029). The last two are dispatched by the build job in the worker.
+        services.AddCommand<RequestOrderExport, OrderExportView, RequestOrderExportHandler>();
+        services.AddCommand<CompleteOrderExport, bool, CompleteOrderExportHandler>();
+        services.AddQuery<GetOrderExports, IReadOnlyList<OrderExportView>, GetOrderExportsHandler>();
+        services.AddQuery<GetOrderExport, OrderExportView, GetOrderExportHandler>();
+        services.AddQuery<GetOrderExportFile, OrderExportDownload, GetOrderExportFileHandler>();
+        services.AddQuery<GetOrderExportRows, OrderExportRowPage, GetOrderExportRowsHandler>();
     }
 
     /// <summary>
@@ -122,6 +134,8 @@ public static class InfrastructureRegistration
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<IOrderExportRepository, OrderExportRepository>();
+        services.AddScoped<IOrderExportRetention, OrderExportRetention>();
         services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
@@ -163,6 +177,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IValidator<ShipOrder>, ShipOrderValidator>();
         services.AddScoped<IValidator<RecordShipment>, RecordShipmentValidator>();
         services.AddScoped<IValidator<CancelOrder>, CancelOrderValidator>();
+        services.AddScoped<IValidator<CompleteOrderExport>, CompleteOrderExportValidator>();
         services.AddScoped<IValidator<MarkNotificationRead>, MarkNotificationReadValidator>();
         services.AddScoped<IValidator<CreateProduct>, CreateProductValidator>();
         services.AddScoped<IValidator<UpdateProduct>, UpdateProductValidator>();
@@ -183,6 +198,8 @@ public static class InfrastructureRegistration
         services.AddDomainEvent<OrderShipped>("order.shipped");
         services.AddDomainEvent<OrderCancelled>("order.cancelled");
         services.AddDomainEvent<ProductPriceChanged>("product.price_changed");
+        services.AddDomainEvent<OrderExportRequested>("order_export.requested");
+        services.AddDomainEvent<OrderExportCompleted>("order_export.completed");
 
         // Two handlers on OrderPlaced, dispatched to both: DomainEventDescriptor iterates
         // GetServices<IDomainEventHandler<T>>(), so registering a second one fans out rather than
@@ -192,6 +209,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderShipped>, OrderShippedNotifier>();
         services.AddScoped<IDomainEventHandler<OrderCancelled>, OrderCancelledNotifier>();
         services.AddScoped<IDomainEventHandler<ProductPriceChanged>, ProductPriceChangedNotifier>();
+        services.AddScoped<IDomainEventHandler<OrderExportCompleted>, OrderExportReadyNotifier>();
 
         // Integration events to other systems (ADR 0026) - a fan-out beside the notifiers, so a
         // broker outage never disturbs them: publishing only writes an envelope row.

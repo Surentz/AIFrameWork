@@ -18,7 +18,7 @@ public interface IOrderNotifier
 /// a light job that opens a connection is not a light job. It also sidesteps ownership entirely:
 /// <c>IOrderRepository</c> reads are scoped to an owner (ADR 0007) and <c>OrderPlaced</c> does not
 /// carry one, so a handler that looked the order up would need a user this job has no business
-/// knowing. Contrast <c>RebuildOrderReport</c>, which genuinely does act for a user and therefore
+/// knowing. Contrast <c>BuildOrderExport</c>, which genuinely does act for a user and therefore
 /// carries one.
 /// </remarks>
 public sealed record SendOrderConfirmation(Guid OrderId, string Sku, int Quantity) : IJob

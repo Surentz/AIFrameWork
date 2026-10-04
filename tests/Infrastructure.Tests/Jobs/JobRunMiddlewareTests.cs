@@ -81,13 +81,13 @@ public sealed class JobRunMiddlewareTests
     [Fact]
     public async Task BeforeAsync_RecordsTheLaneFromTheRegistration()
     {
-        var envelope = AnEnvelope(new RebuildOrderReport(Guid.NewGuid()));
+        var envelope = AnEnvelope(new BuildOrderExport(Guid.NewGuid(), Guid.NewGuid()));
 
         await JobRunMiddleware.BeforeAsync(envelope, _recorder, CancellationToken.None);
 
         await _recorder.Received(1).StartedAsync(
             Arg.Is<JobRunAttempt>(a =>
-                a.JobName == nameof(RebuildOrderReport) && a.Lane == JobLane.Heavy),
+                a.JobName == nameof(BuildOrderExport) && a.Lane == JobLane.Heavy),
             Arg.Any<CancellationToken>());
     }
 
@@ -95,7 +95,7 @@ public sealed class JobRunMiddlewareTests
     public async Task BeforeAsync_RecordsTheOwnerOfAUserScopedJob()
     {
         var ownerId = Guid.NewGuid();
-        var envelope = AnEnvelope(new RebuildOrderReport(ownerId));
+        var envelope = AnEnvelope(new BuildOrderExport(Guid.NewGuid(), ownerId));
 
         await JobRunMiddleware.BeforeAsync(envelope, _recorder, CancellationToken.None);
 

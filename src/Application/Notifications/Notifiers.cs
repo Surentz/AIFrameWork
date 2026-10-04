@@ -311,3 +311,41 @@ public sealed class ProductPriceChangedNotifier(
             cancellationToken).ConfigureAwait(false);
     }
 }
+
+/// <summary>
+/// Tells the owner their export is built. Raised in the worker and delivered here, on an API
+/// replica's outbox pump, because only the API can push (ADR 0028) — this is the notifier that ADR
+/// was written for.
+/// </summary>
+public sealed class OrderExportReadyNotifier(
+    INotificationRepository notifications,
+    IUnitOfWork unitOfWork,
+    IEnumerable<INotificationPush> push,
+    IClock clock)
+    : IDomainEventHandler<OrderExportCompleted>
+{
+    public Task HandleAsync(
+        OrderExportCompleted domainEvent, DomainEventContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(domainEvent);
+
+        var orders = domainEvent.RowCount == 1
+            ? "1 order"
+            : $"{domainEvent.RowCount.ToString(CultureInfo.InvariantCulture)} orders";
+
+        // The subject is the export, not an order: the frontend's View link for this kind opens the
+        // exports page, where the download is.
+        return NotificationFanOut.WriteAsync(
+            notifications,
+            unitOfWork,
+            push,
+            clock,
+            context,
+            [domainEvent.UserId],
+            NotificationKind.OrderExportReady,
+            "Your order export is ready",
+            $"{orders}, ready to download.",
+            domainEvent.ExportId,
+            cancellationToken);
+    }
+}

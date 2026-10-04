@@ -5,9 +5,15 @@ import type {
   UseMutationResult,
   UseQueryResult,
 } from '@tanstack/react-query';
-import { getOrder, listOrders, placeOrder } from '../../api/orders';
+import {
+  getOrder,
+  listOrderExports,
+  listOrders,
+  placeOrder,
+  requestOrderExport,
+} from '../../api/orders';
 import type { ApiError } from '../../api/client';
-import type { Order, OrderPage } from './types';
+import type { Order, OrderExport, OrderPage } from './types';
 
 export const orderKeys = {
   all: ['orders'] as const,
@@ -16,6 +22,7 @@ export const orderKeys = {
   // the pages already on screen.
   list: () => [...orderKeys.all, 'list'] as const,
   detail: (id: string) => [...orderKeys.all, 'detail', id] as const,
+  exports: () => [...orderKeys.all, 'exports'] as const,
 };
 
 export function useOrders(): UseInfiniteQueryResult<InfiniteData<OrderPage>, ApiError> {
@@ -50,6 +57,31 @@ export function usePlaceOrder(): UseMutationResult<
     onSuccess: async () => {
       // A new order changes the list; without this the user places one and does not see it.
       await client.invalidateQueries({ queryKey: orderKeys.all });
+    },
+  });
+}
+
+// How often the list is re-read while an export is being built. Push (the OrderExportReady
+// notification) is best-effort and off in some environments, so the screen reaches Ready on its own.
+const BUILDING_POLL_MS = 5_000;
+
+export function useOrderExports(): UseQueryResult<OrderExport[], ApiError> {
+  return useQuery({
+    queryKey: orderKeys.exports(),
+    queryFn: listOrderExports,
+    // Only while something is being built: an idle exports page asks the API nothing.
+    refetchInterval: (query) =>
+      query.state.data?.some((e) => e.status === 'Requested') === true ? BUILDING_POLL_MS : false,
+  });
+}
+
+export function useRequestOrderExport(): UseMutationResult<OrderExport, ApiError, void> {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: requestOrderExport,
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: orderKeys.exports() });
     },
   });
 }

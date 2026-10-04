@@ -55,7 +55,7 @@ public sealed class JobCurrentUser : ICurrentUser
 /// </para>
 /// <para>
 /// <b>Takes the <see cref="Envelope"/>, not an <see cref="IUserScopedJob"/>.</b> JasperFx resolves
-/// chain variables by exact type: the chain has the CONCRETE message (<c>RebuildOrderReport</c>)
+/// chain variables by exact type: the chain has the CONCRETE message (<c>BuildOrderExport</c>)
 /// and will not upcast it to an interface, so a <c>Before(IUserScopedJob, ...)</c> fails codegen
 /// outright with "unable to resolve a variable of type IUserScopedJob". Found by running
 /// <c>codegen write</c>, which is the only place it shows up — the code compiles fine.

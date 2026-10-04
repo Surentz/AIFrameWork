@@ -111,7 +111,12 @@ export interface NewProduct {
 /** One row of `GET /api/notifications`. Only the fields a spec arranges or waits on. */
 export interface FeedItem {
   readonly id: string;
-  readonly kind: 'OrderPlaced' | 'OrderShipped' | 'OrderCancelled' | 'ProductPriceChanged';
+  readonly kind:
+    | 'OrderPlaced'
+    | 'OrderShipped'
+    | 'OrderCancelled'
+    | 'ProductPriceChanged'
+    | 'OrderExportReady';
   readonly title: string;
   readonly body: string;
   readonly subjectId?: string | null;
@@ -165,7 +170,7 @@ export interface ApiClient {
    */
   waitForNotification(
     user: TestUser,
-    match: { kind: FeedItem['kind']; text: string },
+    match: { kind: FeedItem['kind']; text?: string; subjectId?: string },
   ): Promise<FeedItem>;
   /**
    * How many runs the job-runs table holds for `jobName`, optionally in one status. Needs an
@@ -260,8 +265,14 @@ export function createApiClient(operator: TestUser): ApiClient {
 
   async function waitForNotification(
     user: TestUser,
-    match: { kind: FeedItem['kind']; text: string },
+    match: { kind: FeedItem['kind']; text?: string; subjectId?: string },
   ): Promise<FeedItem> {
+    // By subject when the caller has one: it names exactly one thing (an order, an export), where
+    // a body can be shared - every export's ends "ready to download".
+    const matches = (n: FeedItem): boolean =>
+      n.kind === match.kind &&
+      (match.text === undefined || n.body.includes(match.text)) &&
+      (match.subjectId === undefined || n.subjectId === match.subjectId);
     const context = await contextFor(user);
     // The pump polls every second; ten is generous without hiding a notifier that never fires.
     const deadline = Date.now() + 10_000;
@@ -275,14 +286,14 @@ export function createApiClient(operator: TestUser): ApiClient {
       }
 
       const page = (await response.json()) as { items: readonly FeedItem[] };
-      const found = page.items.find((n) => n.kind === match.kind && n.body.includes(match.text));
+      const found = page.items.find(matches);
       if (found !== undefined) {
         return found;
       }
 
       if (Date.now() > deadline) {
         throw new Error(
-          `No ${match.kind} notification mentioning '${match.text}' reached ${user.username} within 10s.`,
+          `No ${match.kind} notification matching ${JSON.stringify(match)} reached ${user.username} within 10s.`,
         );
       }
 

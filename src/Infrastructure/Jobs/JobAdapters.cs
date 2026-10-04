@@ -39,25 +39,3 @@ public sealed partial class LoggingOrderNotifier(ILogger<LoggingOrderNotifier> l
         Message = "Order confirmation for {OrderId}: {Quantity} x {Sku}. No mail provider is configured.")]
     private static partial void LogConfirmation(ILogger logger, Guid orderId, int quantity, string sku);
 }
-
-/// <summary>
-/// The seam where a report store goes. Logs today, for the same reason as
-/// <see cref="LoggingOrderNotifier"/>: persisting a report means a table and a migration, which is
-/// feature work rather than framework work.
-/// </summary>
-public sealed partial class LoggingOrderReportWriter(ILogger<LoggingOrderReportWriter> logger)
-    : IOrderReportWriter
-{
-    public Task WriteAsync(
-        Guid ownerId, int orderCount, int totalQuantity, CancellationToken cancellationToken)
-    {
-        LogReport(logger, ownerId, orderCount, totalQuantity);
-        return Task.CompletedTask;
-    }
-
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "Order report for {OwnerId}: {OrderCount} orders, {TotalQuantity} items. No report store is configured.")]
-    private static partial void LogReport(
-        ILogger logger, Guid ownerId, int orderCount, int totalQuantity);
-}
