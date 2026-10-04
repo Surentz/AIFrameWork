@@ -44,7 +44,7 @@ public sealed class JobRegistrationTests
         // for the wrong reason — so the non-empty scan is asserted, not eyeballed. Same guard
         // RegistrationCompletenessTests puts on its domain-event scan.
         jobs.Should().NotBeEmpty(
-            "the scan must find at least SendOrderConfirmation and RebuildOrderReport; an empty " +
+            "the scan must find at least SendOrderConfirmation and BuildOrderExport; an empty " +
             "result means ApplicationMarker resolved to the wrong assembly, not that there are " +
             "no jobs");
 

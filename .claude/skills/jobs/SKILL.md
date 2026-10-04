@@ -21,7 +21,7 @@ after that.
 ## A job is a message with a lane
 
 ```csharp
-public sealed record RebuildOrderReport(Guid OwnerId) : IUserScopedJob
+public sealed record BuildOrderExport(Guid ExportId, Guid OwnerId) : IUserScopedJob
 {
     public static JobLane Lane => JobLane.Heavy;
 }

@@ -81,7 +81,7 @@ public sealed class MonitoringJobsTests(ApiFactory factory)
         var client = await _factory.CreateAdminClientAsync();
 
         var response = await client.PostAsJsonAsync(
-            "/api/monitoring/jobs/trigger", new { JobName = nameof(RebuildOrderReport) });
+            "/api/monitoring/jobs/trigger", new { JobName = nameof(BuildOrderExport) });
 
         // Registered, but not scheduled: it carries an owner, and a trigger has none to supply.
         // The same constraint JobDescriptor.Scheduled's new() puts in the type system (ADR 0017),
@@ -127,7 +127,7 @@ public sealed class MonitoringJobsTests(ApiFactory factory)
         health.Should().NotBeNull();
         health.TriggerableJobs.Should().Contain(nameof(PruneProcessedOutbox));
         health.TriggerableJobs.Should().NotContain(
-            nameof(RebuildOrderReport), "a job that takes arguments cannot be triggered");
+            nameof(BuildOrderExport), "a job that takes arguments cannot be triggered");
     }
 
     [Fact]

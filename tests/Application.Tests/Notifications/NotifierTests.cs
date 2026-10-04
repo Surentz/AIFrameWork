@@ -344,4 +344,49 @@ public sealed class NotifierTests
             Arg.Is<Notification>(n => n.Body.Contains(expected, StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task OrderExportCompleted_TellsTheOwnerTheExportIsReady()
+    {
+        var exportId = Guid.NewGuid();
+        var notifier = new OrderExportReadyNotifier(_notifications, _unitOfWork, [_push], _clock);
+
+        await notifier.HandleAsync(
+            new OrderExportCompleted(exportId, UserId, 42), Context, CancellationToken.None);
+
+        await _notifications.Received(1).AddAsync(
+            Arg.Is<Notification>(n =>
+                n.UserId == UserId
+                && n.Kind == NotificationKind.OrderExportReady
+                && n.SubjectId == exportId
+                && n.Title == "Your order export is ready"
+                && n.Body == "42 orders, ready to download."),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OrderExportCompleted_WithOneOrder_SaysOrderNotOrders()
+    {
+        var notifier = new OrderExportReadyNotifier(_notifications, _unitOfWork, [_push], _clock);
+
+        await notifier.HandleAsync(
+            new OrderExportCompleted(Guid.NewGuid(), UserId, 1), Context, CancellationToken.None);
+
+        await _notifications.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.Body == "1 order, ready to download."),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OrderExportCompleted_WhenAlreadyNotified_WritesNothing()
+    {
+        _notifications.ListNotifiedRecipientsAsync(MessageId, Arg.Any<NotificationKind>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<Guid> { UserId });
+        var notifier = new OrderExportReadyNotifier(_notifications, _unitOfWork, [_push], _clock);
+
+        await notifier.HandleAsync(
+            new OrderExportCompleted(Guid.NewGuid(), UserId, 3), Context, CancellationToken.None);
+
+        await _notifications.DidNotReceive().AddAsync(Arg.Any<Notification>(), Arg.Any<CancellationToken>());
+    }
 }

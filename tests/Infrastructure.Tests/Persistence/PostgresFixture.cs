@@ -41,6 +41,8 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddDomainEvent<OrderPlaced>("order.placed");
+        services.AddDomainEvent<OrderExportRequested>("order_export.requested");
+        services.AddDomainEvent<OrderExportCompleted>("order_export.completed");
         services.AddSingleton<DomainEventRegistry>();
         services.AddSingleton<IClock, SystemClock>();
         using var provider = services.BuildServiceProvider();

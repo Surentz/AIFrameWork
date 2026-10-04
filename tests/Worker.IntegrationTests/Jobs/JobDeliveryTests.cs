@@ -105,18 +105,20 @@ public sealed class JobDeliveryTests(WorkerFactory factory)
         var ownerId = Guid.NewGuid();
         var host = factory.Services.GetRequiredService<IHost>();
 
-        // RebuildOrderReportHandler pages GetOrders, which fails Unauthorized with no caller
-        // (ADR 0007 puts ownership in the query) and THROWS from the handler when it does. So a
-        // job that completes without throwing is itself the proof that JobUserMiddleware
-        // populated ICurrentUser from OwnerId — there is no other way for it to have succeeded.
-        var tracked = await TrackJobs(host).ExecuteAndWaitAsync(_ => EnqueueAsync(new RebuildOrderReport(ownerId)));
+        // BuildOrderExportHandler first reads the export through GetOrderExport, which fails
+        // Unauthorized with no caller (ADR 0007 puts ownership in the query), and the handler THROWS
+        // on that. With a caller, an export id that does not exist is NotFound, which the handler
+        // treats as "pruned, nothing to do". So a job that completes without throwing is itself the
+        // proof that JobUserMiddleware populated ICurrentUser from OwnerId.
+        var tracked = await TrackJobs(host).ExecuteAndWaitAsync(
+            _ => EnqueueAsync(new BuildOrderExport(Guid.NewGuid(), ownerId)));
 
-        tracked.Executed.SingleMessage<RebuildOrderReport>()
+        tracked.Executed.SingleMessage<BuildOrderExport>()
             .Should().NotBeNull("the job must reach its handler");
 
         tracked.AllExceptions().Should().BeEmpty(
-            "the handler pages GetOrders, which fails Unauthorized without a current user — so " +
-            "any exception here means JobUserMiddleware did not set the caller from OwnerId");
+            "the handler's first read fails Unauthorized without a current user, and it throws on " +
+            "that — so any exception here means JobUserMiddleware did not set the caller from OwnerId");
     }
 
     /// <summary>

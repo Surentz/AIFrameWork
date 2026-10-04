@@ -16,6 +16,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
 {
     public DbSet<Order> Orders => Set<Order>();
 
+    public DbSet<OrderExport> OrderExports => Set<OrderExport>();
+
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
     public DbSet<OrderAudit> OrderAudits => Set<OrderAudit>();

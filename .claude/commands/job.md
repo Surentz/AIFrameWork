@@ -42,16 +42,20 @@ In the **feature folder**, beside that feature's commands and queries. There is 
 in Application; this repo organises by feature, not by technical kind.
 
 ```csharp
-public sealed record RebuildOrderReport(Guid OwnerId) : IUserScopedJob
+public sealed record BuildOrderExport(Guid ExportId, Guid OwnerId) : IUserScopedJob
 {
     public static JobLane Lane => JobLane.Heavy;
 }
 
-public sealed class RebuildOrderReportHandler(IQueryDispatcher queries, IOrderReportWriter writer)
+public sealed class BuildOrderExportHandler(IQueryDispatcher queries, ICommandDispatcher commands)
 {
-    public async Task Handle(RebuildOrderReport job, CancellationToken cancellationToken) { ... }
+    public async Task Handle(BuildOrderExport job, CancellationToken cancellationToken) { ... }
 }
 ```
+
+`BuildOrderExport` (`src/Application/Orders/BuildOrderExport.cs`) is the reference: it reads
+through the query dispatcher, writes through a command, throws on any failure but "not found",
+and is enqueued from `OrderExportJobEnqueuer`, a domain event handler. ADR 0029.
 
 - Implement `IUserScopedJob` (not just `IJob`) if the job touches user-owned data, and carry the
   owner. There is no `HttpContext` in the worker; `JobUserMiddleware` populates `ICurrentUser`

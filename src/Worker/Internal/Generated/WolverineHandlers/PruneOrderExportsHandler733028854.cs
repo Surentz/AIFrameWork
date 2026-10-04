@@ -4,13 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Internal.Generated.WolverineHandlers
 {
-    // START: RebuildOrderReportHandler339131284
+    // START: PruneOrderExportsHandler733028854
     [global::System.CodeDom.Compiler.GeneratedCode("JasperFx", "1.0.0")]
-    public sealed class RebuildOrderReportHandler339131284 : Wolverine.Runtime.Handlers.MessageHandler
+    public sealed class PruneOrderExportsHandler733028854 : Wolverine.Runtime.Handlers.MessageHandler
     {
         private readonly Microsoft.Extensions.DependencyInjection.IServiceScopeFactory _serviceScopeFactory;
 
-        public RebuildOrderReportHandler339131284(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
+        public PruneOrderExportsHandler733028854(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
         {
             _serviceScopeFactory = serviceScopeFactory;
         }
@@ -21,32 +21,31 @@ namespace Internal.Generated.WolverineHandlers
         {
             await using var serviceScope = _serviceScopeFactory.CreateAsyncScope();
             Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Wolverine.Runtime.ScopedMessageContextHolder>(serviceScope.ServiceProvider).Context = context;
-            var orderReportWriter = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Orders.IOrderReportWriter>(serviceScope.ServiceProvider);
             
             /*
-            * Dependency: Descriptor: ServiceType: System.IServiceProvider Lifetime: Scoped ImplementationType: Microsoft.Extensions.DependencyInjection.ServiceDescriptor
-            * Your code is directly using IServiceProvider
+            * Dependency: Descriptor: ServiceType: AiFramework.Infrastructure.Persistence.AiFrameworkDbContext Lifetime: Scoped ImplementationType: AiFramework.Infrastructure.Persistence.AiFrameworkDbContext
+            * 
+            * Dependency: Descriptor: ServiceType: Microsoft.EntityFrameworkCore.DbContextOptions"1[AiFramework.Infrastructure.Persistence.AiFrameworkDbContext] Lifetime: Scoped ImplementationFactory: Microsoft.Extensions.DependencyInjection.EntityFrameworkServiceCollectionExtensions.CreateDbContextOptions
+            * The service registration for Microsoft.EntityFrameworkCore.DbContextOptions<AiFramework.Infrastructure.Persistence.AiFrameworkDbContext> is an 'opaque' lambda factory with the Scoped lifetime and requires service location
             */
-            var queryDispatcher = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IQueryDispatcher>(serviceScope.ServiceProvider);
-            var jobCurrentUser = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Infrastructure.Jobs.JobCurrentUser>(serviceScope.ServiceProvider);
+            var orderExportRetention = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Orders.IOrderExportRetention>(serviceScope.ServiceProvider);
             
             /*
             * Concrete type AiFramework.Infrastructure.Jobs.JobRunRecorder is not public, so requires service location
             */
             var jobRunRecorder = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<AiFramework.Application.Abstractions.IJobRunRecorder>(serviceScope.ServiceProvider);
             // The actual message body
-            var rebuildOrderReport = (AiFramework.Application.Orders.RebuildOrderReport)context.Envelope.Message;
+            var pruneOrderExports = (AiFramework.Application.Orders.PruneOrderExports)context.Envelope.Message;
 
             try
             {
-                AiFramework.Infrastructure.Jobs.JobUserMiddleware.Before(context.Envelope, jobCurrentUser);
                 await AiFramework.Infrastructure.Jobs.JobRunMiddleware.BeforeAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
-                System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Orders.RebuildOrderReportHandler");
-                System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Orders.RebuildOrderReportHandler");
-                var rebuildOrderReportHandler = new AiFramework.Application.Orders.RebuildOrderReportHandler(queryDispatcher, orderReportWriter);
+                System.Diagnostics.Activity.Current?.SetTag("message.handler", "AiFramework.Application.Orders.PruneOrderExportsHandler");
+                System.Diagnostics.Activity.Current?.SetTag("handler.type", "AiFramework.Application.Orders.PruneOrderExportsHandler");
+                var pruneOrderExportsHandler = new AiFramework.Application.Orders.PruneOrderExportsHandler(orderExportRetention);
                 
                 // The actual message execution
-                await rebuildOrderReportHandler.Handle(rebuildOrderReport, cancellation).ConfigureAwait(false);
+                await pruneOrderExportsHandler.Handle(pruneOrderExports, cancellation).ConfigureAwait(false);
 
                 await AiFramework.Infrastructure.Jobs.JobRunMiddleware.AfterAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
             }
@@ -60,7 +59,7 @@ namespace Internal.Generated.WolverineHandlers
 
     }
 
-    // END: RebuildOrderReportHandler339131284
+    // END: PruneOrderExportsHandler733028854
     
     
 }

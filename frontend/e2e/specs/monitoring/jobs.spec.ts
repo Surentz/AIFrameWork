@@ -52,11 +52,11 @@ test.describe('jobs', { tag: '@local-only' }, () => {
     await adminPage.goto('/monitoring/jobs');
 
     // A job that takes arguments has none a trigger could supply, so it must not be offered.
-    // SendOrderConfirmation and RebuildOrderReport are the two such jobs today.
+    // SendOrderConfirmation and BuildOrderExport are the two such jobs today.
     const options = monitoring.triggerJobSelect(adminPage).getByRole('option');
     await expect(options.filter({ hasText: Job })).toHaveCount(1);
     await expect(options.filter({ hasText: 'SendOrderConfirmation' })).toHaveCount(0);
-    await expect(options.filter({ hasText: 'RebuildOrderReport' })).toHaveCount(0);
+    await expect(options.filter({ hasText: 'BuildOrderExport' })).toHaveCount(0);
   });
 
   // The whole enqueue path, not just the trigger: OrderPlaced is handled off the outbox, which

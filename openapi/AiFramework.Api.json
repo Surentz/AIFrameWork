@@ -449,6 +449,124 @@
         }
       }
     },
+    "/api/orders/exports": {
+      "post": {
+        "tags": [
+          "OrderExports"
+        ],
+        "summary": "Asks for a CSV of every order the caller has placed. Built in the background; the caller is\nnotified when it is ready. While one is still being built, returns that one rather than\nstarting another.",
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderExportResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderExportResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderExportResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "OrderExports"
+        ],
+        "summary": "The caller's exports, newest first. Kept for seven days.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrderExportResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrderExportResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrderExportResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders/exports/{id}/download": {
+      "get": {
+        "tags": [
+          "OrderExports"
+        ],
+        "summary": "The CSV of a Ready export. 404 if it is someone else's or not built yet — the same answer for\nboth, so an export id reveals nothing.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orders": {
       "post": {
         "tags": [
@@ -3677,7 +3795,8 @@
           "OrderPlaced",
           "OrderShipped",
           "OrderCancelled",
-          "ProductPriceChanged"
+          "ProductPriceChanged",
+          "OrderExportReady"
         ],
         "description": "What a notification is about. Persisted by name rather than by number (see the EF\nconfiguration), so the numeric values here are free to be reordered — but the NAMES are a\nstored contract: renaming one orphans every row already written under the old name."
       },
@@ -3775,6 +3894,54 @@
             "format": "date-time"
           }
         }
+      },
+      "OrderExportResponse": {
+        "required": [
+          "id",
+          "status",
+          "requestedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "description": "Serialized as its name. Failed is never stored: an export still Requested after 45 minutes\nreads as Failed, because its build job has given up (ADR 0029).",
+            "$ref": "#/components/schemas/OrderExportState"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null until Ready.",
+            "format": "date-time"
+          },
+          "rowCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "How many orders the file holds. Null until Ready.",
+            "format": "int32"
+          }
+        }
+      },
+      "OrderExportState": {
+        "enum": [
+          "Requested",
+          "Ready",
+          "Failed"
+        ],
+        "description": "An export as the caller sees it. OrderExportState.Failed is never stored: it is a\nRequested export past TimeSpan OrderExport.StaleAfter, read at the time of asking."
       },
       "OrderListItemResponse": {
         "required": [
@@ -4337,6 +4504,10 @@
         ],
         "description": "What happened on one attempt to authenticate."
       },
+      "Stream": {
+        "type": "string",
+        "format": "binary"
+      },
       "TrafficKind": {
         "enum": [
           "Http",
@@ -4609,6 +4780,9 @@
     },
     {
       "name": "Products"
+    },
+    {
+      "name": "OrderExports"
     },
     {
       "name": "Orders"

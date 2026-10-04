@@ -135,7 +135,8 @@ and the remember-me test. **Recount before adding an untagged test that register
 `logins.spec.ts` were tagged because only the managed stack named the e2e operator. The kind
 overlay names it too since ADR 0025, so that reason no longer holds for the cluster; they stay
 tagged until someone decides to run them there, which is its own change.
-`jobs.spec.ts` also needs the worker, which an arbitrary URL target cannot be assumed to run.
+`jobs.spec.ts` also needs the worker, which an arbitrary URL target cannot be assumed to run, and
+`exports.spec.ts` is tagged for that reason alone.
 `monitoring.spec.ts`'s two *access* tests are untagged deliberately — refusing a member is the
 security-relevant half and needs no administrator, so it runs everywhere.
 
@@ -154,7 +155,7 @@ budget nor the administrator: it publishes `shipment.confirmed.v1` through the b
 management HTTP API directly from the host (`support/broker.ts`), and only the stack
 `playwright.config.ts` starts exposes that port — the kind cluster does not.
 
-**A `kind` run therefore executes 28 of the 57 tests** — `npm run e2e` runs all of them, where
+**A `kind` run therefore executes 28 of the 58 tests** — `npm run e2e` runs all of them, where
 the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
@@ -197,7 +198,7 @@ first, or set `API_PORT` / `WORKER_PORT`.
 | Area | Specs |
 |---|---|
 | Auth | sign-in, remember me, reveal password, navigation, registration (+ validation), change password (+ validation), sign out everywhere, lockout |
-| Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation), shipment confirmed via the broker |
+| Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation), shipment confirmed via the broker, export (request, built by the worker, notified, downloaded) |
 | Products | create, edit, edit-from-detail, duplicate sku, field validation (all as the operator), member refused the form, paging |
 | Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
 | Monitoring | access, overview, drill-downs, traffic window, jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |

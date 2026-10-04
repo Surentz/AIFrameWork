@@ -13,3 +13,9 @@ export type Order = components['schemas']['OrderResponse'];
 export type OrderListItem = components['schemas']['OrderListItemResponse'];
 
 export type OrderPage = components['schemas']['OrderPageResponse'];
+
+// An export of the caller's own orders (ADR 0029). Status is 'Requested' | 'Ready' | 'Failed';
+// Failed is never stored, the API derives it from a request the build job gave up on.
+export type OrderExport = components['schemas']['OrderExportResponse'];
+
+export type OrderExportState = components['schemas']['OrderExportState'];

@@ -31,6 +31,7 @@ export function AppLayout(): React.JSX.Element {
             All orders
           </NavLink>
           <NavLink to="/orders/new">Place an order</NavLink>
+          <NavLink to="/orders/exports">Exports</NavLink>
           {/* `end` for the same reason as above: /products/new and /products/:id must not
               light up "Catalogue". */}
           <NavLink to="/products" end>

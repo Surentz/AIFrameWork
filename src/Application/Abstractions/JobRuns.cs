@@ -28,7 +28,7 @@ public enum JobRunStatus
 /// </summary>
 /// <param name="EnvelopeId">Wolverine's message id. Stable across every attempt.</param>
 /// <param name="Attempt">1 for the first try.</param>
-/// <param name="JobName">The message type's name, e.g. <c>RebuildOrderReport</c>.</param>
+/// <param name="JobName">The message type's name, e.g. <c>BuildOrderExport</c>.</param>
 /// <param name="Lane">
 /// Null only if the job is not in <c>JobRegistration.Jobs</c>, which the completeness test makes
 /// impossible — recorded as nullable rather than guessed, so a gap shows up as a gap.

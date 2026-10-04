@@ -79,6 +79,28 @@ describe('NotificationList', () => {
     ]);
   });
 
+  it('links an export-ready notification to the exports page, where the download is', async () => {
+    server.use(
+      http.get('/api/notifications', () =>
+        HttpResponse.json({
+          items: [
+            {
+              ...aNotification,
+              kind: 'OrderExportReady',
+              title: 'Your order export is ready',
+              subjectId: '55555555-5555-5555-5555-555555555555',
+            },
+          ],
+          nextCursor: null,
+        }),
+      ),
+    );
+
+    renderList();
+
+    expect(await screen.findByRole('link', { name: /^View / })).toHaveAttribute('href', '/orders/exports');
+  });
+
   it('offers no View link when the notification has no subject', async () => {
     server.use(
       http.get('/api/notifications', () =>

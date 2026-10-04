@@ -65,9 +65,9 @@ public sealed class JobRunRecordingTests(WorkerFactory factory)
         var host = factory.Services.GetRequiredService<IHost>();
 
         await TrackJobs(host).ExecuteAndWaitAsync(
-            _ => EnqueueAsync(new RebuildOrderReport(Guid.NewGuid())));
+            _ => EnqueueAsync(new BuildOrderExport(Guid.NewGuid(), Guid.NewGuid())));
 
-        var run = await ReadRunAsync(nameof(RebuildOrderReport));
+        var run = await ReadRunAsync(nameof(BuildOrderExport));
 
         // The lane comes from JobRegistration, not from the message — IJob.Lane is a static
         // abstract and cannot be read off an instance at all.
@@ -81,9 +81,9 @@ public sealed class JobRunRecordingTests(WorkerFactory factory)
         var ownerId = Guid.NewGuid();
         var host = factory.Services.GetRequiredService<IHost>();
 
-        await TrackJobs(host).ExecuteAndWaitAsync(_ => EnqueueAsync(new RebuildOrderReport(ownerId)));
+        await TrackJobs(host).ExecuteAndWaitAsync(_ => EnqueueAsync(new BuildOrderExport(Guid.NewGuid(), ownerId)));
 
-        var run = await ReadRunAsync(nameof(RebuildOrderReport));
+        var run = await ReadRunAsync(nameof(BuildOrderExport));
 
         run.Should().NotBeNull();
         run.OwnerId.Should().Be(ownerId, "a user-scoped job's run is attributable to its owner");

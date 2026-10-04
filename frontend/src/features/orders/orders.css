@@ -194,3 +194,12 @@
   font-size: var(--text-lg);
   font-weight: 600;
 }
+
+/* The exports page's button and, under it, the error a refused request produces - kept together so
+   the failure appears where the user clicked. */
+.orders__export {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}

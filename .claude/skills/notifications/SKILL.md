@@ -6,9 +6,12 @@ description: Use when touching the in-app notification feed, a domain event hand
 # Notifications
 
 An in-app feed, one row per recipient, written by domain event handlers off the outbox and read
-over REST (`/api/notifications`, `/api/notifications/unread-count`). Four kinds:
-`OrderPlaced`, `OrderShipped`, `OrderCancelled`, `ProductPriceChanged`. The first three notify
-the buyer; the last notifies everyone who has previously ordered that product.
+over REST (`/api/notifications`, `/api/notifications/unread-count`). Five kinds:
+`OrderPlaced`, `OrderShipped`, `OrderCancelled`, `ProductPriceChanged`, `OrderExportReady`. The
+first three notify the buyer; `ProductPriceChanged` notifies everyone who has previously ordered
+that product; `OrderExportReady` tells an export's owner it can be downloaded. That last one is
+raised in the worker and delivered by an API replica, which is exactly the path ADR 0028 exists
+for; its `SubjectId` is the export, and the frontend links it to `/orders/exports` (ADR 0029).
 
 Five things that will cost you time:
 
