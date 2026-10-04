@@ -245,6 +245,11 @@ same workflow runs by hand from the Actions tab, with optional `grep` and `repea
 `e2e / e2e`, and `pr title and labels` from `.github/workflows/pr-labels.yml`. Renaming a job, or adding a path filter to the `pull_request` trigger, leaves a
 required check that never reports, and every PR blocks — update the ruleset in the same change.
 
+**CodeQL runs from repository settings, not from a workflow file** (Settings → Advanced Security →
+CodeQL analysis, *default setup*, enabled 2026-10-04). It scans C#, TypeScript and the Actions
+workflows on every PR and weekly, and results land in the Security tab. It is not a required
+check. Do not add a `codeql.yml`: GitHub rejects advanced-setup uploads while default setup is on.
+
 **Every PR gets one test-and-coverage comment**, from `ci.yml`'s last job, `test report`: every
 suite's results (flaky e2e tests included), the failed tests by name, and backend and frontend
 line, branch and method coverage against main. It is report only and is **not** a required check.
