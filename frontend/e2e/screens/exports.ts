@@ -8,6 +8,13 @@ export const exportButton = (p: Page): Locator =>
 
 /** The newest Ready export's download - the list is newest first, and each link's name starts
     "Download export requested …", which a substring match on "Download" finds. */
+/** The newest Ready export's View button. */
+export const viewButton = (p: Page): Locator =>
+  p.getByRole('table', { name: 'Exports' }).getByRole('button', { name: /^View export requested / }).first();
+
+/** The open viewer. */
+export const viewer = (p: Page): Locator => p.getByRole('dialog', { name: /^Export requested / });
+
 export const downloadLink = (p: Page): Locator =>
   p.getByRole('table', { name: 'Exports' }).getByRole('link', { name: 'Download' }).first();
 
