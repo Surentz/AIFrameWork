@@ -72,6 +72,15 @@ jobs:
 
       - run: dotnet restore
 
+      # Whitespace only: code-style and analyzer rules already fail the build below, so
+      # `dotnet format style`/`analyzers` would only repeat it, slowly. Debug leg only - the
+      # answer does not depend on the configuration, and it rides the existing required check
+      # `backend (Debug)` rather than adding one to the ruleset. Fix locally with
+      # `dotnet format whitespace AiFramework.slnx`.
+      - name: Check formatting
+        if: matrix.configuration == 'Debug'
+        run: dotnet format whitespace AiFramework.slnx --verify-no-changes --no-restore
+
       # Warnings are errors across compiler, analyzers and build (Directory.Build.props), so
       # this step failing on a warning is the intended behaviour, not a CI misconfiguration.
       - name: Build
