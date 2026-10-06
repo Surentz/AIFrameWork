@@ -129,7 +129,9 @@ function Exports({ exports, error }: ExportsProps): React.JSX.Element {
                           <button
                             className="btn btn--secondary"
                             type="button"
-                            onClick={() => { setViewing(exp); }}
+                            onClick={() => {
+                              setViewing(exp);
+                            }}
                             aria-label={`View export requested ${requested}`}
                           >
                             View
@@ -155,7 +157,12 @@ function Exports({ exports, error }: ExportsProps): React.JSX.Element {
         </div>
       )}
 
-      <ExportViewerDialog exportItem={viewing} onClose={() => { setViewing(null); }} />
+      <ExportViewerDialog
+        exportItem={viewing}
+        onClose={() => {
+          setViewing(null);
+        }}
+      />
 
       {/* In every branch that has data: a re-read that fails keeps the last list on screen, the
           empty one included, and must still say it failed. */}

@@ -271,3 +271,18 @@
     border-radius: 0.75rem;
   }
 }
+
+/* Narrow phones: the toolbar wraps rather than squeezing its buttons. */
+.export-viewer__toolbar {
+  flex-wrap: wrap;
+}
+
+/* offsetTop of each page is measured against the body (ExportViewer pageInView). */
+.export-viewer__body {
+  position: relative;
+}
+
+/* A modal <dialog> does not stop the page behind it scrolling; this does, while the viewer is open. */
+html:has(.export-viewer[open]) {
+  overflow: hidden;
+}

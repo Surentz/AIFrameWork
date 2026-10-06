@@ -10,7 +10,11 @@ import * as exportsPage from '../../screens/exports.ts';
  * run - the same reason as jobs.spec.ts. Runs as `workerUser`, so it spends no auth permit.
  */
 test.describe('order exports', { tag: '@local-only' }, () => {
-  test('exports the caller\'s orders to a PDF they can read and download', async ({ signedInPage, workerUser, api }) => {
+  test("exports the caller's orders to a PDF they can read and download", async ({
+    signedInPage,
+    workerUser,
+    api,
+  }) => {
     const sku = (await api.placeOrders(workerUser, 1))[0];
     if (sku === undefined) {
       throw new Error('placeOrders returned no sku');

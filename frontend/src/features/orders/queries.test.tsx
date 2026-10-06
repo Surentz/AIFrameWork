@@ -71,23 +71,36 @@ describe('useOrderExportDocument', () => {
       }),
     );
 
-    const { result } = renderHook(() => useOrderExportDocument(anOrderExport.id), { wrapper: withQueryClient() });
+    const { result } = renderHook(() => useOrderExportDocument(anOrderExport.id), {
+      wrapper: withQueryClient(),
+    });
 
-    await waitFor(() => { expect(result.current.isSuccess).toBe(true); });
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
     expect(requested).toBe(`/api/orders/exports/${anOrderExport.id}/download`);
-    expect(Array.from(new Uint8Array(result.current.data ?? new ArrayBuffer(0)))).toEqual(Array.from(aPdf));
+    expect(Array.from(new Uint8Array(result.current.data ?? new ArrayBuffer(0)))).toEqual(
+      Array.from(aPdf),
+    );
   });
 
   it('reports a missing export as an ApiError', async () => {
     server.use(
       http.get('/api/orders/exports/:id/download', () =>
-        HttpResponse.json({ title: 'Not found', detail: 'That export does not exist or is not ready.' }, { status: 404 }),
+        HttpResponse.json(
+          { title: 'Not found', detail: 'That export does not exist or is not ready.' },
+          { status: 404 },
+        ),
       ),
     );
 
-    const { result } = renderHook(() => useOrderExportDocument(anOrderExport.id), { wrapper: withQueryClient() });
+    const { result } = renderHook(() => useOrderExportDocument(anOrderExport.id), {
+      wrapper: withQueryClient(),
+    });
 
-    await waitFor(() => { expect(result.current.isError).toBe(true); });
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
     expect(result.current.error?.status).toBe(404);
   });
 });

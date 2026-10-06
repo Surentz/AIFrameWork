@@ -1,7 +1,29 @@
 import { Suspense, lazy, useEffect, useId, useRef } from 'react';
+import { orderExportDownloadUrl } from '../../api/orders';
 import type { OrderExport } from './types';
 
-const ExportViewer = lazy(() => import('./ExportViewer'));
+interface ViewerProps {
+  readonly id: string;
+}
+
+/** What the dialog shows when the viewer's own code cannot be fetched. */
+function ViewerUnavailable({ id }: ViewerProps): React.JSX.Element {
+  return (
+    <div className="orders__state" role="alert">
+      <p>The viewer could not load. You can still download the export.</p>
+      <a className="btn btn--secondary" href={orderExportDownloadUrl(id)} download>
+        Download
+      </a>
+    </div>
+  );
+}
+
+// The viewer is a separate chunk, and a chunk can fail to arrive: offline, or a hashed file a
+// deploy has since replaced. Without this the rejection is thrown during render and takes the whole
+// page down with it. Not a swallowed error: the dialog says so, and offers the download instead.
+const ExportViewer = lazy(() =>
+  import('./ExportViewer').catch(() => ({ default: ViewerUnavailable })),
+);
 
 interface ExportViewerDialogProps {
   readonly exportItem: OrderExport | null;
@@ -13,7 +35,10 @@ interface ExportViewerDialogProps {
  * focus trap, Esc, the inert page behind it, and focus returning to the View button on close.
  * Full screen below 40rem (orders.css).
  */
-export function ExportViewerDialog({ exportItem, onClose }: ExportViewerDialogProps): React.JSX.Element {
+export function ExportViewerDialog({
+  exportItem,
+  onClose,
+}: ExportViewerDialogProps): React.JSX.Element {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -38,7 +63,13 @@ export function ExportViewerDialog({ exportItem, onClose }: ExportViewerDialogPr
             <h2 id={titleId} className="export-viewer__title">
               {`Export requested ${new Date(exportItem.requestedAt).toLocaleString()}`}
             </h2>
-            <button className="btn btn--secondary" type="button" onClick={() => { dialog.current?.close(); }}>
+            <button
+              className="btn btn--secondary"
+              type="button"
+              onClick={() => {
+                dialog.current?.close();
+              }}
+            >
               Close
             </button>
           </div>

@@ -286,7 +286,9 @@ export const handlers = [
   http.get('/api/orders/exports', () => HttpResponse.json([anOrderExport])),
   http.post('/api/orders/exports', () => HttpResponse.json(aBuildingExport, { status: 202 })),
   http.get('/api/orders/exports/:id/download', () =>
-    HttpResponse.arrayBuffer(aPdf.slice().buffer, { headers: { 'Content-Type': 'application/pdf' } }),
+    HttpResponse.arrayBuffer(aPdf.slice().buffer, {
+      headers: { 'Content-Type': 'application/pdf' },
+    }),
   ),
   http.get('/api/orders/:id', ({ params }) =>
     HttpResponse.json({ ...anOrder, id: String(params.id) }),
