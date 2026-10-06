@@ -239,6 +239,9 @@ build, because only its *startup* failed), `codegen`,
 `contract`, `frontend`, and `e2e`. `/verify` runs the same checks locally, including the two
 diff checks. The `e2e` job is defined in `.github/workflows/e2e.yml`, which `ci.yml` calls; the
 same workflow runs by hand from the Actions tab, with optional `grep` and `repeat_each` inputs.
+`backend (Debug)` also fails on unformatted C# (`dotnet format whitespace --verify-no-changes`);
+fix with `dotnet format whitespace AiFramework.slnx`. Rider's formatter can disagree with it, and
+the command wins. Migrations are exempt from its encoding rule only (`.editorconfig`).
 
 `main` is protected by a branch ruleset that requires seven checks **by name**: `backend (Debug)`,
 `backend (Release)`, `generated code is current`, `api contract is current`, `frontend`,

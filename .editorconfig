@@ -88,6 +88,10 @@ dotnet_diagnostic.CA1031.severity = none
 # several to satisfy a line count would also make the schema history lie about what changed
 # together). Scoped to this generated folder only - not a repo-wide exemption. ---
 [src/Infrastructure/Persistence/Migrations/*.cs]
+# No encoding rule here: EF's template writes UTF-8 with a BOM, three hand-written migrations
+# have none, and a committed migration cannot be edited to agree. Either setting would fail
+# `dotnet format whitespace --verify-no-changes` on files nobody may touch.
+charset = unset
 dotnet_diagnostic.CA1062.severity = none
 dotnet_diagnostic.IDE0161.severity = none
 dotnet_diagnostic.CA1861.severity = none
