@@ -13,15 +13,16 @@ namespace AiFramework.Infrastructure.Tests.Persistence;
 [Collection(nameof(PostgresCollection))]
 public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
 {
+    private static readonly byte[] AFile = [0x25, 0x50, 0x44, 0x46];
     private static readonly DateTimeOffset Base = new(2099, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     private async Task<OrderExport> SeedAsync(
-        Guid userId, DateTimeOffset? requestedAt = null, string? content = null)
+        Guid userId, DateTimeOffset? requestedAt = null, byte[]? document = null)
     {
         var export = OrderExport.Request(Guid.NewGuid(), userId, requestedAt ?? Base);
-        if (content is not null)
+        if (document is not null)
         {
-            export.Complete(content, 3, (requestedAt ?? Base).AddMinutes(1));
+            export.Complete(document, 3, (requestedAt ?? Base).AddMinutes(1));
         }
 
         export.ClearDomainEvents();
@@ -34,7 +35,7 @@ public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
     [Fact]
     public async Task AddAsync_RoundTripsEveryMappedProperty()
     {
-        var export = await SeedAsync(Guid.NewGuid(), content: "OrderId\r\n");
+        var export = await SeedAsync(Guid.NewGuid(), document: AFile);
 
         await using var context = fixture.CreateContext();
         var stored = await context.OrderExports.AsNoTracking().SingleAsync(e => e.Id == export.Id);
@@ -44,7 +45,7 @@ public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
         stored.Status.Should().Be(OrderExportStatus.Ready);
         stored.CompletedAt.Should().Be(Base.AddMinutes(1));
         stored.RowCount.Should().Be(3);
-        stored.Content.Should().Be("OrderId\r\n");
+        stored.Document.Should().Equal(AFile);
     }
 
     [Fact]
@@ -91,7 +92,7 @@ public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
     public async Task GetInProgressAsync_IgnoresAReadyExport()
     {
         var userId = Guid.NewGuid();
-        await SeedAsync(userId, content: "csv");
+        await SeedAsync(userId, document: AFile);
 
         await using var context = fixture.CreateContext();
         var found = await new OrderExportRepository(context)
@@ -122,7 +123,7 @@ public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
             var tracked = await new OrderExportRepository(context)
                 .GetForUpdateAsync(export.Id, export.UserId, CancellationToken.None);
             // ! is safe: the export was seeded above for exactly this owner.
-            tracked!.Complete("csv", 0, Base.AddMinutes(1));
+            tracked!.Complete(AFile, 0, Base.AddMinutes(1));
             await context.SaveChangesAsync();
         }
 
@@ -150,7 +151,7 @@ public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
     [Fact]
     public async Task GetSummaryAsync_ReadsTheStatusOfABuiltExport()
     {
-        var export = await SeedAsync(Guid.NewGuid(), content: "csv");
+        var export = await SeedAsync(Guid.NewGuid(), document: AFile);
 
         await using var context = fixture.CreateContext();
         var found = await new OrderExportRepository(context)
@@ -165,7 +166,7 @@ public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
     {
         var userId = Guid.NewGuid();
         var older = await SeedAsync(userId, Base);
-        var newer = await SeedAsync(userId, Base.AddHours(1), content: "csv");
+        var newer = await SeedAsync(userId, Base.AddHours(1), document: AFile);
         await SeedAsync(Guid.NewGuid());
 
         await using var context = fixture.CreateContext();
@@ -177,15 +178,16 @@ public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task GetFileAsync_ReturnsAReadyExportsContent()
+    public async Task GetFileAsync_ReturnsAReadyExportsDocument()
     {
-        var export = await SeedAsync(Guid.NewGuid(), content: "OrderId\r\n");
+        var export = await SeedAsync(Guid.NewGuid(), document: AFile);
 
         await using var context = fixture.CreateContext();
         var file = await new OrderExportRepository(context)
             .GetFileAsync(export.Id, export.UserId, CancellationToken.None);
 
-        file.Should().Be(new OrderExportFile("OrderId\r\n", Base));
+        file!.Document.Should().Equal(AFile);
+        file.RequestedAt.Should().Be(Base);
     }
 
     [Fact]
@@ -203,7 +205,7 @@ public sealed class OrderExportRepositoryTests(PostgresFixture fixture)
     [Fact]
     public async Task GetFileAsync_ForSomeoneElse_IsNull()
     {
-        var export = await SeedAsync(Guid.NewGuid(), content: "csv");
+        var export = await SeedAsync(Guid.NewGuid(), document: AFile);
 
         await using var context = fixture.CreateContext();
         var file = await new OrderExportRepository(context)

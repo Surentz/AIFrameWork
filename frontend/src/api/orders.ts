@@ -1,5 +1,5 @@
 import type { Order, OrderExport, OrderPage } from '../features/orders/types';
-import { request } from './client';
+import { request, requestBytes } from './client';
 
 // The `| undefined` on each member is required, not noise: exactOptionalPropertyTypes is on,
 // so `{ cursor }` where cursor is `string | undefined` does not satisfy a bare `cursor?: string`.
@@ -38,4 +38,9 @@ export function listOrderExports(): Promise<OrderExport[]> {
 // Content-Disposition: attachment, so the browser saves the file itself with no blob handling here.
 export function orderExportDownloadUrl(id: string): string {
   return `/api/orders/exports/${id}/download`;
+}
+
+// The viewer's copy of the same file the link downloads.
+export function getOrderExportDocument(id: string): Promise<ArrayBuffer> {
+  return requestBytes(orderExportDownloadUrl(id));
 }

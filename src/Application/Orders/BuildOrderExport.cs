@@ -1,9 +1,10 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Users;
 
 namespace AiFramework.Application.Orders;
 
 /// <summary>
-/// Builds an export's CSV. The reference HEAVY job: it pages every order a user has — unbounded work
+/// Builds an export's PDF. The reference HEAVY job: it pages every order a user has — unbounded work
 /// over an unbounded result set, exactly what must never run on a request thread. ADR 0029.
 /// </summary>
 /// <remarks>
@@ -24,7 +25,8 @@ public sealed record BuildOrderExport(Guid ExportId, Guid OwnerId) : IUserScoped
 /// the logging behavior stay on the path, so the job's reads and its write are recorded exactly like
 /// a request's. It logs nothing itself.
 /// </summary>
-public sealed class BuildOrderExportHandler(IQueryDispatcher queries, ICommandDispatcher commands)
+public sealed class BuildOrderExportHandler(
+    IQueryDispatcher queries, ICommandDispatcher commands, IOrderExportRenderer renderer, IClock clock)
 {
     public async Task Handle(BuildOrderExport job, CancellationToken cancellationToken)
     {
@@ -55,6 +57,32 @@ public sealed class BuildOrderExportHandler(IQueryDispatcher queries, ICommandDi
             return;
         }
 
+        var rows = await ReadAllRowsAsync(job, cancellationToken).ConfigureAwait(false);
+
+        // The owner's display name heads the document. The job runs as the owner, so this is their
+        // own record; a failure is thrown like every other, for Wolverine's retry policy to see.
+        var owner = await queries.SendAsync(new GetUser(job.OwnerId), cancellationToken).ConfigureAwait(false);
+        if (!owner.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"Building order export {job.ExportId} failed reading its owner: {owner.Error.Code}.");
+        }
+
+        var document = renderer.Render(OrderExportReport.Create(rows, owner.Value.DisplayName, clock.UtcNow));
+
+        var completed = await commands
+            .SendAsync(new CompleteOrderExport(job.ExportId, document, rows.Count), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!completed.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"Building order export {job.ExportId} failed storing the file: {completed.Error.Code}.");
+        }
+    }
+
+    private async Task<List<OrderExportRow>> ReadAllRowsAsync(BuildOrderExport job, CancellationToken cancellationToken)
+    {
         var rows = new List<OrderExportRow>();
         string? cursor = null;
         do
@@ -77,15 +105,7 @@ public sealed class BuildOrderExportHandler(IQueryDispatcher queries, ICommandDi
         }
         while (cursor is not null);
 
-        var completed = await commands
-            .SendAsync(new CompleteOrderExport(job.ExportId, OrderExportCsv.Build(rows), rows.Count), cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!completed.IsSuccess)
-        {
-            throw new InvalidOperationException(
-                $"Building order export {job.ExportId} failed storing the file: {completed.Error.Code}.");
-        }
+        return rows;
     }
 }
 

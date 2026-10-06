@@ -57,7 +57,7 @@ public sealed class GetOrderExportHandler(
 }
 
 /// <summary>A Ready export's file, and the name it downloads as.</summary>
-public sealed record OrderExportDownload(string FileName, string Content);
+public sealed record OrderExportDownload(string FileName, byte[] Document);
 
 public sealed record GetOrderExportFile(Guid Id) : IQuery<OrderExportDownload>;
 
@@ -84,7 +84,7 @@ public sealed class GetOrderExportFileHandler(IOrderExportRepository exports, IC
             ? Result.Failure<OrderExportDownload>(new Error(
                 ErrorKind.NotFound, "order_exports.not_found", "That export does not exist or is not ready."))
             : Result.Success(new OrderExportDownload(
-                $"orders-{file.RequestedAt.UtcDateTime:yyyy-MM-dd}.csv", file.Content));
+                $"orders-{file.RequestedAt.UtcDateTime:yyyy-MM-dd}.pdf", file.Document));
     }
 }
 

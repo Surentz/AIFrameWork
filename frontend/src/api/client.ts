@@ -61,3 +61,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export async function requestVoid(path: string, init?: RequestInit): Promise<void> {
   await send(path, init);
 }
+
+/** For the endpoints that answer a file. Same error handling as `request`. */
+export async function requestBytes(path: string, init?: RequestInit): Promise<ArrayBuffer> {
+  return (await send(path, init)).arrayBuffer();
+}

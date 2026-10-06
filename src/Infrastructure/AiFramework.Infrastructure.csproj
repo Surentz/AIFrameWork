@@ -5,6 +5,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The worker image (aspnet:10.0-noble-chiseled) has no system fonts, so the export PDF's font
+         ships inside this assembly. Logical names keep the resource names independent of folders. -->
+    <EmbeddedResource Include="Exports/Fonts/*.ttf" LogicalName="ExportFonts.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!--
       The Data Protection key ring, persisted to the application database. Two API replicas
       that each hold an in-memory ring reject each other's session cookies; with no store
@@ -80,6 +86,7 @@
       only one Infrastructure.csproj's own graph sees.
     -->
     <PackageReference Include="OpenTelemetry.Api" Version="1.19.1" />
+    <PackageReference Include="PDFsharp-MigraDoc" Version="6.2.4" />
     <PackageReference Include="WolverineFx" Version="6.46.0" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.46.0" />
     <PackageReference Include="WolverineFx.Postgresql" Version="6.46.0" />

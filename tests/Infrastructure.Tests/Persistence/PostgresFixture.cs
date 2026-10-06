@@ -5,6 +5,7 @@ using AiFramework.Infrastructure.Outbox;
 using AiFramework.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace AiFramework.Infrastructure.Tests.Persistence;
@@ -37,6 +38,18 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     /// <summary>A context with the domain-events interceptor attached, as production has it.</summary>
+    /// <summary>
+    /// A context on a fresh, empty database in the same container, for tests that migrate down and
+    /// up. The database is created by the first migration; nothing else shares it.
+    /// </summary>
+    public AiFrameworkDbContext CreateContextForNewDatabase(string databaseName)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(ConnectionString) { Database = databaseName };
+        return new AiFrameworkDbContext(new DbContextOptionsBuilder<AiFrameworkDbContext>()
+            .UseNpgsql(builder.ConnectionString)
+            .Options);
+    }
+
     public AiFrameworkDbContext CreateContextWithOutbox()
     {
         var services = new ServiceCollection();

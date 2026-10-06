@@ -58,7 +58,7 @@ public sealed record OrderExportView(
 }
 
 /// <summary>
-/// Asks for a CSV of the caller's orders. Not cacheable — a command — and with no input to
+/// Asks for a file of the caller's orders. Not cacheable — a command — and with no input to
 /// validate. A request while one is still being built returns that one rather than starting
 /// another.
 /// </summary>
@@ -109,14 +109,14 @@ public sealed class RequestOrderExportHandler(
 /// Stores a built file. Dispatched by the build job in the worker, where ICurrentUser is the
 /// export's owner (IUserScopedJob), so the owner scoping below holds there as it does in the API.
 /// </summary>
-public sealed record CompleteOrderExport(Guid ExportId, string Content, int RowCount) : ICommand<bool>;
+public sealed record CompleteOrderExport(Guid ExportId, byte[] Document, int RowCount) : ICommand<bool>;
 
 public sealed class CompleteOrderExportValidator : AbstractValidator<CompleteOrderExport>
 {
     public CompleteOrderExportValidator()
     {
         RuleFor(c => c.ExportId).NotEmpty();
-        RuleFor(c => c.Content).NotNull();
+        RuleFor(c => c.Document).NotEmpty();
         RuleFor(c => c.RowCount).GreaterThanOrEqualTo(0);
     }
 }
@@ -147,7 +147,7 @@ public sealed class CompleteOrderExportHandler(
         }
 
         // A no-op on an export that is already Ready: a redelivered build lands here twice.
-        export.Complete(command.Content, command.RowCount, clock.UtcNow);
+        export.Complete(command.Document, command.RowCount, clock.UtcNow);
         return Result.Success(true);
     }
 }

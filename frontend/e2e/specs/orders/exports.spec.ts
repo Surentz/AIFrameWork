@@ -4,13 +4,17 @@ import * as exportsPage from '../../screens/exports.ts';
 
 /**
  * An export of the caller's own orders, end to end: requested from the page, built by the worker
- * on the heavy lane, announced by the API's notifier, downloaded as a file (ADR 0029).
+ * on the heavy lane, announced by the API's notifier, read in the viewer and downloaded as a PDF (ADR 0029, 0030).
  *
  * @local-only: the build runs in the worker, which an arbitrary URL target cannot be assumed to
  * run - the same reason as jobs.spec.ts. Runs as `workerUser`, so it spends no auth permit.
  */
 test.describe('order exports', { tag: '@local-only' }, () => {
-  test('exports the caller\'s orders to a downloadable CSV', async ({ signedInPage, workerUser, api }) => {
+  test("exports the caller's orders to a PDF they can read and download", async ({
+    signedInPage,
+    workerUser,
+    api,
+  }) => {
     const sku = (await api.placeOrders(workerUser, 1))[0];
     if (sku === undefined) {
       throw new Error('placeOrders returned no sku');
@@ -41,18 +45,38 @@ test.describe('order exports', { tag: '@local-only' }, () => {
       await api.waitForNotification(workerUser, { kind: 'OrderExportReady', subjectId: exportId });
     });
 
-    await test.step('download it', async () => {
+    await test.step('read it in the viewer', async () => {
       await signedInPage.reload();
+      const view = exportsPage.viewButton(signedInPage);
 
+      // Twice: pdf.js detaches the buffer it draws from, and a second open must still draw.
+      for (const attempt of [1, 2]) {
+        await view.click();
+        const viewer = exportsPage.viewer(signedInPage);
+        await expect(viewer).toBeVisible();
+        // The text layer: proof pdf.js drew the real document, not just a canvas.
+        // .first(): the title and every page footer both say "Order history".
+        await expect(viewer.getByText('Order history').first()).toBeVisible();
+        // .first(): the product column shows the name and, beneath it, the SKU - the same text here.
+        await expect(viewer.getByText(sku, { exact: true }).first()).toBeVisible();
+
+        // The browser's own dialog behaviour, which jsdom cannot show: Esc closes it and focus
+        // returns to the button that opened it.
+        await signedInPage.keyboard.press('Escape');
+        await expect(viewer).toBeHidden();
+        await expect(view, `focus after closing, attempt ${String(attempt)}`).toBeFocused();
+      }
+    });
+
+    await test.step('download it', async () => {
       const [download] = await Promise.all([
         signedInPage.waitForEvent('download'),
         exportsPage.downloadLink(signedInPage).click(),
       ]);
 
-      expect(download.suggestedFilename()).toMatch(/^orders-\d{4}-\d{2}-\d{2}\.csv$/);
-      const csv = await readFile(await download.path(), 'utf8');
-      expect(csv).toContain('OrderId,Sku,Product,Quantity');
-      expect(csv).toContain(sku);
+      expect(download.suggestedFilename()).toMatch(/^orders-\d{4}-\d{2}-\d{2}\.pdf$/);
+      const pdf = await readFile(await download.path());
+      expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     });
   });
 });

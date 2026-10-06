@@ -121,6 +121,21 @@ Three things about this worth knowing before you change it:
 - **`schema.d.ts` is in eslint's `ignores`**, beside `dist/`. It is generated output, so a style
   rule failing on it is answered by not linting it, never by relaxing the rule.
 
+## The export viewer
+
+`/orders/exports` reads a PDF with react-pdf (pdf.js) inside a native `<dialog>` (ADR 0030).
+
+- **`ExportViewer.tsx` is lazy-loaded** (`ExportViewerDialog.tsx`), so pdf.js — about 1 MB — loads only
+  on the first View. Do not import `react-pdf` anywhere else, or it lands in the main bundle.
+- **`workerSrc` is set in `ExportViewer.tsx`**, the module that renders `<Document>`: react-pdf warns that
+  one set elsewhere can be overwritten by its default. The worker is bundled and same-origin.
+- **The worker is `.mjs`, which nginx does not map by default.** `nginx.conf` maps it under `/assets/`;
+  without that the viewer never draws in the cluster while working in dev and e2e (both run Vite).
+- **pdf.js detaches the buffer it is given**, so the viewer hands it a copy. Passing the query's cached
+  `ArrayBuffer` breaks the second open.
+- **Unit tests stub `react-pdf`** (pdf.js cannot draw in jsdom) and `src/test/setup.ts` stubs `<dialog>`
+  (jsdom has none of its behaviour). Drawing, Esc and focus return are tested in Playwright.
+
 ## Dependencies held back or overridden
 
 Each entry says what would let it go. Check before assuming a peer-range error is new.

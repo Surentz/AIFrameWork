@@ -1,4 +1,3 @@
-using System.Text;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using Microsoft.AspNetCore.Authorization;
@@ -26,7 +25,7 @@ public sealed class OrderExportsController(ICommandDispatcher commands, IQueryDi
 #pragma warning restore S6960
 {
     /// <summary>
-    /// Asks for a CSV of every order the caller has placed. Built in the background; the caller is
+    /// Asks for a PDF of every order the caller has placed. Built in the background; the caller is
     /// notified when it is ready. While one is still being built, returns that one rather than
     /// starting another.
     /// </summary>
@@ -54,11 +53,11 @@ public sealed class OrderExportsController(ICommandDispatcher commands, IQueryDi
     }
 
     /// <summary>
-    /// The CSV of a Ready export. 404 if it is someone else's or not built yet — the same answer for
-    /// both, so an export id reveals nothing.
+    /// The PDF of a Ready export. 404 if it is someone else's or not built yet — the same answer for
+    /// both, so an export id reveals nothing. The viewer fetches this same URL for the bytes.
     /// </summary>
     [HttpGet("{id:guid}/download")]
-    [ProducesResponseType(typeof(Stream), StatusCodes.Status200OK, "text/csv")]
+    [ProducesResponseType(typeof(Stream), StatusCodes.Status200OK, "application/pdf")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Download(Guid id, CancellationToken cancellationToken)
     {
@@ -68,9 +67,6 @@ public sealed class OrderExportsController(ICommandDispatcher commands, IQueryDi
             return result.Problem(HttpContext);
         }
 
-        // The byte-order mark goes on here, not into the stored text: without it Excel reads the
-        // file as the system code page and mangles every non-ASCII product name.
-        byte[] bytes = [.. Encoding.UTF8.Preamble, .. Encoding.UTF8.GetBytes(result.Value.Content)];
-        return File(bytes, "text/csv; charset=utf-8", result.Value.FileName);
+        return File(result.Value.Document, "application/pdf", result.Value.FileName);
     }
 }

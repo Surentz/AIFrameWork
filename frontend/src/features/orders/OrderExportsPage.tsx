@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { orderExportDownloadUrl } from '../../api/orders';
 import type { ApiError } from '../../api/client';
 import { ErrorPanel } from '../../components/ErrorPanel';
+import { ExportViewerDialog } from './ExportViewerDialog';
 import { useOrderExports, useRequestOrderExport } from './queries';
 import type { OrderExport, OrderExportState } from './types';
 import './orders.css';
@@ -69,8 +71,8 @@ function Header({ newest }: NewestProps): React.JSX.Element {
       <div>
         <h1 className="page-title">Exports</h1>
         <p className="page-subtitle">
-          A CSV of every order you have placed. You are notified when it is ready; exports are kept
-          for seven days.
+          A PDF of every order you have placed, ready to share. You are notified when it is ready;
+          exports are kept for seven days.
         </p>
       </div>
       <ExportButton newest={newest} />
@@ -85,6 +87,7 @@ interface ExportsProps {
 
 function Exports({ exports, error }: ExportsProps): React.JSX.Element {
   const newest = exports[0];
+  const [viewing, setViewing] = useState<OrderExport | null>(null);
 
   return (
     <>
@@ -108,7 +111,7 @@ function Exports({ exports, error }: ExportsProps): React.JSX.Element {
                   Orders
                 </th>
                 <th scope="col">
-                  <span className="visually-hidden">Download</span>
+                  <span className="visually-hidden">Actions</span>
                 </th>
               </tr>
             </thead>
@@ -120,18 +123,30 @@ function Exports({ exports, error }: ExportsProps): React.JSX.Element {
                     <td className="orders__when">{requested}</td>
                     <td>{STATUS_LABEL[exp.status]}</td>
                     <td className="orders__num">{exp.rowCount ?? '–'}</td>
-                    <td>
+                    <td className="orders__actions">
                       {exp.status === 'Ready' && (
-                        <a
-                          className="btn btn--secondary"
-                          href={orderExportDownloadUrl(exp.id)}
-                          download
-                          // Each row's link says which export it is: a screen reader's link list
-                          // would otherwise show a column of identical "Download"s.
-                          aria-label={`Download export requested ${requested}`}
-                        >
-                          Download
-                        </a>
+                        <>
+                          <button
+                            className="btn btn--secondary"
+                            type="button"
+                            onClick={() => {
+                              setViewing(exp);
+                            }}
+                            aria-label={`View export requested ${requested}`}
+                          >
+                            View
+                          </button>
+                          <a
+                            className="btn btn--secondary"
+                            href={orderExportDownloadUrl(exp.id)}
+                            download
+                            // Each row's link says which export it is: a screen reader's link list
+                            // would otherwise show a column of identical "Download"s.
+                            aria-label={`Download export requested ${requested}`}
+                          >
+                            Download
+                          </a>
+                        </>
                       )}
                     </td>
                   </tr>
@@ -141,6 +156,13 @@ function Exports({ exports, error }: ExportsProps): React.JSX.Element {
           </table>
         </div>
       )}
+
+      <ExportViewerDialog
+        exportItem={viewing}
+        onClose={() => {
+          setViewing(null);
+        }}
+      />
 
       {/* In every branch that has data: a re-read that fails keeps the last list on screen, the
           empty one included, and must still say it failed. */}

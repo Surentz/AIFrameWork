@@ -14,6 +14,7 @@ public sealed class OrderExportHandlerTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
     private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly byte[] AFile = [0x25, 0x50, 0x44, 0x46];
 
     private readonly IOrderExportRepository _exports = Substitute.For<IOrderExportRepository>();
     private readonly IOrderRepository _orders = Substitute.For<IOrderRepository>();
@@ -78,11 +79,11 @@ public sealed class OrderExportHandlerTests
         _exports.GetForUpdateAsync(export.Id, UserId, Arg.Any<CancellationToken>()).Returns(export);
 
         var result = await new CompleteOrderExportHandler(_exports, _currentUser, _clock)
-            .HandleAsync(new CompleteOrderExport(export.Id, "csv", 4), CancellationToken.None);
+            .HandleAsync(new CompleteOrderExport(export.Id, AFile, 4), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         export.Status.Should().Be(OrderExportStatus.Ready);
-        export.Content.Should().Be("csv");
+        export.Document.Should().Equal(AFile);
         export.RowCount.Should().Be(4);
         export.CompletedAt.Should().Be(Now);
     }
@@ -91,7 +92,7 @@ public sealed class OrderExportHandlerTests
     public async Task CompleteOrderExport_ForAnExportTheCallerDoesNotHold_IsNotFound()
     {
         var result = await new CompleteOrderExportHandler(_exports, _currentUser, _clock)
-            .HandleAsync(new CompleteOrderExport(Guid.NewGuid(), "csv", 0), CancellationToken.None);
+            .HandleAsync(new CompleteOrderExport(Guid.NewGuid(), AFile, 0), CancellationToken.None);
 
         result.Error.Kind.Should().Be(ErrorKind.NotFound);
     }
@@ -99,7 +100,15 @@ public sealed class OrderExportHandlerTests
     [Fact]
     public void CompleteOrderExportValidator_RejectsANegativeRowCount()
     {
-        var result = new CompleteOrderExportValidator().Validate(new CompleteOrderExport(Guid.NewGuid(), "csv", -1));
+        var result = new CompleteOrderExportValidator().Validate(new CompleteOrderExport(Guid.NewGuid(), AFile, -1));
+
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CompleteOrderExportValidator_RejectsAnEmptyDocument()
+    {
+        var result = new CompleteOrderExportValidator().Validate(new CompleteOrderExport(Guid.NewGuid(), [], 1));
 
         result.IsValid.Should().BeFalse();
     }
@@ -137,12 +146,13 @@ public sealed class OrderExportHandlerTests
         var id = Guid.NewGuid();
         var requestedAt = new DateTimeOffset(2026, 10, 4, 0, 30, 0, TimeSpan.FromHours(2));
         _exports.GetFileAsync(id, UserId, Arg.Any<CancellationToken>())
-            .Returns(new OrderExportFile("csv", requestedAt));
+            .Returns(new OrderExportFile(AFile, requestedAt));
 
         var result = await new GetOrderExportFileHandler(_exports, _currentUser)
             .HandleAsync(new GetOrderExportFile(id), CancellationToken.None);
 
-        result.Value.Should().Be(new OrderExportDownload("orders-2026-10-03.csv", "csv"));
+        result.Value.FileName.Should().Be("orders-2026-10-03.pdf");
+        result.Value.Document.Should().Equal(AFile);
     }
 
     [Fact]
@@ -155,7 +165,7 @@ public sealed class OrderExportHandlerTests
     }
 
     [Fact]
-    public async Task GetOrderExportRows_MapsEveryColumnTheCsvNeeds()
+    public async Task GetOrderExportRows_MapsEveryColumnTheExportNeeds()
     {
         var order = Order.Place(Guid.NewGuid(), UserId, 2, Now, AnOrderedProduct.Any(), "SKU-1");
         order.Cancel("Changed my mind.", Now.AddHours(1));

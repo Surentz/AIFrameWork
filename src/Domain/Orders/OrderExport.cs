@@ -3,7 +3,7 @@ using AiFramework.Domain.Abstractions;
 namespace AiFramework.Domain.Orders;
 
 /// <summary>
-/// A CSV of one user's orders, built by a job in the worker. Requested, then Ready; a request that
+/// A file of one user's orders, built by a job in the worker. Requested, then Ready; a request that
 /// never finishes reads as failed once <see cref="StaleAfter"/> has passed. ADR 0029.
 /// </summary>
 public sealed class OrderExport : Entity
@@ -37,8 +37,8 @@ public sealed class OrderExport : Entity
 
     public int? RowCount { get; private set; }
 
-    /// <summary>The CSV text. Null until <see cref="Complete"/>.</summary>
-    public string? Content { get; private set; }
+    /// <summary>The built file. Null until <see cref="Complete"/>.</summary>
+    public byte[]? Document { get; private set; }
 
     public static OrderExport Request(Guid id, Guid userId, DateTimeOffset requestedAt)
     {
@@ -57,9 +57,9 @@ public sealed class OrderExport : Entity
     /// nothing: build jobs are delivered at least once, and a second delivery must neither replace
     /// the file nor send the user a second "ready" notification.
     /// </summary>
-    public void Complete(string content, int rowCount, DateTimeOffset completedAt)
+    public void Complete(byte[] document, int rowCount, DateTimeOffset completedAt)
     {
-        if (content is null)
+        if (document is null || document.Length == 0)
         {
             throw new DomainException("A completed order export needs its file.");
         }
@@ -75,7 +75,7 @@ public sealed class OrderExport : Entity
         }
 
         Status = OrderExportStatus.Ready;
-        Content = content;
+        Document = document;
         RowCount = rowCount;
         CompletedAt = completedAt;
         Raise(new OrderExportCompleted(Id, UserId, rowCount));

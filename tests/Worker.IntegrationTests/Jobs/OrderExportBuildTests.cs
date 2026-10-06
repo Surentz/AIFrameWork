@@ -1,11 +1,13 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using AiFramework.Domain.Orders;
+using AiFramework.Domain.Users;
 using AiFramework.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using UglyToad.PdfPig;
 using Wolverine.Tracking;
 
 namespace AiFramework.Worker.IntegrationTests.Jobs;
@@ -30,6 +32,17 @@ public sealed class OrderExportBuildTests(WorkerFactory factory)
         context.Orders.Add(Order.Place(
             Guid.NewGuid(), ownerId, 2, DateTimeOffset.UtcNow.AddMinutes(-5), AnOrderedProduct.Any(), sku));
         await context.SaveChangesAsync();
+    }
+
+    private async Task<Guid> RegisterOwnerAsync()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+        var owner = User.Register(
+            Guid.NewGuid(), $"export{Guid.NewGuid():N}"[..32], "not-a-real-hash", "Export Owner", DateTimeOffset.UtcNow);
+        context.Users.Add(owner);
+        await context.SaveChangesAsync();
+        return owner.Id;
     }
 
     private async Task<Guid> RequestAsync(Guid ownerId)
@@ -57,9 +70,9 @@ public sealed class OrderExportBuildTests(WorkerFactory factory)
     }
 
     [Fact]
-    public async Task BuildOrderExport_StoresACsvOfTheOwnersOrdersOnly()
+    public async Task BuildOrderExport_StoresAPdfOfTheOwnersOrdersOnly()
     {
-        var ownerId = Guid.NewGuid();
+        var ownerId = await RegisterOwnerAsync();
         await PlaceAsync(ownerId, "SKU-EXPORT-MINE-1");
         await PlaceAsync(ownerId, "SKU-EXPORT-MINE-2");
         await PlaceAsync(Guid.NewGuid(), "SKU-EXPORT-SOMEONE-ELSES");
@@ -72,7 +85,9 @@ public sealed class OrderExportBuildTests(WorkerFactory factory)
         var export = await ReadAsync(exportId);
         export.Status.Should().Be(OrderExportStatus.Ready);
         export.RowCount.Should().Be(2);
-        export.Content.Should().Contain("SKU-EXPORT-MINE-1").And.Contain("SKU-EXPORT-MINE-2")
+        using var pdf = PdfDocument.Open(export.Document!);
+        var text = string.Join(" ", pdf.GetPages().SelectMany(p => p.GetWords()).Select(w => w.Text));
+        text.Should().Contain("SKU-EXPORT-MINE-1").And.Contain("SKU-EXPORT-MINE-2")
             .And.NotContain("SKU-EXPORT-SOMEONE-ELSES");
     }
 
@@ -85,7 +100,7 @@ public sealed class OrderExportBuildTests(WorkerFactory factory)
     [Fact]
     public async Task BuildOrderExport_DeliveredTwice_CompletesOnceAndKeepsTheFirstFile()
     {
-        var ownerId = Guid.NewGuid();
+        var ownerId = await RegisterOwnerAsync();
         await PlaceAsync(ownerId, "SKU-EXPORT-TWICE");
         var exportId = await RequestAsync(ownerId);
         var host = factory.Services.GetRequiredService<IHost>();
@@ -107,7 +122,7 @@ public sealed class OrderExportBuildTests(WorkerFactory factory)
     [Fact]
     public async Task BuildOrderExport_WritesTheCompletedEventForTheApiToDeliver()
     {
-        var ownerId = Guid.NewGuid();
+        var ownerId = await RegisterOwnerAsync();
         var exportId = await RequestAsync(ownerId);
 
         await TrackJobs(factory.Services.GetRequiredService<IHost>())

@@ -203,3 +203,86 @@
   align-items: flex-end;
   gap: var(--space-2);
 }
+
+.orders__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* The export viewer: full screen on phones, a large panel above 40rem. */
+.export-viewer {
+  border: none;
+  padding: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.export-viewer[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.export-viewer::backdrop {
+  background: rgb(12 14 20 / 60%);
+}
+
+.export-viewer__header,
+.export-viewer__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.export-viewer__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.export-viewer__pages {
+  flex: 1;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.export-viewer__body {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-4);
+  background: var(--color-canvas);
+}
+
+.export-viewer__page {
+  margin: 0 auto var(--space-4);
+  box-shadow: 0 1px 3px rgb(18 21 28 / 15%);
+}
+
+@media (min-width: 40rem) {
+  .export-viewer {
+    width: min(72rem, 92vw);
+    height: 90dvh;
+    border-radius: 0.75rem;
+  }
+}
+
+/* Narrow phones: the toolbar wraps rather than squeezing its buttons. */
+.export-viewer__toolbar {
+  flex-wrap: wrap;
+}
+
+/* offsetTop of each page is measured against the body (ExportViewer pageInView). */
+.export-viewer__body {
+  position: relative;
+}
+
+/* A modal <dialog> does not stop the page behind it scrolling; this does, while the viewer is open. */
+html:has(.export-viewer[open]) {
+  overflow: hidden;
+}
