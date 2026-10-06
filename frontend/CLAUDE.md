@@ -130,3 +130,10 @@ Each entry says what would let it go. Check before assuming a peer-range error i
   prototype is typescript-eslint#12803). `dependabot.yml` ignores `typescript` majors for this
   reason. **Lift both** once a typescript-eslint release's peer range admits 7 — and check
   `openapi-typescript`'s peer range at the same time (see "The API contract").
+- **`eslint-plugin-jsx-a11y` runs under an npm `overrides` entry** (`package.json`) that points
+  its `eslint` peer at the root version. 6.10.2 is the latest release (October 2024) and declares
+  `eslint ^3‖…‖^9`, so without the override `npm ci` refuses ESLint 10 — and Dependabot's
+  `eslint` group cannot fix that, because jsx-a11y is not in it. It calls none of the rule
+  `context` methods ESLint 10 removed, and still reports its violations under 10 (verified
+  2026-10-06 on 10.12.0). **Remove the override** once a jsx-a11y release declares ESLint 10 —
+  upstream issues jsx-eslint/eslint-plugin-jsx-a11y#1075, #1079, #1081.
