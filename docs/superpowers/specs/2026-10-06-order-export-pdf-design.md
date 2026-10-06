@@ -1,8 +1,7 @@
 # Order export as a PDF, viewable in the app — design
 
 **Date:** 2026-10-06
-**Status:** Approved in conversation, section by section (2026-10-06). Awaiting review of this
-written spec, then an implementation plan.
+**Status:** Approved and built (2026-10-06). Recorded as ADR 0030.
 **Type:** `feat(orders)!`, one pull request on `claude/order-export-pdf`
 **Builds on:** [the order export design](2026-10-03-order-export-design.md) and ADR 0029, which
 stay in force for everything this document does not change.

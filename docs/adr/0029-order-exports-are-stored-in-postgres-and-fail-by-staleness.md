@@ -1,7 +1,7 @@
 # 0029. Order exports are stored in Postgres and fail by staleness
 
 **Date:** 2026-10-04
-**Status:** Accepted
+**Status:** Accepted. Its CSV format, formula guard and byte-order mark are superseded by [ADR 0030](0030-order-exports-are-pdfs-rendered-by-migradoc.md); storage, the outbox, staleness and retention stand.
 
 ## Context
 
