@@ -19,7 +19,7 @@ and `frontend/e2e/CLAUDE.md` if the change touches `e2e/` — before you start.
 1. **Swallowed errors.** A `catch` that discards. A query or mutation whose `error` state is
    never rendered. A `.catch(() => null)` to make a red line go away.
 2. **Tests that cannot fail.** `vi.mock()` of the API client instead of MSW. MSW configured
-   without `onUnhandledRequest: 'error'`. An assertion satisfied identically by the success
+   without `onUnhandledFrame: 'error'`. An assertion satisfied identically by the success
    and failure paths — a count that is the same either way, where the discriminator should be
    the resulting state.
 3. **Server state in the wrong place.** `useEffect` + `useState` doing what `useQuery` does.
