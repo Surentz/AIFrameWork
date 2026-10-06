@@ -120,3 +120,13 @@ Three things about this worth knowing before you change it:
   the document says so. Do not narrow it to `number` to make it look tidier.
 - **`schema.d.ts` is in eslint's `ignores`**, beside `dist/`. It is generated output, so a style
   rule failing on it is answered by not linting it, never by relaxing the rule.
+
+## Dependencies held back or overridden
+
+Each entry says what would let it go. Check before assuming a peer-range error is new.
+
+- **TypeScript stays on 6.x.** `typescript-eslint` 8.71.0 peers `typescript <6.1.0`: typed
+  linting needs a TypeScript JS API that 7 does not ship yet (typescript-eslint#10940; a
+  prototype is typescript-eslint#12803). `dependabot.yml` ignores `typescript` majors for this
+  reason. **Lift both** once a typescript-eslint release's peer range admits 7 — and check
+  `openapi-typescript`'s peer range at the same time (see "The API contract").
