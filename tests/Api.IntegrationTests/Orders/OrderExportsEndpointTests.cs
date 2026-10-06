@@ -19,7 +19,7 @@ namespace AiFramework.Api.IntegrationTests.Orders;
 [Collection(nameof(ApiFactoryCollection))]
 public sealed class OrderExportsEndpointTests(ApiFactory factory)
 {
-    private const string Csv = "OrderId,Sku\r\nabc,SKU-1\r\n";
+    private static readonly byte[] CsvBytes = "OrderId,Sku\r\nabc,SKU-1\r\n"u8.ToArray();
 
     private sealed record ExportItem(
         Guid Id, string Status, DateTimeOffset RequestedAt, DateTimeOffset? CompletedAt, int? RowCount);
@@ -40,7 +40,7 @@ public sealed class OrderExportsEndpointTests(ApiFactory factory)
         await using var scope = factory.Services.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
         var export = await context.OrderExports.SingleAsync(e => e.Id == exportId);
-        export.Complete(Csv, 1, DateTimeOffset.UtcNow);
+        export.Complete(CsvBytes, 1, DateTimeOffset.UtcNow);
         await context.SaveChangesAsync();
     }
 
@@ -152,7 +152,7 @@ public sealed class OrderExportsEndpointTests(ApiFactory factory)
         var bytes = await client.GetByteArrayAsync(new Uri($"/api/orders/exports/{export.Id}/download", UriKind.Relative));
 
         bytes.Take(3).Should().Equal(0xEF, 0xBB, 0xBF);
-        System.Text.Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3).Should().Be(Csv);
+        bytes.Skip(3).Should().Equal(CsvBytes);
     }
 
     [Fact]

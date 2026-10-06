@@ -72,7 +72,8 @@ public sealed class OrderExportBuildTests(WorkerFactory factory)
         var export = await ReadAsync(exportId);
         export.Status.Should().Be(OrderExportStatus.Ready);
         export.RowCount.Should().Be(2);
-        export.Content.Should().Contain("SKU-EXPORT-MINE-1").And.Contain("SKU-EXPORT-MINE-2")
+        System.Text.Encoding.UTF8.GetString(export.Document!).Should()
+            .Contain("SKU-EXPORT-MINE-1").And.Contain("SKU-EXPORT-MINE-2")
             .And.NotContain("SKU-EXPORT-SOMEONE-ELSES");
     }
 

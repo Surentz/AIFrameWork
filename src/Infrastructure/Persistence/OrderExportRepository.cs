@@ -22,7 +22,7 @@ public sealed class OrderExportRepository(AiFrameworkDbContext context) : IOrder
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    // Projected, like ListAsync, so the SELECT never names content.
+    // Projected, like ListAsync, so the SELECT never names the file.
     public Task<OrderExportSummary?> GetSummaryAsync(
         Guid id, Guid ownerId, CancellationToken cancellationToken) =>
         context.OrderExports.AsNoTracking()
@@ -37,7 +37,7 @@ public sealed class OrderExportRepository(AiFrameworkDbContext context) : IOrder
         context.OrderExports
             .FirstOrDefaultAsync(e => e.Id == id && e.UserId == ownerId, cancellationToken);
 
-    // Projected, so the SELECT names every column but content.
+    // Projected, so the SELECT names every column but the file.
     public async Task<IReadOnlyList<OrderExportSummary>> ListAsync(
         Guid ownerId, CancellationToken cancellationToken) =>
         await context.OrderExports.AsNoTracking()
@@ -53,8 +53,8 @@ public sealed class OrderExportRepository(AiFrameworkDbContext context) : IOrder
             .Where(e => e.Id == id
                 && e.UserId == ownerId
                 && e.Status == OrderExportStatus.Ready
-                && e.Content != null)
-            // ! is safe: the Where above admits only rows whose Content is not null.
-            .Select(e => new OrderExportFile(e.Content!, e.RequestedAt))
+                && e.Document != null)
+            // ! is safe: the Where above admits only rows whose Document is not null.
+            .Select(e => new OrderExportFile(e.Document!, e.RequestedAt))
             .FirstOrDefaultAsync(cancellationToken);
 }

@@ -1,3 +1,4 @@
+using System.Text;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
 using AiFramework.Domain.Orders;
@@ -51,8 +52,8 @@ public sealed class BuildOrderExportHandlerTests
         await _commands.Received(1).SendAsync(
             Arg.Is<CompleteOrderExport>(c => c.ExportId == ExportId
                 && c.RowCount == 3
-                && c.Content.Contains(",A,", StringComparison.Ordinal)
-                && c.Content.Contains(",C,", StringComparison.Ordinal)),
+                && Encoding.UTF8.GetString(c.Document).Contains(",A,", StringComparison.Ordinal)
+                && Encoding.UTF8.GetString(c.Document).Contains(",C,", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
     }
 

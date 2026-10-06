@@ -1,3 +1,4 @@
+using System.Text;
 using AiFramework.Application.Abstractions;
 
 namespace AiFramework.Application.Orders;
@@ -78,7 +79,7 @@ public sealed class BuildOrderExportHandler(IQueryDispatcher queries, ICommandDi
         while (cursor is not null);
 
         var completed = await commands
-            .SendAsync(new CompleteOrderExport(job.ExportId, OrderExportCsv.Build(rows), rows.Count), cancellationToken)
+            .SendAsync(new CompleteOrderExport(job.ExportId, Encoding.UTF8.GetBytes(OrderExportCsv.Build(rows)), rows.Count), cancellationToken)
             .ConfigureAwait(false);
 
         if (!completed.IsSuccess)

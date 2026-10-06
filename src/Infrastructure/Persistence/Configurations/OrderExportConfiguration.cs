@@ -15,9 +15,7 @@ internal sealed class OrderExportConfiguration : IEntityTypeConfiguration<OrderE
         builder.Property(e => e.UserId).IsRequired();
         builder.Property(e => e.RequestedAt).IsRequired();
 
-        // text, not varchar(n): a user's whole order history, with no sensible upper bound to
-        // declare. Only GetFileAsync ever selects it; the list projects it away.
-        builder.Property(e => e.Content).HasColumnType("text");
+        // bytea: the built file. Only GetFileAsync ever selects it; the list projects it away.
 
         // By name, like OrderStatus and NotificationKind: OrderExportStatus says the names are
         // the stored contract.

@@ -46,9 +46,9 @@ public sealed class OrderExportConcurrencyTests(PostgresFixture fixture)
         await using var second = fixture.CreateContextWithOutbox();
         var firstCopy = await ReadForUpdateAsync(first, seeded);
         var secondCopy = await ReadForUpdateAsync(second, seeded);
-        firstCopy.Complete("first", 1, Now.AddMinutes(1));
+        firstCopy.Complete("first"u8.ToArray(), 1, Now.AddMinutes(1));
         await new UnitOfWork(first).SaveChangesAsync(CancellationToken.None);
-        secondCopy.Complete("second", 2, Now.AddMinutes(2));
+        secondCopy.Complete("second"u8.ToArray(), 2, Now.AddMinutes(2));
 
         var act = () => new UnitOfWork(second).SaveChangesAsync(CancellationToken.None);
 
@@ -65,9 +65,9 @@ public sealed class OrderExportConcurrencyTests(PostgresFixture fixture)
         {
             var firstCopy = await ReadForUpdateAsync(first, seeded);
             var secondCopy = await ReadForUpdateAsync(second, seeded);
-            firstCopy.Complete("first", 1, Now.AddMinutes(1));
+            firstCopy.Complete("first"u8.ToArray(), 1, Now.AddMinutes(1));
             await new UnitOfWork(first).SaveChangesAsync(CancellationToken.None);
-            secondCopy.Complete("second", 2, Now.AddMinutes(2));
+            secondCopy.Complete("second"u8.ToArray(), 2, Now.AddMinutes(2));
             await new UnitOfWork(second).Invoking(u => u.SaveChangesAsync(CancellationToken.None))
                 .Should().ThrowAsync<DbUpdateConcurrencyException>();
         }
@@ -78,6 +78,6 @@ public sealed class OrderExportConcurrencyTests(PostgresFixture fixture)
                 .CountAsync(m => m.EventName == "order_export.completed" && m.Payload.Contains(id)))
             .Should().Be(1, "only the build that saved may announce the export");
         (await verify.OrderExports.AsNoTracking().SingleAsync(e => e.Id == seeded.Id))
-            .Content.Should().Be("first");
+            .Document.Should().Equal("first"u8.ToArray());
     }
 }

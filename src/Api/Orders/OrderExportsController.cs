@@ -68,9 +68,8 @@ public sealed class OrderExportsController(ICommandDispatcher commands, IQueryDi
             return result.Problem(HttpContext);
         }
 
-        // The byte-order mark goes on here, not into the stored text: without it Excel reads the
-        // file as the system code page and mangles every non-ASCII product name.
-        byte[] bytes = [.. Encoding.UTF8.Preamble, .. Encoding.UTF8.GetBytes(result.Value.Content)];
+        // Still a CSV until the build job renders a PDF: the byte-order mark keeps Excel reading UTF-8.
+        byte[] bytes = [.. Encoding.UTF8.Preamble, .. result.Value.Document];
         return File(bytes, "text/csv; charset=utf-8", result.Value.FileName);
     }
 }

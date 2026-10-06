@@ -11,7 +11,7 @@ public sealed record OrderExportSummary(
     int? RowCount);
 
 /// <summary>A Ready export's file, and when it was asked for (which names the download).</summary>
-public sealed record OrderExportFile(string Content, DateTimeOffset RequestedAt);
+public sealed record OrderExportFile(byte[] Document, DateTimeOffset RequestedAt);
 
 /// <summary>
 /// Every read is scoped to the owner by signature, as <see cref="IOrderRepository"/> is: there is
@@ -30,7 +30,7 @@ public interface IOrderExportRepository
 
     /// <summary>
     /// The status of one export, without the file. Null if missing or someone else's. The build job
-    /// reads this on every delivery, a duplicate one included, so it must not load the CSV.
+    /// reads this on every delivery, a duplicate one included, so it must not load the file.
     /// </summary>
     public Task<OrderExportSummary?> GetSummaryAsync(
         Guid id, Guid ownerId, CancellationToken cancellationToken);
