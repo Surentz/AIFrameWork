@@ -103,6 +103,22 @@ public sealed class MigraDocOrderExportRendererTests
         PageTexts(pdf).Should().NotBeEmpty();
     }
 
+    // The renderer is a singleton and PDFsharp's font cache is process-wide, while the heavy lane runs
+    // builds side by side (Jobs__HeavyParallelism, 2 per pod by default). Eight at once, each with its
+    // own owner, must each come out whole and with its own text.
+    [Fact]
+    public async Task Render_CalledConcurrently_ProducesEveryDocumentIntact()
+    {
+        var renderer = new MigraDocOrderExportRenderer();
+        var owners = Enumerable.Range(1, 8).Select(n => $"Owner {n}").ToArray();
+
+        var pdfs = await Task.WhenAll(owners.Select(owner => Task.Run(() =>
+            renderer.Render(OrderExportReport.Create([.. Enumerable.Range(1, 30).Select(n => Row(n))], owner, At)))));
+
+        pdfs.Select((pdf, i) => PageTexts(pdf)[0].Contains(owners[i], StringComparison.Ordinal))
+            .Should().AllBeEquivalentTo(true);
+    }
+
     [Fact]
     public void Render_TitlesTheDocumentAndNamesItsAuthor()
     {

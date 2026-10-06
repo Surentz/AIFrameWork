@@ -21,15 +21,24 @@ internal sealed class NotoSansFontResolver : IFontResolver
 
     /// <summary>
     /// PDFsharp's resolver is process-wide, and the Api, the worker and test hosts can share one
-    /// process, so it is set once and only if nothing else has been.
+    /// process, so it is set once. A resolver someone else installed is never replaced: PDFsharp can
+    /// throw on a change after fonts were used, and silently taking it over would break that caller.
     /// </summary>
     public static void Install()
     {
         lock (InstallLock)
         {
-            if (GlobalFontSettings.FontResolver is not NotoSansFontResolver)
+            switch (GlobalFontSettings.FontResolver)
             {
-                GlobalFontSettings.FontResolver = new NotoSansFontResolver();
+                case null:
+                    GlobalFontSettings.FontResolver = new NotoSansFontResolver();
+                    break;
+                case NotoSansFontResolver:
+                    break;
+                case var other:
+                    throw new InvalidOperationException(
+                        $"PDFsharp's font resolver is already {other.GetType().FullName}; the order export needs " +
+                        $"{nameof(NotoSansFontResolver)}, and replacing a resolver in use is not safe.");
             }
         }
     }
