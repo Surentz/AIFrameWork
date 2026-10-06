@@ -99,14 +99,17 @@ internal sealed class MigraDocOrderExportRenderer : IOrderExportRenderer
         var cards = section.AddTable();
         cards.TopPadding = Unit.FromMillimeter(3);
         cards.BottomPadding = Unit.FromMillimeter(3);
-        cards.LeftPadding = Unit.FromMillimeter(4);
 
+        // Inset with each cell's LeftIndent, never the table's LeftPadding: MigraDoc shifts a table
+        // left by its cell padding, so a wider padding here put the cards out of line with the band
+        // above (and the table below), which keep the default.
         if (report.IsEmpty)
         {
             cards.AddColumn(Unit.FromMillimeter(ContentWidthMm));
             var only = cards.AddRow();
             only.Shading.Color = OrderExportPalette.Card.ToColor();
-            Value(only.Cells[0], "No orders yet.");
+            only.Cells[0].Format.LeftIndent = Unit.FromMillimeter(3);
+            Value(only.Cells[0], "No orders yet.", 15);
             Spacer(section);
             return;
         }
@@ -118,20 +121,22 @@ internal sealed class MigraDocOrderExportRenderer : IOrderExportRenderer
         }
 
         var row = cards.AddRow();
-        Card(row.Cells[0], "ORDERS", report.OrderCount.ToString(System.Globalization.CultureInfo.InvariantCulture), report.Period);
-        Card(row.Cells[2], "TOTAL VALUE", report.TotalValue, report.TotalValueNote);
-        Card(row.Cells[4], "BY STATUS", report.StatusSummary, null);
+        Card(row.Cells[0], "ORDERS", report.OrderCount.ToString(System.Globalization.CultureInfo.InvariantCulture), report.Period, 15);
+        Card(row.Cells[2], "TOTAL VALUE", report.TotalValue, report.TotalValueNote, 15);
+        // Smaller: "Placed 16 · Shipped 16 · Cancelled 8" wraps onto two lines at 15 pt in 85 mm.
+        Card(row.Cells[4], "BY STATUS", report.StatusSummary, null, 11.5);
         Spacer(section);
     }
 
-    private static void Card(Cell cell, string label, string value, string? note)
+    private static void Card(Cell cell, string label, string value, string? note, double valueSize)
     {
         cell.Shading.Color = OrderExportPalette.Card.ToColor();
+        cell.Format.LeftIndent = Unit.FromMillimeter(3);
         var heading = cell.AddParagraph(label);
         heading.Format.Font.Size = 7.5;
         heading.Format.Font.Bold = true;
         heading.Format.Font.Color = OrderExportPalette.Muted.ToColor();
-        Value(cell, value);
+        Value(cell, value, valueSize);
         if (note is not null)
         {
             var small = cell.AddParagraph(note);
@@ -140,10 +145,10 @@ internal sealed class MigraDocOrderExportRenderer : IOrderExportRenderer
         }
     }
 
-    private static void Value(Cell cell, string value)
+    private static void Value(Cell cell, string value, double size)
     {
         var big = cell.AddParagraph(value);
-        big.Format.Font.Size = 15;
+        big.Format.Font.Size = size;
         big.Format.Font.Bold = true;
         big.Format.SpaceBefore = Unit.FromMillimeter(1);
     }
