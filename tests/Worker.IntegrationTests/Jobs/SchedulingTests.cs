@@ -234,4 +234,54 @@ public sealed class SchedulingTests(WorkerFactory factory)
             "continues_trigger_group text YES",
             "continues_trigger_name text YES");
     }
+
+    /// <summary>
+    /// Quartz 4.3 adds twelve columns across four tables (fire progress, overlap policy, pause
+    /// reason), and a 4.3 node refuses to start without them. As for 4.2's, startup validation
+    /// proves they exist; this pins that they are in the `quartz` schema, nullable, and of
+    /// Quartz's own types.
+    /// </summary>
+    [Fact]
+    public async Task TheQuartzTables_HaveQuartz43sColumns()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AiFrameworkDbContext>();
+        await using var connection = new NpgsqlConnection(context.Database.GetConnectionString());
+        await connection.OpenAsync(CancellationToken.None);
+
+        await using var command = new NpgsqlCommand(
+            "select table_name, column_name, data_type, character_maximum_length, is_nullable " +
+            "from information_schema.columns where table_schema = 'quartz' " +
+            "and column_name in ('progress', 'progress_message', 'overlap_policy', " +
+            "'pause_reason', 'paused_by', 'paused_at') " +
+            // C collation, so 'pause_reason' sorts before 'paused_at' whatever the server's locale.
+            "order by table_name collate \"C\", column_name collate \"C\"",
+            connection);
+
+        var columns = new List<string>();
+        await using (var reader = await command.ExecuteReaderAsync(CancellationToken.None))
+        {
+            while (await reader.ReadAsync(CancellationToken.None))
+            {
+                var length = reader.IsDBNull(3) ? "" : $"({reader.GetInt32(3)})";
+                columns.Add(
+                    $"{reader.GetString(0)}.{reader.GetString(1)} " +
+                    $"{reader.GetString(2)}{length} {reader.GetString(4)}");
+            }
+        }
+
+        columns.Should().Equal(
+            "qrtz_fired_triggers.progress integer YES",
+            "qrtz_fired_triggers.progress_message character varying(250) YES",
+            "qrtz_paused_job_grps.pause_reason character varying(250) YES",
+            "qrtz_paused_job_grps.paused_at bigint YES",
+            "qrtz_paused_job_grps.paused_by character varying(200) YES",
+            "qrtz_paused_trigger_grps.pause_reason character varying(250) YES",
+            "qrtz_paused_trigger_grps.paused_at bigint YES",
+            "qrtz_paused_trigger_grps.paused_by character varying(200) YES",
+            "qrtz_triggers.overlap_policy integer YES",
+            "qrtz_triggers.pause_reason character varying(250) YES",
+            "qrtz_triggers.paused_at bigint YES",
+            "qrtz_triggers.paused_by character varying(200) YES");
+    }
 }
