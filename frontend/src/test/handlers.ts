@@ -38,6 +38,9 @@ export const aBuildingExport: OrderExport = {
   rowCount: null,
 };
 
+/** Bytes that start like a PDF. Unit tests never draw it: react-pdf is stubbed (OrderExportsPage.test.tsx). */
+export const aPdf = new TextEncoder().encode('%PDF-1.7 test');
+
 /** Someone else's order, as the fulfilment queue shows it to an operator. */
 export const anOrderToFulfil: FulfilmentOrder = {
   id: anOrder.id,
@@ -282,6 +285,9 @@ export const handlers = [
   // the router, takes the first handler whose pattern matches.
   http.get('/api/orders/exports', () => HttpResponse.json([anOrderExport])),
   http.post('/api/orders/exports', () => HttpResponse.json(aBuildingExport, { status: 202 })),
+  http.get('/api/orders/exports/:id/download', () =>
+    HttpResponse.arrayBuffer(aPdf.slice().buffer, { headers: { 'Content-Type': 'application/pdf' } }),
+  ),
   http.get('/api/orders/:id', ({ params }) =>
     HttpResponse.json({ ...anOrder, id: String(params.id) }),
   ),

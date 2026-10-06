@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
-import { aProduct, server } from '../../test/handlers';
+import { aPdf, aProduct, anOrderExport, server } from '../../test/handlers';
 import { withQueryClient } from '../../test/withQueryClient';
 import { OrderList } from './OrderList';
 import { PlaceOrderForm } from './PlaceOrderForm';
+import { useOrderExportDocument } from './queries';
 
 // Covers the onSuccess invalidateQueries call in usePlaceOrder (queries.ts) - deleting that
 // body breaks no other test, since PlaceOrderForm and OrderList are otherwise always tested in
@@ -57,5 +58,36 @@ describe('placing an order and the order list', () => {
     // call.
     expect(await screen.findByRole('link', { name: aProduct.sku })).toBeInTheDocument();
     expect(listRequests).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('useOrderExportDocument', () => {
+  it('fetches the export file as bytes from its download URL', async () => {
+    let requested = '';
+    server.use(
+      http.get('/api/orders/exports/:id/download', ({ request }) => {
+        requested = new URL(request.url).pathname;
+        return HttpResponse.arrayBuffer(aPdf.slice().buffer);
+      }),
+    );
+
+    const { result } = renderHook(() => useOrderExportDocument(anOrderExport.id), { wrapper: withQueryClient() });
+
+    await waitFor(() => { expect(result.current.isSuccess).toBe(true); });
+    expect(requested).toBe(`/api/orders/exports/${anOrderExport.id}/download`);
+    expect(Array.from(new Uint8Array(result.current.data ?? new ArrayBuffer(0)))).toEqual(Array.from(aPdf));
+  });
+
+  it('reports a missing export as an ApiError', async () => {
+    server.use(
+      http.get('/api/orders/exports/:id/download', () =>
+        HttpResponse.json({ title: 'Not found', detail: 'That export does not exist or is not ready.' }, { status: 404 }),
+      ),
+    );
+
+    const { result } = renderHook(() => useOrderExportDocument(anOrderExport.id), { wrapper: withQueryClient() });
+
+    await waitFor(() => { expect(result.current.isError).toBe(true); });
+    expect(result.current.error?.status).toBe(404);
   });
 });

@@ -7,6 +7,7 @@ import type {
 } from '@tanstack/react-query';
 import {
   getOrder,
+  getOrderExportDocument,
   listOrderExports,
   listOrders,
   placeOrder,
@@ -23,6 +24,8 @@ export const orderKeys = {
   list: () => [...orderKeys.all, 'list'] as const,
   detail: (id: string) => [...orderKeys.all, 'detail', id] as const,
   exports: () => [...orderKeys.all, 'exports'] as const,
+  // Not under exports(): invalidating the list must not refetch an open viewer's file.
+  exportDocument: (id: string) => [...orderKeys.all, 'export-document', id] as const,
 };
 
 export function useOrders(): UseInfiniteQueryResult<InfiniteData<OrderPage>, ApiError> {
@@ -83,5 +86,16 @@ export function useRequestOrderExport(): UseMutationResult<OrderExport, ApiError
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: orderKeys.exports() });
     },
+  });
+}
+
+export function useOrderExportDocument(id: string): UseQueryResult<ArrayBuffer, ApiError> {
+  return useQuery({
+    queryKey: orderKeys.exportDocument(id),
+    queryFn: () => getOrderExportDocument(id),
+    // A Ready export never changes, so nothing to refetch while the viewer is open.
+    staleTime: Infinity,
+    // Someone's order history: dropped as soon as the viewer closes, not kept for five minutes.
+    gcTime: 0,
   });
 }
