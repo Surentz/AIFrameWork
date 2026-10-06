@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Infrastructure\AiFramework.Infrastructure.csproj" />
+    <ProjectReference Include="..\PartnerSimulator\AiFramework.PartnerSimulator.csproj" />
   </ItemGroup>
 
 </Project>
