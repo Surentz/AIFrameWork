@@ -103,8 +103,12 @@ public sealed class OutboxWorkItemProcessorTests(PostgresFixture fixture)
         await using var context = fixture.CreateContext();
         context.Outbox.Add(new OutboxMessage
         {
-            Id = id, EventName = eventName, Payload = payload, OccurredAt = Now,
-            Status = OutboxStatus.InFlight, Attempts = attempts,
+            Id = id,
+            EventName = eventName,
+            Payload = payload,
+            OccurredAt = Now,
+            Status = OutboxStatus.InFlight,
+            Attempts = attempts,
         });
         await context.SaveChangesAsync();
         return id;

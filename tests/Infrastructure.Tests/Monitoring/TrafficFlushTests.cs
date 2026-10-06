@@ -53,15 +53,15 @@ public sealed class TrafficFlushTests(PostgresFixture fixture)
 
     private static TrafficBucket ABucket(
         DateTimeOffset at, string instanceId, string name, int succeeded, int fastCount) => new()
-    {
-        BucketStart = at,
-        Kind = TrafficKind.Http,
-        Name = name,
-        InstanceId = instanceId,
-        Succeeded = succeeded,
-        DurationMsTotal = succeeded * 3L,
-        Bucket0 = fastCount,
-    };
+        {
+            BucketStart = at,
+            Kind = TrafficKind.Http,
+            Name = name,
+            InstanceId = instanceId,
+            Succeeded = succeeded,
+            DurationMsTotal = succeeded * 3L,
+            Bucket0 = fastCount,
+        };
 
     [Fact]
     public async Task TheUpsert_IsIdempotent()

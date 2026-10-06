@@ -16,9 +16,14 @@ Prints nothing? There is no .NET SDK. Say so, skip to step 2, do not report a fa
 Otherwise:
 
 ```
+dotnet format whitespace AiFramework.slnx --verify-no-changes --verbosity quiet
 dotnet build --nologo --verbosity quiet
 dotnet test --nologo --verbosity quiet
 ```
+
+The format check is CI's `Check formatting` step in `backend (Debug)`. It fails on a diff, not a
+build error, so report each `file:line` it prints. Do not fix them silently: say they need
+`dotnet format whitespace AiFramework.slnx`, and run it only if asked.
 
 Warnings are errors here, so a warning is a build failure. Report every diagnostic with
 `file:line`.
