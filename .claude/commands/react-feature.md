@@ -31,7 +31,7 @@ frontend/src/test/handlers.ts         MSW handlers for the new endpoints
   endpoints behind it need an administrator
 - If the backend endpoints are new, regenerate `schema.d.ts` first (`npm run generate:api`)
 - No `any`, no `!`
-- MSW handlers added for every new endpoint, because `onUnhandledRequest: 'error'` will
+- MSW handlers added for every new endpoint, because `onUnhandledFrame: 'error'` will
   otherwise fail the test rather than silently pass it
 
 ## Finish

@@ -9,12 +9,14 @@ Runner: Vitest. Component queries: React Testing Library. HTTP: MSW.
 
 ## MSW is not optional
 
-MSW runs with `onUnhandledRequest: 'error'`. Without it a component that requests the wrong
+MSW runs with `onUnhandledFrame: 'error'`. Without it a component that requests the wrong
 URL falls through unmocked and the test still passes — the request never had to be right.
+(MSW 3 renamed it from `onUnhandledRequest`, which most samples online still use; it now also
+covers WebSocket connections.)
 
 ```ts
 // src/test/setup.ts
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 ```
