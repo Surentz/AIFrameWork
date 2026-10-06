@@ -1,7 +1,8 @@
-using System.Text;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Orders;
+using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
+using AiFramework.Domain.Users;
 using FluentAssertions;
 using NSubstitute;
 
@@ -18,16 +19,24 @@ public sealed class BuildOrderExportHandlerTests
     private static readonly DateTimeOffset Now = new(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
 
     private readonly IQueryDispatcher _queries = Substitute.For<IQueryDispatcher>();
+    private static readonly byte[] Pdf = "%PDF-1.7"u8.ToArray();
+
     private readonly ICommandDispatcher _commands = Substitute.For<ICommandDispatcher>();
+    private readonly IOrderExportRenderer _renderer = Substitute.For<IOrderExportRenderer>();
+    private readonly IClock _clock = Substitute.For<IClock>();
 
     public BuildOrderExportHandlerTests()
     {
         ExportIs(OrderExportState.Requested);
         _commands.SendAsync(Arg.Any<ICommand<bool>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(true));
+        _queries.SendAsync(Arg.Any<IQuery<SessionView>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new SessionView(OwnerId, "jane", "Jane Doe", "stamp", UserRole.Member)));
+        _renderer.Render(Arg.Any<OrderExportReport>()).Returns(Pdf);
+        _clock.UtcNow.Returns(Now);
     }
 
-    private BuildOrderExportHandler Handler => new(_queries, _commands);
+    private BuildOrderExportHandler Handler => new(_queries, _commands, _renderer, _clock);
 
     private void ExportIs(OrderExportState state) =>
         _queries.SendAsync(Arg.Any<IQuery<OrderExportView>>(), Arg.Any<CancellationToken>())
@@ -49,12 +58,36 @@ public sealed class BuildOrderExportHandlerTests
         await _queries.Received(1).SendAsync(
             Arg.Is<GetOrderExportRows>(q => q.Cursor == "page-2"),
             Arg.Any<CancellationToken>());
+        _renderer.Received(1).Render(Arg.Is<OrderExportReport>(r => r.OrderCount == 3));
         await _commands.Received(1).SendAsync(
-            Arg.Is<CompleteOrderExport>(c => c.ExportId == ExportId
-                && c.RowCount == 3
-                && Encoding.UTF8.GetString(c.Document).Contains(",A,", StringComparison.Ordinal)
-                && Encoding.UTF8.GetString(c.Document).Contains(",C,", StringComparison.Ordinal)),
+            Arg.Is<CompleteOrderExport>(c => c.ExportId == ExportId && c.RowCount == 3 && c.Document == Pdf),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NamesTheOwnerAndTheTimeInTheReport()
+    {
+        _queries.SendAsync(Arg.Any<IQuery<OrderExportRowPage>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new OrderExportRowPage([], NextCursor: null)));
+
+        await Handler.Handle(new BuildOrderExport(ExportId, OwnerId), CancellationToken.None);
+
+        await _queries.Received(1).SendAsync(Arg.Is<GetUser>(q => q.Id == OwnerId), Arg.Any<CancellationToken>());
+        _renderer.Received(1).Render(Arg.Is<OrderExportReport>(r =>
+            r.OwnerName == "Jane Doe" && r.Generated == "Generated 3 Oct 2026, 12:00 UTC"));
+    }
+
+    [Fact]
+    public Task Handle_WhenTheOwnerCannotBeRead_Throws()
+    {
+        _queries.SendAsync(Arg.Any<IQuery<OrderExportRowPage>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new OrderExportRowPage([], NextCursor: null)));
+        _queries.SendAsync(Arg.Any<IQuery<SessionView>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<SessionView>(new Error(ErrorKind.NotFound, "user.not_found", "gone")));
+
+        var act = () => Handler.Handle(new BuildOrderExport(ExportId, OwnerId), CancellationToken.None);
+
+        return act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]

@@ -454,7 +454,7 @@
         "tags": [
           "OrderExports"
         ],
-        "summary": "Asks for a CSV of every order the caller has placed. Built in the background; the caller is\nnotified when it is ready. While one is still being built, returns that one rather than\nstarting another.",
+        "summary": "Asks for a PDF of every order the caller has placed. Built in the background; the caller is\nnotified when it is ready. While one is still being built, returns that one rather than\nstarting another.",
         "responses": {
           "202": {
             "description": "Accepted",
@@ -521,7 +521,7 @@
         "tags": [
           "OrderExports"
         ],
-        "summary": "The CSV of a Ready export. 404 if it is someone else's or not built yet — the same answer for\nboth, so an export id reveals nothing.",
+        "summary": "The PDF of a Ready export. 404 if it is someone else's or not built yet — the same answer for\nboth, so an export id reveals nothing. The viewer fetches this same URL for the bytes.",
         "parameters": [
           {
             "name": "id",
@@ -537,7 +537,7 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/csv": {
+              "application/pdf": {
                 "schema": {
                   "$ref": "#/components/schemas/Stream"
                 }

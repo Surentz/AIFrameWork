@@ -84,7 +84,7 @@ public sealed class GetOrderExportFileHandler(IOrderExportRepository exports, IC
             ? Result.Failure<OrderExportDownload>(new Error(
                 ErrorKind.NotFound, "order_exports.not_found", "That export does not exist or is not ready."))
             : Result.Success(new OrderExportDownload(
-                $"orders-{file.RequestedAt.UtcDateTime:yyyy-MM-dd}.csv", file.Document));
+                $"orders-{file.RequestedAt.UtcDateTime:yyyy-MM-dd}.pdf", file.Document));
     }
 }
 

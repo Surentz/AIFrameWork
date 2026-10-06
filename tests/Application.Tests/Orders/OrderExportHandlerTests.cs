@@ -151,7 +151,7 @@ public sealed class OrderExportHandlerTests
         var result = await new GetOrderExportFileHandler(_exports, _currentUser)
             .HandleAsync(new GetOrderExportFile(id), CancellationToken.None);
 
-        result.Value.FileName.Should().Be("orders-2026-10-03.csv");
+        result.Value.FileName.Should().Be("orders-2026-10-03.pdf");
         result.Value.Document.Should().Equal(AFile);
     }
 

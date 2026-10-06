@@ -11,6 +11,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageReference Include="NSubstitute" Version="6.2.0" />
     <PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="1.19.1" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <PackageReference Include="Testcontainers.RabbitMq" Version="4.15.0" />
     <PackageReference Include="TngTech.ArchUnitNET" Version="0.13.4" />

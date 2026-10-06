@@ -359,7 +359,7 @@ export interface paths {
         };
         readonly put?: never;
         /**
-         * Asks for a CSV of every order the caller has placed. Built in the background; the caller is
+         * Asks for a PDF of every order the caller has placed. Built in the background; the caller is
          *     notified when it is ready. While one is still being built, returns that one rather than
          *     starting another.
          */
@@ -399,8 +399,8 @@ export interface paths {
             readonly cookie?: never;
         };
         /**
-         * The CSV of a Ready export. 404 if it is someone else's or not built yet — the same answer for
-         *     both, so an export id reveals nothing.
+         * The PDF of a Ready export. 404 if it is someone else's or not built yet — the same answer for
+         *     both, so an export id reveals nothing. The viewer fetches this same URL for the bytes.
          */
         readonly get: {
             readonly parameters: {
@@ -419,7 +419,7 @@ export interface paths {
                         readonly [name: string]: unknown;
                     };
                     content: {
-                        readonly "text/csv": components["schemas"]["Stream"];
+                        readonly "application/pdf": components["schemas"]["Stream"];
                     };
                 };
                 /** @description Not Found */
