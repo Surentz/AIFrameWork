@@ -30,7 +30,7 @@ as well as download it.
 | What is the PDF for? | **Sharing with someone else**: a formatted, stand-alone document. |
 | How does viewing work? | **The same viewer on every device**: pdf.js through react-pdf, not the browser's built-in viewer (which most mobile browsers cannot embed). |
 | PDF library | **PDFsharp + MigraDoc 6.2.4** (MIT, fully managed). Not QuestPDF (native Skia on a chiseled image with no fonts, revenue-based licence), not headless Chromium (a browser in the worker image). |
-| Look | **Coloured to match the app's light theme**, with a brand header band, summary cards and status pills. |
+| Look | **Coloured to match the app's light theme**, with a brand header band, summary cards and status badges. |
 | Delivery | **One pull request**, not split at the viewer. |
 
 ## 1. The document
@@ -40,7 +40,7 @@ as well as download it.
 **Header band (page 1 only):** full width, solid brand indigo `#3b2fa8` (solid, not the app's
 gradient: MigraDoc cannot fill a gradient, and a flat band prints reliably). On it, **Order
 history** large in white bold; beneath, the owner's display name and "Generated 6 Oct 2026, 18:04
-UTC" in softer white. **All times in the document are UTC**, said once here: the worker does not
+UTC" in a soft lavender `#e0ddf7` (the app uses translucent white here; the PDF needs a solid colour). **All times in the document are UTC**, said once here: the worker does not
 know the reader's time zone.
 
 **Summary: three cards** on pale indigo `#eef1ff`, each a small grey label over a large bold value:
@@ -58,19 +58,19 @@ memory, which already holds them all):
 
 - **Order** is a short reference: the first 8 characters of the id, upper case (`3F2A9C01`). No
   full GUID appears anywhere in the document.
-- **Product** is the product name, with the SKU beneath it in small grey. An order with no product
+- **Product** is the product name, with the SKU beneath it, smaller, in the muted grey `#59616f`. An order with no product
   name shows the SKU alone.
 - **Unit price** and **Total** show `–` when there is no recorded price.
-- **Status** is a coloured pill with the word inside it, so it reads in greyscale print and for
+- **Status** is a coloured badge with the word inside it (rectangular: MigraDoc draws no rounded corners), so it reads in greyscale print and for
   colour-blind readers: Shipped `#0f6b3f` on `#f0fdf5`, Cancelled `#912018` on `#fef4f3`, Placed
-  `#4f46e5` on `#eef1ff`. Beneath the pill: "Shipped 3 Mar 2026", or "Cancelled 5 Mar 2026" and the
+  `#4f46e5` on `#eef1ff`. Beneath the badge: "Shipped 3 Mar 2026", or "Cancelled 5 Mar 2026" and the
   cancellation reason in small italic.
 - The header row repeats on every page: small uppercase grey text on `#f8f9fb`. Rows are
   zebra-striped (white and `#f8f9fb`) with `#e4e7ec` hairlines. Numbers are right-aligned.
 - A **grand total** row closes the table, in bold above a stronger `#cfd4dd` rule. It repeats the
   Total value card's figure and rule.
 
-**Footer, every page:** a thin rule, then "Order history · Jane Doe · Page 2 of 5" in `#878e9b`.
+**Footer, every page:** a thin rule, then "Order history · Jane Doe · Page 2 of 5" in the muted grey `#59616f`. (The app's subtle grey `#878e9b` was the first choice for the SKU line and the footer; at 3.3:1 on white it fails WCAG AA, so both use `#59616f`, 6.2:1.)
 
 **Amounts:** two decimals, invariant culture, with a thousands separator (`1,234.50`), and no
 currency symbol, because the domain has no currency (the CSV printed amounts the same way).
@@ -123,7 +123,7 @@ column: every export is a PDF.
 
 - **`MigraDocOrderExportRenderer`** implements the port with PDFsharp/MigraDoc 6.2.4. All layout and
   colour lives here and in `OrderExportPalette`.
-- **Fonts:** Noto Sans Regular and Bold as embedded resources, served by an `IFontResolver`, with
+- **Fonts:** Noto Sans Regular and Bold as embedded resources, served by an `IFontResolver` that answers **every** family name with Noto Sans (MigraDoc asks for Courier New as its own error font, which the image does not have; found by a spike on 2026-10-06), with
   the SIL Open Font License text committed beside the font files. PDFsharp's font resolver is a
   process-wide setting: it is set once, guarded so that the Api and the worker, and test hosts in
   one process, can all register it without throwing.
@@ -186,7 +186,7 @@ View button on close. Desktop: a large centred panel over a dimmed backdrop. Bel
 - The viewer is **`React.lazy`-loaded**, so pdf.js (about 1 MB) downloads only on the first View; the
   rest of the app is unchanged. This is the app's first lazy-loaded module.
 - The pdf.js worker is bundled by Vite and served from the app's own origin, never a CDN.
-- `frontend/nginx.conf` must serve the worker's `.mjs` with a JavaScript MIME type; the plan
+- `frontend/nginx.conf` must serve the worker's `.mjs` with a JavaScript MIME type. nginx's stock `mime.types` maps only `.js`, so without an explicit mapping the worker arrives as `application/octet-stream` and browsers refuse to run it; the plan
   verifies this against the production image.
 - `pdfjs-dist` is the version react-pdf 11 depends on; it is not pinned separately.
 
@@ -210,7 +210,8 @@ You are notified when it is ready; exports are kept for seven days."
 | `Infrastructure.Tests` | The document round-trips through `document bytea` |
 | `Api.IntegrationTests` | Download: `application/pdf`, attachment `orders-….pdf`, body starts `%PDF-`; another user's export is still 404 |
 | `Worker.IntegrationTests` | The existing delivery test ends with a Ready export holding a PDF |
-| Vitest | View opens the dialog; the right URL is requested (through MSW, as the repo requires); loading and error states; Esc closes; focus returns to View; the subtitle |
+| Vitest | View opens the dialog; the right URL is requested (through MSW, as the repo requires); loading and error states; Close; the subtitle |
+| Playwright (dialog behaviour) | Esc closes the viewer and focus returns to View. jsdom 30 implements none of `<dialog>`'s behaviour, so this is the browser's to prove, not a stub's |
 | Playwright | Download is a `.pdf` starting `%PDF-`; View renders the first page, whose text layer contains "Order history" and the order's SKU |
 
 **Vitest stubs react-pdf**, because pdf.js cannot draw in jsdom. The repo forbids mocking the *API
