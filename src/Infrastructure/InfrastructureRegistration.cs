@@ -11,6 +11,7 @@ using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.Exports;
 using AiFramework.Infrastructure.Integration;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Monitoring;
@@ -136,6 +137,9 @@ public static class InfrastructureRegistration
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IOrderExportRepository, OrderExportRepository>();
         services.AddScoped<IOrderExportRetention, OrderExportRetention>();
+        // Stateless, and only the worker's build job calls it; registered here so both hosts resolve the
+        // same graph. Constructing it installs the embedded font, once per process.
+        services.AddSingleton<IOrderExportRenderer, MigraDocOrderExportRenderer>();
         services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
