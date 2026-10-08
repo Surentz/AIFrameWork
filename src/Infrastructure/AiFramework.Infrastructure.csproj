@@ -112,6 +112,9 @@
       sees a Quartz type, and only the worker starts a scheduler.
     -->
     <PackageReference Include="Quartz" Version="4.3.0" />
+    <!-- Typed clients for external systems (ADR 0031). Source-generated at build time; methods
+         return IApiResponse<T> and never throw ApiException, so adapters map the final outcome. -->
+    <PackageReference Include="Refit.HttpClientFactory" Version="16.3.0" />
   </ItemGroup>
 
   <!--

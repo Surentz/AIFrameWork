@@ -13,6 +13,9 @@ namespace AiFramework.Infrastructure.ExternalSystems.Http;
 internal sealed class OutboundTrafficHandler(
     ITrafficRecorder recorder, TimeProvider time, string systemName, TrafficKind kind) : DelegatingHandler
 {
+    /// <summary>Outbound or OutboundAttempt: which side of the resilience handler this instance sits on.</summary>
+    public TrafficKind Kind => kind;
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
