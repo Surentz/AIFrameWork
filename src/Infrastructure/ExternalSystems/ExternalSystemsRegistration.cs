@@ -92,8 +92,8 @@ public static class ExternalSystemsRegistration
 
         var builder = services.AddClientCredentialsTokenManagement();
 
-        // After Duende's own registration, which adds a no-op assertion service: the last
-        // registration of a service type is the one resolved, so this one replaces it.
+        // Duende registers a no-op default; if it won, private_key_jwt would silently send no assertion.
+        services.RemoveAll<IClientAssertionService>();
         services.AddSingleton<IClientAssertionService, PrivateKeyJwtAssertionService>();
         return builder;
     }
@@ -127,20 +127,23 @@ public static class ExternalSystemsRegistration
             }
 
             if (system.Auth.Kind == ExternalSystemAuthKind.ClientSecret
-                && TryReadSecret(system.Auth.ClientSecretFile!) is { } secret) // validated for ClientSecret.
+                && TryReadSecret(system.Auth.ClientSecretFile!) is { } secret // validated for ClientSecret.
+                && ClientSecret.TryParse(secret, out var parsed, out _))
             {
-                client.ClientSecret = ClientSecret.Parse(secret);
+                client.ClientSecret = parsed;
             }
         });
     }
 
-    // A missing secret leaves ClientSecret unset: the IdP answers 401 and the token check
-    // reports it. Throwing from inside an options callback would fail the first CALL instead.
+    // A missing, empty or unparseable secret leaves ClientSecret unset: the IdP answers 401 and
+    // the token check reports it. Throwing from inside an options callback (ClientSecret.Parse
+    // does, on "") would fail the first CALL instead.
     private static string? TryReadSecret(string path)
     {
         try
         {
-            return File.ReadAllText(path).Trim();
+            var secret = File.ReadAllText(path).Trim();
+            return secret.Length == 0 ? null : secret;
         }
         catch (IOException)
         {

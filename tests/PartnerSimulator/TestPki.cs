@@ -110,9 +110,46 @@ public sealed class TestPki : IDisposable
 
     public void Dispose()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            RemoveFromUserStores();
+        }
+
         _intermediateKey.Dispose();
         Root.Dispose();
         Intermediate.Dispose();
+    }
+
+    /// <summary>
+    /// On Windows, SslStreamCertificateContext.Create copies a chain's intermediate into
+    /// CurrentUser\CA. Every run adds more with the same subject, and at about a hundred Windows
+    /// chain building fails with "An unknown chain building error occurred". This PKI's own two
+    /// certificates are removed by thumbprint; nothing else is touched. With test classes running
+    /// in parallel the odd one still survives, about one every two or three full runs, which a
+    /// serial run never leaves; that is a race below this code, not a missed Dispose.
+    /// </summary>
+    private void RemoveFromUserStores()
+    {
+        string[] thumbprints = [Root.Thumbprint, Intermediate.Thumbprint];
+        foreach (var name in (StoreName[])[StoreName.CertificateAuthority, StoreName.Root])
+        {
+            using var store = new X509Store(name, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite | OpenFlags.OpenExistingOnly);
+            var all = store.Certificates;
+            var ours = new X509Certificate2Collection();
+            ours.AddRange(all.Where(c => thumbprints.Contains(c.Thumbprint, StringComparer.OrdinalIgnoreCase)).ToArray());
+
+            // Remove only on a match: removing from CurrentUser\Root asks the user in a dialog.
+            if (ours.Count > 0)
+            {
+                store.RemoveRange(ours);
+            }
+
+            foreach (var certificate in all)
+            {
+                certificate.Dispose();
+            }
+        }
     }
 
     private X509Certificate2 Issue(

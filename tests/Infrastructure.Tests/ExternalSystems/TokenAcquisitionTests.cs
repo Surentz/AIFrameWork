@@ -60,6 +60,39 @@ public sealed class TokenAcquisitionTests(KeycloakFixture keycloak) : IDisposabl
         entry.Description.Should().NotContain("not-the-secret");
     }
 
+    [Fact]
+    public async Task CheckHealth_WithAMissingSecretFile_IsUnhealthy()
+    {
+        var entry = await TokenCheckAsync(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["Auth:Kind"] = "ClientSecret",
+            ["Auth:TokenEndpoint"] = keycloak.TokenEndpoint,
+            ["Auth:ClientId"] = KeycloakFixture.SecretClientId,
+            ["Auth:ClientSecretFile"] = Path.Combine(_directory, "does-not-exist"),
+        });
+
+        entry.Status.Should().Be(HealthStatus.Unhealthy);
+        entry.Exception.Should().BeNull("a missing secret is a failed token result, not a throw");
+    }
+
+    [Fact]
+    public async Task CheckHealth_WithAnEmptySecretFile_IsUnhealthy()
+    {
+        var secret = Path.Combine(_directory, "empty");
+        await File.WriteAllTextAsync(secret, " \n");
+
+        var entry = await TokenCheckAsync(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["Auth:Kind"] = "ClientSecret",
+            ["Auth:TokenEndpoint"] = keycloak.TokenEndpoint,
+            ["Auth:ClientId"] = KeycloakFixture.SecretClientId,
+            ["Auth:ClientSecretFile"] = secret,
+        });
+
+        entry.Status.Should().Be(HealthStatus.Unhealthy);
+        entry.Exception.Should().BeNull("an empty secret is a failed token result, not a throw");
+    }
+
     // §5 probe 3: Keycloak's "Signed JWT" authenticator accepts our assertion with the
     // certificate registered on the client (not a JWKS URL), audience = the realm issuer.
     [Fact]
