@@ -13,6 +13,12 @@ namespace AiFramework.Infrastructure.Tests.ExternalSystems;
 
 public sealed class HandlerChainTests
 {
+    // IHttpClientFactory's own wrappers: lifetime tracking and its two logging handlers. Not ours.
+    private static readonly HashSet<string> FactoryPlumbing = new(StringComparer.Ordinal)
+    {
+        "LifetimeTrackingHttpMessageHandler", "LoggingScopeHttpMessageHandler", "LoggingHttpMessageHandler",
+    };
+
     [Fact]
     public void AddClient_BuildsTheChainInTheFixedOrder()
     {
@@ -33,20 +39,32 @@ public sealed class HandlerChainTests
         var handler = provider.GetRequiredService<IHttpMessageHandlerFactory>()
             .CreateHandler(UniqueName.ForType<ISimulatorApi>());
 
-        Describe(handler).Should().ContainInOrder(
-            "Traffic:Outbound", nameof(ResilienceHandler), "Traffic:OutboundAttempt", "Token", nameof(SocketsHttpHandler));
+        // Exact, so a missing, extra or moved layer fails. ResilienceHandler exposes no pipeline
+        // name, so the two are told apart by position: #1 is the standard handler, #2 the 401
+        // resend. Swapping those two is caught by behaviour instead: ExternalSystemClientTests'
+        // 503 test counts the attempts that only the standard handler, outside OutboundAttempt,
+        // produces.
+        Describe(handler).Should().Equal(
+            "Traffic:Outbound", "ResilienceHandler#1", "Traffic:OutboundAttempt", "ResilienceHandler#2", "Token",
+            nameof(SocketsHttpHandler));
     }
 
     private static List<string> Describe(HttpMessageHandler handler)
     {
         var chain = new List<string>();
+        var resilience = 0;
         for (HttpMessageHandler? current = handler; current is not null;
              current = (current as DelegatingHandler)?.InnerHandler)
         {
+            if (FactoryPlumbing.Contains(current.GetType().Name))
+            {
+                continue;
+            }
+
             chain.Add(current switch
             {
                 OutboundTrafficHandler traffic => $"Traffic:{traffic.Kind}",
-                ResilienceHandler => nameof(ResilienceHandler),
+                ResilienceHandler => $"{nameof(ResilienceHandler)}#{++resilience}",
                 SocketsHttpHandler => nameof(SocketsHttpHandler),
                 _ when current.GetType().Name.Contains("Token", StringComparison.Ordinal) => "Token",
                 _ => current.GetType().Name,

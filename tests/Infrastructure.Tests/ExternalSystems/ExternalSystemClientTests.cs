@@ -19,8 +19,8 @@ public interface ISimulatorApi
 /// <summary>
 /// The whole chain, for real: Refit → traffic → resilience → traffic → Duende → mTLS, against the
 /// simulator (trusting this run's Keycloak PKI) and a real Keycloak. Retry delays are real but
-/// tiny (BaseDelay 50 ms) rather than faked, because Duende's cache also reads the clock and the
-/// two must agree.
+/// tiny (BaseDelay 50 ms; the 401 resend has none) rather than faked, because Duende's cache also
+/// reads the clock and the two must agree.
 /// </summary>
 [Collection(nameof(KeycloakCollection))]
 public sealed class ExternalSystemClientTests(KeycloakFixture keycloak) : IAsyncLifetime, IDisposable
@@ -106,6 +106,24 @@ public sealed class ExternalSystemClientTests(KeycloakFixture keycloak) : IAsync
     public async Task Send_WhenThePartnerAnswers401Once_RefreshesTheTokenOnceAndSucceeds()
     {
         await using var provider = Build();
+        var api = provider.GetRequiredService<ISimulatorApi>();
+        await api.EchoAsync(CancellationToken.None); // warm the token cache with token A.
+        _simulator.EnqueueEchoStatus(HttpStatusCode.Unauthorized);
+
+        var response = await api.EchoAsync(CancellationToken.None);
+
+        response.IsSuccessStatusCode.Should().BeTrue();
+        var authorizations = _simulator.EchoRequests.Select(r => r.Authorization).ToList();
+        authorizations.Should().HaveCount(3, "the warm-up, the 401, and exactly one resend");
+        authorizations[2].Should().NotBe(authorizations[1], "the resend must carry a freshly fetched token");
+    }
+
+    // The 401 resend is not the standard retry: a non-idempotent client still gets it, because a
+    // 401 means the partner did not act on the request.
+    [Fact]
+    public async Task Send_WithoutRetryWhenThePartnerAnswers401Once_StillRefreshesOnceAndSucceeds()
+    {
+        await using var provider = Build(client: c => c.WithoutRetry("CreateThing is not idempotent"));
         var api = provider.GetRequiredService<ISimulatorApi>();
         await api.EchoAsync(CancellationToken.None); // warm the token cache with token A.
         _simulator.EnqueueEchoStatus(HttpStatusCode.Unauthorized);
