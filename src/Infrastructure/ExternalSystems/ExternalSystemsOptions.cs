@@ -19,6 +19,14 @@ public sealed class ExternalSystemsOptions
 
     public ExternalSystemOptions? Find(string name) =>
         Systems.TryGetValue(name, out var system) ? system : null;
+
+    /// <summary>
+    /// The configured key that matches <paramref name="name"/> case-insensitively, in the
+    /// configuration's own casing; <paramref name="name"/> itself when none does. Named options
+    /// match ORDINALLY, and AddExternalSystems registers them under this spelling.
+    /// </summary>
+    internal string CanonicalName(string name) =>
+        Systems.Keys.FirstOrDefault(key => string.Equals(key, name, StringComparison.OrdinalIgnoreCase)) ?? name;
 }
 
 public sealed class ExternalSystemOptions

@@ -85,9 +85,12 @@ reason is mandatory and appears in the startup log.
 2. `AddStandardResilienceHandler()` — this system's own options and its own circuit breaker.
    Order inside it is the standard handler's and is not rearranged (ADR 0014).
 3. `OutboundTrafficHandler` (**Attempt**) — one record per physical attempt.
-4. Duende's client-credentials token handler — only when `Auth.Kind != None` — behind Duende's
-   `AddDefaultAccessTokenResiliency()`. Each attempt reads the token from the cache; a 401 forces
-   one refresh and one resend.
+4. Duende's client-credentials token handler — only when `Auth.Kind != None` — behind our own
+   zero-delay `token-resend` pipeline (not Duende's `AddDefaultAccessTokenResiliency()`, whose
+   jittered delay sits inside the attempt timeout; ADR 0031). Each attempt reads the token from the
+   cache; a 401 calls Duende's public `SetForceRenewal` on the request and resends once, at once,
+   with a freshly fetched token, also for `WithoutRetry` clients. The standard retry clears the
+   flag before each later attempt.
 5. Primary handler: `SocketsHttpHandler` whose `SslOptions` present the system's certificate
    (§2) and validate the server against `ServerTrust` when configured.
 

@@ -15,7 +15,9 @@ public sealed class ReadinessTests(WorkerFactory factory)
 
         var response = await client.GetAsync("/health/ready");
 
+        // The body is the aggregate status: Healthy only if no external check was run.
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Be("Healthy");
     }
 
     [Fact]

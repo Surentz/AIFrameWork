@@ -18,7 +18,9 @@ public sealed class ExternalSystemClientBuilder<TApi>
 
     /// <summary>
     /// This client's calls are not idempotent and the partner takes no idempotency key: never
-    /// retry. The reason is mandatory and is logged at startup. ADR 0014.
+    /// retry. The reason is mandatory and is logged once when the host starts, because the
+    /// standard handler's options are validated on start and building them runs this client's
+    /// resilience configuration. ADR 0014.
     /// </summary>
     public ExternalSystemClientBuilder<TApi> WithoutRetry(string reason)
     {

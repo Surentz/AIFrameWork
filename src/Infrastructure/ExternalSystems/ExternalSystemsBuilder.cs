@@ -61,33 +61,38 @@ public sealed partial class ExternalSystemsBuilder
                 $"{typeof(TApi).Name} is already registered as an external-system client; each system needs its own interface.");
         }
 
-        var system = Snapshot.Find(name);
+        // Configuration keys are case-insensitive but named options (Duende's token client, our
+        // client settings) match ordinally: an env var's PARTNERSIM and the code's "PartnerSim"
+        // are one system only if every name below is the configuration's own spelling — the one
+        // AddExternalSystems registered the token client and the health checks under.
+        var systemName = Snapshot.CanonicalName(name);
+        var system = Snapshot.Find(systemName);
 
         var client = Services.AddRefitGeneratedClient<TApi>()
             .ConfigureHttpClient((sp, http) =>
             {
-                var current = sp.GetRequiredService<IOptionsMonitor<ExternalSystemsOptions>>().CurrentValue.Find(name);
+                var current = sp.GetRequiredService<IOptionsMonitor<ExternalSystemsOptions>>().CurrentValue.Find(systemName);
                 http.BaseAddress = new Uri($"{(current?.BaseAddress ?? NotConfiguredAddress).TrimEnd('/')}/");
                 http.Timeout = Timeout.InfiniteTimeSpan; // the standard handler owns both timeouts.
             })
             .AddHttpMessageHandler(sp => new OutboundTrafficHandler(
-                sp.GetRequiredService<ITrafficRecorder>(), sp.GetRequiredService<TimeProvider>(), name, TrafficKind.Outbound));
+                sp.GetRequiredService<ITrafficRecorder>(), sp.GetRequiredService<TimeProvider>(), systemName, TrafficKind.Outbound));
 
-        client.AddStandardResilienceHandler().Configure((resilience, sp) => ConfigureStandardResilience(resilience, sp, name));
+        client.AddStandardResilienceHandler().Configure((resilience, sp) => ConfigureStandardResilience(resilience, sp, systemName));
 
         client.AddHttpMessageHandler(sp => new OutboundTrafficHandler(
-            sp.GetRequiredService<ITrafficRecorder>(), sp.GetRequiredService<TimeProvider>(), name, TrafficKind.OutboundAttempt));
+            sp.GetRequiredService<ITrafficRecorder>(), sp.GetRequiredService<TimeProvider>(), systemName, TrafficKind.OutboundAttempt));
 
         if (system is { Auth.Kind: not ExternalSystemAuthKind.None })
         {
             AddTokenResend(client);
-            client.AddClientCredentialsTokenHandler(ClientCredentialsClientName.Parse(name));
+            client.AddClientCredentialsTokenHandler(ClientCredentialsClientName.Parse(systemName));
         }
 
         client.ConfigurePrimaryHttpMessageHandler(sp =>
-            sp.GetRequiredService<ExternalSystemHandlerFactory>().CreatePrimaryHandler(name));
+            sp.GetRequiredService<ExternalSystemHandlerFactory>().CreatePrimaryHandler(systemName));
 
-        return new ExternalSystemClientBuilder<TApi>(Services, name);
+        return new ExternalSystemClientBuilder<TApi>(Services, systemName);
     }
 
     /// <summary>This system's timeouts and retry budget; retry off globally, by WithoutRetry, or when unconfigured.</summary>
@@ -100,11 +105,34 @@ public sealed partial class ExternalSystemsBuilder
         resilience.Retry.MaxRetryAttempts = options.Resilience.MaxRetryAttempts;
         resilience.Retry.Delay = options.Resilience.BaseDelay;
 
+        // HttpStandardResilienceOptionsCustomValidator (ValidateOnStart) requires
+        // CircuitBreaker.SamplingDuration >= 2 x AttemptTimeout. Against the 30 s default, any
+        // AttemptTimeout over 15 s would stop the host with a message naming neither the system
+        // nor the property, so the window widens with the attempt instead.
+        var minimumSampling = options.Resilience.AttemptTimeout * 2;
+        if (resilience.CircuitBreaker.SamplingDuration < minimumSampling)
+        {
+            resilience.CircuitBreaker.SamplingDuration = minimumSampling;
+        }
+
+        // The 401 resend sets Duende's force-renewal flag on the request, and every later attempt
+        // of the same call reuses that request: clear it before each standard retry, or each
+        // retry would fetch a fresh token. Here, not in the resend pipeline, because only this
+        // callback runs before every later attempt however the previous one ended, including a
+        // resend cut off by the attempt timeout.
+        resilience.Retry.OnRetry = arguments =>
+        {
+            arguments.Context.GetRequestMessage()?.SetForceRenewal(false);
+            return ValueTask.CompletedTask;
+        };
+
         var globallyEnabled = sp.GetRequiredService<IOptions<ResilienceOptions>>().Value.Enabled;
         var disabledReason = sp.GetRequiredService<IOptionsMonitor<ExternalSystemClientSettings>>().Get(name).RetryDisabledReason;
         if (disabledReason is not null)
         {
-            // This callback runs once, when the client's pipeline is first built.
+            // This callback runs once per container, when these named options are first built: at
+            // host start, because the standard handler registers them ValidateOnStart (a bare
+            // container that never runs startup validation builds them at the first call).
             var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("AiFramework.ExternalSystems");
             LogRetryDisabled(logger, name, disabledReason);
         }
@@ -136,6 +164,10 @@ public sealed partial class ExternalSystemsBuilder
             Delay = TimeSpan.Zero,
             BackoffType = DelayBackoffType.Constant,
             UseJitter = false,
+
+            // On by default: a 401 carrying Retry-After would otherwise wait out the header inside
+            // the attempt timeout, the very delay this pipeline exists to avoid.
+            ShouldRetryAfterHeader = false,
             ShouldHandle = arguments =>
             {
                 if (arguments.Outcome.Result is { StatusCode: HttpStatusCode.Unauthorized, RequestMessage: { } request })

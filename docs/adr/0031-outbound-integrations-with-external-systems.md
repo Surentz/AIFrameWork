@@ -96,6 +96,11 @@ files. The PFX must contain the intermediates: Linux sends only what the PFX hol
 - **A 401 resend happens inside the `OutboundAttempt` counter**, so a 401 followed by a successful
   resend counts as one successful attempt.
 - **Breakers are per pod.** One pod can open its breaker while another keeps calling.
+- **Breakers are per Refit interface, not per system.** Two interfaces for one system get two
+  breakers.
+- **An IdP outage can surface as a partner 401.** When token acquisition fails, Duende 4.2 logs a
+  warning and sends the request anyway, without a token (or, on the resend, with the rejected one).
+  Adapters map a 401 that survived the resend to `Unavailable`, not to a business error.
 - **`Resilience:Enabled=false` reaches every system**, disabling retry for all of them.
 - **On Windows, parallel test runs can leave a few test intermediates in `CurrentUser\CA`.**
   `TestPki.Dispose` removes its own, but a store race leaks a handful per many runs. Linux CI is

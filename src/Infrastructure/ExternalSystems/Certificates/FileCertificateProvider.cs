@@ -108,8 +108,19 @@ internal sealed partial class FileCertificateProvider(
 
         var intermediates = new X509Certificate2Collection();
         intermediates.AddRange(collection.Where(c => !ReferenceEquals(c, leaf)).ToArray());
-        var loaded = new LoadedClientCertificate(
-            leaf, SslStreamCertificateContext.Create(leaf, intermediates, offline: true));
+        SslStreamCertificateContext context;
+        try
+        {
+            context = SslStreamCertificateContext.Create(leaf, intermediates, offline: true);
+        }
+        catch (CryptographicException exception)
+        {
+            // Caught so it never escapes CreatePrimaryHandler, which reaches this through
+            // GetCurrent. The type, never the message, as above.
+            return Failed(systemName, $"client certificate chain could not be prepared: {exception.GetType().Name}");
+        }
+
+        var loaded = new LoadedClientCertificate(leaf, context);
 
         LogLoaded(systemName, leaf.Subject, leaf.Thumbprint, loaded.NotAfter);
         return new Entry(CertificateLoadResult.Loaded(loaded), hash, default);
