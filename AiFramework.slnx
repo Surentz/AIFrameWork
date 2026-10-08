@@ -31,4 +31,7 @@
   <Folder Name="/tests/Infrastructure.Tests/">
     <Project Path="tests/Infrastructure.Tests/AiFramework.Infrastructure.Tests.csproj" />
   </Folder>
+  <Folder Name="/tests/PartnerSimulator/">
+    <Project Path="tests/PartnerSimulator/AiFramework.PartnerSimulator.csproj" />
+  </Folder>
 </Solution>

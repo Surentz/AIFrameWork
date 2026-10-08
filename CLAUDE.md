@@ -130,6 +130,7 @@ generated-code tree, and keeping them apart is what makes each host's `codegen w
 | `notifications` | The notification feed, handlers that write to it, SignalR push |
 | `observability` | Logging, tracing, OTLP, OpenTelemetry metrics, sampling, trace links from the UI, traffic metrics and their charts |
 | `resilience` | Outbound HTTP clients, retry/timeouts, explicit DB transactions |
+| `external-systems` | Calling an external system: Refit clients, OCES3/mTLS, OAuth 2.0 client credentials (Keycloak), per-system retry and health checks, `ExternalSystems__*` config, the dev PKI |
 | `local-dev` | The dev loop scripts, Seq, ports, `dotnet ef` vs user-secrets, the control panel |
 | `kubernetes` | The kind cluster, `deploy.ps1`, HPAs, ingress affinity, `-WithObservability` (OpenSearch, Prometheus, Grafana, alert rules) |
 

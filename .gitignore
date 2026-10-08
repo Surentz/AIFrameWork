@@ -23,6 +23,8 @@ secrets.json
 appsettings.*.Local.json
 .env
 .env.*
+# Throwaway dev PKI from scripts/new-dev-certs.ps1 (ca.pem and .pass files are not covered by *.pfx)
+.certs/
 !.env.example
 
 # --- Node / React ---

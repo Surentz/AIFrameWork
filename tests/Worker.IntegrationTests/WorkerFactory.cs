@@ -139,6 +139,11 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // A test asserting a job's failure path must not first sit through the retry pipeline's
         // own backoff delays — the same reason ApiFactory sets it. ADR 0014.
         builder.UseSetting("Resilience:Enabled", "false");
+
+        // A permanently unreachable external system (port 1 on loopback refuses at once). Its
+        // probe is Unhealthy by construction, which is what makes ReadinessTests' 200 meaningful:
+        // /health/ready must ignore it. ADR 0031.
+        builder.UseSetting("ExternalSystems:Systems:Unreachable:BaseAddress", "https://127.0.0.1:1/");
     }
 
     /// <summary>

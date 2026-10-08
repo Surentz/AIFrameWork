@@ -16,6 +16,8 @@ using AiFramework.Domain.Users;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.ExternalSystems;
+using AiFramework.Infrastructure.ExternalSystems.Health;
 using AiFramework.Infrastructure.Persistence;
 using AiFramework.Infrastructure.Resilience;
 using AiFramework.Infrastructure.Security;
@@ -23,6 +25,7 @@ using JasperFx;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -371,6 +374,11 @@ if (realtime.Enabled)
 // configuration and hands the values to Infrastructure. ADR 0014.
 builder.Services.Configure<ResilienceOptions>(builder.Configuration.GetSection("Resilience"));
 
+// External systems (ADR 0031): every configured system's probe client, health checks and token
+// client. Here rather than in AddInfrastructure because the set of named clients must be known at
+// registration time — the same reason the worker reads Jobs straight off configuration.
+builder.Services.AddExternalSystems(builder.Configuration.GetSection(ExternalSystemsOptions.SectionName));
+
 // ADR 0005 spike: Wolverine's durable event path, alongside the existing outbox rather than
 // replacing it. UseWolverine hooks the host builder, so this cannot go through AddInfrastructure.
 builder.Host.AddWolverineEventPath(
@@ -441,7 +449,10 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" })).DisableHttpMetric
 // traffic", which needs Postgres. It stays a separate endpoint because /health must remain
 // database-free — HealthTests boots a host with no database at all and asserts 200 on it.
 // Anonymous for the same reason /health is: no fallback authorization policy is registered.
-app.MapHealthChecks("/health/ready").DisableHttpMetrics();
+// Partners are excluded: an external system's outage must never take this pod out of rotation.
+// Without the predicate MapHealthChecks runs EVERY registered check. ADR 0031.
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = ExternalSystemHealth.IsNotExternal })
+    .DisableHttpMetrics();
 
 // Development only, deliberately: a deployed instance must not publish its endpoint surface.
 // Asserted in both directions by OpenApiDocumentTests, because a missing environment check

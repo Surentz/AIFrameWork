@@ -12,6 +12,12 @@
 
   <ItemGroup>
     <!--
+      Client-credentials token acquisition, caching and refresh for external systems (ADR 0031).
+      The client-side library only — Apache 2.0 — not Duende IdentityServer. Keycloak issues the
+      tokens; this fetches them.
+    -->
+    <PackageReference Include="Duende.AccessTokenManagement" Version="4.2.0" />
+    <!--
       The Data Protection key ring, persisted to the application database. Two API replicas
       that each hold an in-memory ring reject each other's session cookies; with no store
       configured the framework falls back to a per-machine filesystem ring, which does not
@@ -41,6 +47,9 @@
     -->
     <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.10.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <!-- IHealthCheck for the external-system checks (ExternalSystems/Health). Same 10.0.12 train as
+         the other Microsoft.Extensions pins, so NU1605 cannot split them. ADR 0031. -->
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.12" />
     <!--
       For PasswordHasher<T> alone (Security/PasswordHasher.cs). This is the plain hashing
       primitive - PBKDF2, versioned format, constant-time compare - not the ASP.NET Core Identity
@@ -67,6 +76,12 @@
     <!-- IOptions binding for CacheOptions (Caching/CachingRegistration.cs). Explicit rather
          than transitive, for the same reason Relational is pinned above. -->
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
+    <!--
+      Signs private_key_jwt client assertions (ExternalSystems/Auth). Pinned at exactly the version
+      Duende.AccessTokenManagement already brings transitively, explicit and public for the same
+      NU1605/MSB3277 reason Relational is pinned above.
+    -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.1" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <!--
       Database spans for the tracing pipeline. Matches Npgsql.EntityFrameworkCore.PostgreSQL's
@@ -97,6 +112,9 @@
       sees a Quartz type, and only the worker starts a scheduler.
     -->
     <PackageReference Include="Quartz" Version="4.3.0" />
+    <!-- Typed clients for external systems (ADR 0031). Source-generated at build time; methods
+         return IApiResponse<T> and never throw ApiException, so adapters map the final outcome. -->
+    <PackageReference Include="Refit.HttpClientFactory" Version="16.3.0" />
   </ItemGroup>
 
   <!--

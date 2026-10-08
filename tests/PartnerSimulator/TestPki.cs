@@ -1,0 +1,192 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+
+namespace AiFramework.PartnerSimulator;
+
+/// <summary>
+/// A throwaway root → intermediate → leaf PKI, generated in memory. The intermediate is the point:
+/// the simulator trusts only the root, so a handshake succeeds only if the CLIENT sends the
+/// intermediate with its leaf — which is what an OCES3 PFX needs on Linux, and what a Windows
+/// machine store can otherwise paper over.
+/// </summary>
+/// <remarks>Never persist one of these anywhere but a git-ignored folder. See ADR 0031.</remarks>
+public sealed class TestPki : IDisposable
+{
+    private readonly RSA _intermediateKey;
+
+    private TestPki(X509Certificate2 root, X509Certificate2 intermediate, RSA intermediateKey)
+    {
+        Root = root;
+        Intermediate = intermediate;
+        _intermediateKey = intermediateKey;
+    }
+
+    public X509Certificate2 Root { get; }
+
+    public X509Certificate2 Intermediate { get; }
+
+    public string RootPem => Root.ExportCertificatePem();
+
+    public static TestPki Create(string name = "AiFramework Test")
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        using var rootKey = RSA.Create(2048);
+        var rootRequest = new CertificateRequest(
+            $"CN={name} Root CA", rootKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        rootRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        rootRequest.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
+        rootRequest.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(rootRequest.PublicKey, false));
+        var root = rootRequest.CreateSelfSigned(now.AddDays(-1), now.AddYears(5));
+
+        var intermediateKey = RSA.Create(2048);
+        var intermediateRequest = new CertificateRequest(
+            $"CN={name} Intermediate CA", intermediateKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        intermediateRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
+        intermediateRequest.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
+        intermediateRequest.CertificateExtensions.Add(
+            new X509SubjectKeyIdentifierExtension(intermediateRequest.PublicKey, false));
+        intermediateRequest.CertificateExtensions.Add(
+            X509AuthorityKeyIdentifierExtension.CreateFromCertificate(root, true, false));
+        using var intermediatePublic = intermediateRequest.Create(
+            root, now.AddDays(-1), now.AddYears(4), NewSerial());
+        var intermediate = intermediatePublic.CopyWithPrivateKey(intermediateKey);
+
+        return new TestPki(root, intermediate, intermediateKey);
+    }
+
+    /// <summary>A client-authentication leaf issued by the intermediate.</summary>
+    public X509Certificate2 IssueClient(string commonName, DateTimeOffset? notAfter = null) =>
+        Issue(Intermediate, $"CN={commonName}", "1.3.6.1.5.5.7.3.2", notAfter, sans: null);
+
+    /// <summary>
+    /// A server-authentication leaf for localhost and 127.0.0.1, issued by the ROOT directly. A
+    /// server leaf issued by the intermediate made the handshake depend on the server sending that
+    /// intermediate (PartialChain on Linux), and sending it let a Windows server complete a
+    /// chainless client chain from its own context, hollowing out the chain test. Issued by the
+    /// root, the server chain is complete on every OS and the intermediate stays the client's alone.
+    /// </summary>
+    public X509Certificate2 IssueServer()
+    {
+        var sans = new SubjectAlternativeNameBuilder();
+        sans.AddDnsName("localhost");
+        sans.AddIpAddress(System.Net.IPAddress.Loopback);
+        return Issue(Root, "CN=localhost", "1.3.6.1.5.5.7.3.1", notAfter: null, sans);
+    }
+
+    /// <summary>Leaf (with its key) plus the intermediate, the shape of a real OCES3 PFX.</summary>
+    public byte[] ExportPfx(X509Certificate2 leaf, string? password)
+    {
+        ArgumentNullException.ThrowIfNull(leaf);
+
+        var collection = new X509Certificate2Collection
+        {
+            leaf,
+            X509CertificateLoader.LoadCertificate(Intermediate.RawData),
+        };
+        return collection.Export(X509ContentType.Pkcs12, password)
+            ?? throw new InvalidOperationException("PKCS#12 export returned nothing.");
+    }
+
+    /// <summary>
+    /// Round-trips a generated certificate through PKCS#12. Windows' TLS stack cannot use the
+    /// ephemeral key <c>CopyWithPrivateKey</c> produces ("No credentials are available in the
+    /// security package"); a reloaded one it can. Harmless elsewhere.
+    /// </summary>
+    public static X509Certificate2 Usable(X509Certificate2 certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+        return X509CertificateLoader.LoadPkcs12(certificate.Export(X509ContentType.Pkcs12), password: null);
+    }
+
+    /// <summary>The files scripts/new-dev-certs.ps1 promises: ca.pem, client.pfx/.pass, server.pfx/.pass.</summary>
+    public void WriteDevFiles(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        const string devPfxKey = "dev-only";
+
+        File.WriteAllText(Path.Combine(directory, "ca.pem"), RootPem);
+        File.WriteAllBytes(Path.Combine(directory, "client.pfx"), ExportPfx(IssueClient("aiframework-dev-client"), devPfxKey));
+        File.WriteAllText(Path.Combine(directory, "client.pass"), devPfxKey);
+        File.WriteAllBytes(Path.Combine(directory, "server.pfx"), ExportPfx(IssueServer(), devPfxKey));
+        File.WriteAllText(Path.Combine(directory, "server.pass"), devPfxKey);
+    }
+
+    public void Dispose()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            RemoveFromUserStores();
+        }
+
+        _intermediateKey.Dispose();
+        Root.Dispose();
+        Intermediate.Dispose();
+    }
+
+    /// <summary>
+    /// On Windows, SslStreamCertificateContext.Create copies a chain's intermediate into
+    /// CurrentUser\CA. Every run adds more with the same subject, and at about a hundred Windows
+    /// chain building fails with "An unknown chain building error occurred". This PKI's own two
+    /// certificates are removed by thumbprint; nothing else is touched. With test classes running
+    /// in parallel the odd one still survives, about one every two or three full runs, which a
+    /// serial run never leaves; that is a race below this code, not a missed Dispose.
+    /// </summary>
+    private void RemoveFromUserStores()
+    {
+        string[] thumbprints = [Root.Thumbprint, Intermediate.Thumbprint];
+        foreach (var name in (StoreName[])[StoreName.CertificateAuthority, StoreName.Root])
+        {
+            using var store = new X509Store(name, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite | OpenFlags.OpenExistingOnly);
+            var all = store.Certificates;
+            var ours = new X509Certificate2Collection();
+            ours.AddRange(all.Where(c => thumbprints.Contains(c.Thumbprint, StringComparer.OrdinalIgnoreCase)).ToArray());
+
+            // Remove only on a match: removing from CurrentUser\Root asks the user in a dialog.
+            if (ours.Count > 0)
+            {
+                store.RemoveRange(ours);
+            }
+
+            foreach (var certificate in all)
+            {
+                certificate.Dispose();
+            }
+        }
+    }
+
+    private static X509Certificate2 Issue(
+        X509Certificate2 issuer, string subject, string extendedKeyUsageOid, DateTimeOffset? notAfter, SubjectAlternativeNameBuilder? sans)
+    {
+        var now = DateTimeOffset.UtcNow;
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(subject, key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid(extendedKeyUsageOid)], false));
+        request.CertificateExtensions.Add(
+            X509AuthorityKeyIdentifierExtension.CreateFromCertificate(issuer, true, false));
+        if (sans is not null)
+        {
+            request.CertificateExtensions.Add(sans.Build());
+        }
+
+        var expiry = notAfter ?? now.AddYears(2);
+        var notBefore = now.AddDays(-1);
+        if (expiry < now)
+        {
+            // An already-expired leaf must still start inside its issuer's validity, or Create throws.
+            var issuerStart = new DateTimeOffset(issuer.NotBefore);
+            notBefore = expiry.AddDays(-30) < issuerStart ? issuerStart : expiry.AddDays(-30);
+        }
+
+        using var issued = request.Create(issuer, notBefore, expiry, NewSerial());
+        return issued.CopyWithPrivateKey(key);
+    }
+
+    private static byte[] NewSerial() => RandomNumberGenerator.GetBytes(16);
+}

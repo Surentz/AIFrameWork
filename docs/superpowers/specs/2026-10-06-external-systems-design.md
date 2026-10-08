@@ -1,7 +1,7 @@
 # Outbound integrations with external systems — design
 
 **Date:** 2026-10-06
-**Status:** Approved 2026-10-06. Amended while planning PR 2: issuer as the assertion audience, a contract change for `TrafficKind`, an inbound-only traffic page, in-process simulator scripting, and when the partner-isolation rule arrives.
+**Status:** Plumbing built (PR 2); monitoring (PR 3) pending. Approved 2026-10-06. Amended while planning PR 2: issuer as the assertion audience, a contract change for `TrafficKind`, an inbound-only traffic page, in-process simulator scripting, and when the partner-isolation rule arrives.
 **Type:** this document is `docs(integrations)`; the build is two `feat` pull requests (§6).
 **Builds on:** ADR 0014 (retry and resilience), ADR 0021/0027 (operational telemetry and
 metrics), ADR 0016/0026 (jobs in the worker, RabbitMQ), all of which stay in force.
@@ -85,9 +85,12 @@ reason is mandatory and appears in the startup log.
 2. `AddStandardResilienceHandler()` — this system's own options and its own circuit breaker.
    Order inside it is the standard handler's and is not rearranged (ADR 0014).
 3. `OutboundTrafficHandler` (**Attempt**) — one record per physical attempt.
-4. Duende's client-credentials token handler — only when `Auth.Kind != None` — behind Duende's
-   `AddDefaultAccessTokenResiliency()`. Each attempt reads the token from the cache; a 401 forces
-   one refresh and one resend.
+4. Duende's client-credentials token handler — only when `Auth.Kind != None` — behind our own
+   zero-delay `token-resend` pipeline (not Duende's `AddDefaultAccessTokenResiliency()`, whose
+   jittered delay sits inside the attempt timeout; ADR 0031). Each attempt reads the token from the
+   cache; a 401 calls Duende's public `SetForceRenewal` on the request and resends once, at once,
+   with a freshly fetched token, also for `WithoutRetry` clients. The standard retry clears the
+   flag before each later attempt.
 5. Primary handler: `SocketsHttpHandler` whose `SslOptions` present the system's certificate
    (§2) and validate the server against `ServerTrust` when configured.
 
@@ -329,6 +332,13 @@ Each is checked in the first task that depends on it, with the result written in
 4. ~~Whether the worker records traffic today (§3).~~ Answered while planning: it does.
 
 If any probe fails, the design section it supports is revisited before that task continues.
+
+Outcomes (ADR 0031 has the full text):
+
+1. **Done.** Duende's retry resends once with a forced renewal, but its inherited 2 s jittered delay sits inside the 3 s attempt timeout. We replaced it with our own zero-delay `token-resend` pipeline using Duende's public `SetForceRenewal`; exactly one resend with a fresh token, also for `WithoutRetry` clients. Duende's DPoP-nonce retry is dropped (no DPoP in use).
+2. **Done.** CI's Linux `backend (Debug)` and `backend (Release)` jobs pass `Send_WithALeafIssuedByTheIntermediate_Succeeds` and reject `Ping_WithALeafSentWithoutItsIntermediate_FailsTheHandshake` (PR #107, commit `0a090ab`). The first run exposed that the simulator's server leaf depended on an unsent intermediate (Linux `PartialChain`, hidden on Windows by `CurrentUser\CA`); it is now issued by the root.
+3. **Done.** Keycloak 26.4 accepts `private_key_jwt` with the realm issuer as audience once the JWT `kid` is base64url(SHA-256(SubjectPublicKeyInfo DER)), Keycloak's `KeyUtils.createKeyId`; the default thumbprint `kid` fails with "Unable to load public key". Alternative: the client attribute `jwt.credential.kid`.
+4. **Done.** The worker records traffic: `AddMonitoring` runs in every host.
 
 ## 6. Delivery
 
