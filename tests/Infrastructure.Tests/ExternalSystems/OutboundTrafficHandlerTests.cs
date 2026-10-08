@@ -2,6 +2,7 @@ using System.Net;
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.ExternalSystems.Http;
 using AiFramework.Infrastructure.Tests.Resilience;
+using FluentAssertions;
 using NSubstitute;
 
 namespace AiFramework.Infrastructure.Tests.ExternalSystems;
@@ -42,16 +43,28 @@ public sealed class OutboundTrafficHandlerTests
     }
 
     [Fact]
+    public async Task Send_WhenTheCallTimesOutWithoutCallerCancellation_RecordsAFault()
+    {
+        var act = () => SendAsync(new StubHttpMessageHandler(_ => throw new TaskCanceledException("timed out")));
+
+        await Assert.ThrowsAsync<TaskCanceledException>(act);
+        _recorder.Received(1).Record(TrafficKind.Outbound, "Sim", TrafficOutcome.Faulted, Arg.Any<long>());
+    }
+
+    [Fact]
     public async Task Send_WhenTheCallerCancels_RecordsNothing()
     {
-        using var cancelled = new CancellationTokenSource();
-        await cancelled.CancelAsync();
+        using var cancelling = new CancellationTokenSource();
+        using var stub = new StubHttpMessageHandler(_ =>
+        {
+            cancelling.Cancel();
+            throw new OperationCanceledException(cancelling.Token);
+        });
 
-        var act = () => SendAsync(
-            new StubHttpMessageHandler(_ => throw new OperationCanceledException(cancelled.Token)),
-            cancelled.Token);
+        var act = () => SendAsync(stub, cancelling.Token);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
+        stub.CallCount.Should().Be(1);
         _recorder.DidNotReceiveWithAnyArgs().Record(default, default!, default, default);
     }
 }
