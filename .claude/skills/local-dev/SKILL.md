@@ -9,7 +9,13 @@ description: Use when starting, stopping or debugging the local dev loop - dev.p
 ./scripts/dev.ps1                                            # all of the below, in three windows
 ./scripts/dev.ps1 -WithSeq                                   # same, plus Seq at localhost:55341
 ./scripts/worker.ps1                                         # just the job worker, in this window
+./scripts/new-dev-certs.ps1                                  # throwaway PKI into .certs/, for trying an external system
 ```
+
+`new-dev-certs.ps1` is only needed to point a configured external system at local certificate
+files (`.certs/` is git-ignored; `-Force` replaces it). It is not in the control panel menu, the
+dev loop calls no external system by default, and the tests generate their own certificates —
+see the `external-systems` skill.
 
 The three windows are the API (5234), the **job worker** (5235) and Vite (5173). `worker.ps1` is
 for restarting only the worker — which `dotnet run --project src/Worker -- codegen write` requires

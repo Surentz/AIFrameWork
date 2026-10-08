@@ -90,8 +90,17 @@ start without a broker connection (ADR 0026) and letting the rollout race ahead 
 CrashLoopBackOff. The management UI is reachable with `kubectl port-forward svc/rabbitmq 15672`
 and deliberately not exposed on the ingress — it is an operator tool for this local cluster, not
 something the application depends on. Neither host's `/health/ready` checks RabbitMQ: readiness
-still only calls `AddDbContextCheck`'s Postgres probe, so a broker outage does not flip a pod's
-readiness the way a Postgres outage does.
+calls `AddDbContextCheck`'s Postgres probe (and, in the worker, Quartz's own check), so a broker
+outage does not flip a pod's readiness the way a Postgres outage does. External systems' checks
+are registered in both hosts but filtered out of `/health/ready` by
+`ExternalSystemHealth.IsNotExternal`, for the same reason: a partner outage must never take a pod
+out of rotation.
+
+**External-system secrets are not in the cluster yet.** ADR 0031 fixes the contract a real
+environment's Vault Secrets Operator must meet — one Secret per system mounted at
+`/var/run/secrets/external-systems/<system>/`, `rolloutRestartTargets` naming the api and worker
+Deployments — but the local overlay mounts none and configures no system, so nothing here calls
+one.
 
 `./deploy/e2e-k8s.ps1` runs the Playwright suite against this cluster — a gate that exercises
 durable Wolverine, caching on, two replicas, and the real rate limit, none of which the compose

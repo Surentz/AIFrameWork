@@ -29,8 +29,13 @@ Warnings are errors here, so a warning is a build failure. Report every diagnost
 `file:line`.
 
 The three Testcontainers projects (`Infrastructure.Tests`, `Api.IntegrationTests`,
-`Worker.IntegrationTests`) need a running Docker daemon for Postgres and RabbitMQ. If
+`Worker.IntegrationTests`) need a running Docker daemon — for Postgres, for RabbitMQ in the two
+integration projects, and for Keycloak in `Infrastructure.Tests`' external-system tests. If
 `docker info` fails, say so: their failures are environmental, not assertion failures.
+
+A green certificate/TLS test on Windows is not evidence about Linux: Windows completes
+certificate chains from its own store. Say so when reporting `Infrastructure.Tests` from a
+Windows machine; CI's Linux `backend` jobs are the authority for those.
 
 ## 2. Frontend
 

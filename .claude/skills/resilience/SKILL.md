@@ -10,6 +10,12 @@ reference); `EnableRetryOnFailure` on the Npgsql provider for everything else. B
 transient faults automatically — a Postgres pod restarting, a third party answering 503 — so
 neither should be reached for again by hand.
 
+**Calling a partner system** — anything with a certificate, a token, or a name in
+`ExternalSystems:Systems` — is the `external-systems` skill's job, not a hand-written
+`AddHttpClient`: `AddClient<TApi>` attaches this same standard handler with per-system options,
+fits the circuit breaker's sampling duration to long attempt timeouts, and adds the certificate,
+the token and traffic counting around it. Everything below still applies to its adapters.
+
 Three things that will cost you time:
 
 - **Polly cannot see a failed `Result<T>`.** It decides whether to retry by inspecting an

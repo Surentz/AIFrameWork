@@ -19,9 +19,11 @@ each layer you are reviewing, and any skill the change touches (`caching`, `jobs
 
 1. **Dependency rule.** `Domain` referencing anything outward; `Application` referencing
    `Infrastructure`, `Api`, or EF Core; `Infrastructure` referencing `Api`; `Api` and `Worker`
-   referencing each other (siblings, ADR 0016). Two of these the hook cannot see, so they are
-   specifically your job: `Domain`/`Application`/`Infrastructure` referencing `Worker`, and a
-   controller using a repository directly instead of an Application handler.
+   referencing each other (siblings, ADR 0016). Two of these the edit-time hook cannot see:
+   `Domain`/`Application`/`Infrastructure` referencing `Worker`, and a controller using a
+   repository directly instead of an Application handler. The `ArchitectureTests` catch both in
+   CI — flag them anyway, so they never reach CI. A new type added to an Api/Worker
+   `CompositionTypes` allowlist needs a stated reason.
 2. **Per-host registrations.** `ICurrentUser`, `IClientContext`, `INotificationPush` and
    `AddOutboxPumps()` are registered by a host, never in `AddInfrastructure`; the worker never
    calls `AddOutboxPumps()` (ADR 0028). A privileged endpoint takes a capability policy from
@@ -39,7 +41,14 @@ each layer you are reviewing, and any skill the change touches (`caching`, `jobs
    migration.
 7. **Async.** `async void` outside event handlers. `.Result` or `.Wait()`. Sync I/O in an
    async method. Missing `CancellationToken` on a method that does I/O.
-8. **Tests.** New behaviour with no test. A test asserting implementation rather than behaviour.
+8. **External systems** (ADR 0031, the `external-systems` skill). A partner client wired with a
+   bare `AddHttpClient` instead of `ExternalSystemsBuilder.AddClient<TApi>`. A Refit method
+   returning `Task<T>` instead of `IApiResponse<T>`, or an adapter returning a failed `Result`
+   from inside the Polly-wrapped call. Any certificate-validation callback. A secret's *value* in
+   an option instead of a file path. A non-GET partner call outside a worker job, or without an
+   idempotency key or `.WithoutRetry(reason)`. A `/health/ready` mapping that lost the
+   `ExternalSystemHealth.IsNotExternal` predicate.
+9. **Tests.** New behaviour with no test. A test asserting implementation rather than behaviour.
 
 ## Output
 

@@ -79,10 +79,12 @@ beside the command ones. Off by configuration everywhere it is not the subject �
 ## Resilience
 
 `Resilience/` holds `ResilienceOptions`, `ResilienceRegistration` (`AddResilience`,
-`AddExchangeRateClient`), and the one typed client that exists today, `ExchangeRateClient`. Both
-outbound HTTP and the Npgsql provider retry transient faults now — see the `resilience`
-skill for the three that will cost you an afternoon. This section is the rules for
-writing the *next* typed client.
+`AddExchangeRateClient`), and ADR 0014's reference client, `ExchangeRateClient` — an open,
+unauthenticated API. **A partner system's client does not go here**: it goes through
+`ExternalSystems/` (next section), which builds the same standard resilience handler per system
+along with certificates, tokens, traffic and health. Both outbound HTTP and the Npgsql provider
+retry transient faults — see the `resilience` skill for the three that will cost you an
+afternoon. The rules below apply to every typed client, in either folder.
 
 - **The pipeline lives under the port, never over it.** Polly decides whether to retry by
   inspecting an outcome — an exception, or the raw `HttpResponseMessage` — never a `Result<T>`,

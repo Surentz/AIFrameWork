@@ -27,6 +27,11 @@ process that serves no HTTP: an `exec` probe needs a shell, and the chiseled run
 none — the same fact `k8s/base/api.yaml` records when explaining why its `preStop` uses the native
 sleep hook. So this host serves `/health` and `/health/ready`, and that is the entire HTTP surface.
 
+`/health/ready` uses the `ExternalSystemHealth.IsNotExternal` predicate, exactly like the API's:
+`Program.cs` calls `AddExternalSystems` here too — writes to a partner run as jobs, so this host
+gets every external-system client and its health checks — and a partner's outage must not take a
+worker pod out of rotation. `ReadinessTests` guards it (ADR 0031).
+
 Two things fall out of it that are worth having on purpose: a `WebApplicationBuilder` means
 `AddWorkerObservability` needs no `IHostApplicationBuilder` gymnastics, and
 `RunJasperFxCommands(args)` works exactly as it does in `src/Api`, which is what makes this
