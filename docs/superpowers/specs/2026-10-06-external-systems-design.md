@@ -336,7 +336,7 @@ If any probe fails, the design section it supports is revisited before that task
 Outcomes (ADR 0031 has the full text):
 
 1. **Done.** Duende's retry resends once with a forced renewal, but its inherited 2 s jittered delay sits inside the 3 s attempt timeout. We replaced it with our own zero-delay `token-resend` pipeline using Duende's public `SetForceRenewal`; exactly one resend with a fresh token, also for `WithoutRetry` clients. Duende's DPoP-nonce retry is dropped (no DPoP in use).
-2. **Pending the PR's first Linux CI run** (`backend` job, `Send_WithALeafIssuedByTheIntermediate_Succeeds`).
+2. **Done.** CI's Linux `backend (Debug)` and `backend (Release)` jobs pass `Send_WithALeafIssuedByTheIntermediate_Succeeds` and reject `Ping_WithALeafSentWithoutItsIntermediate_FailsTheHandshake` (PR #107, commit `0a090ab`). The first run exposed that the simulator's server leaf depended on an unsent intermediate (Linux `PartialChain`, hidden on Windows by `CurrentUser\CA`); it is now issued by the root.
 3. **Done.** Keycloak 26.4 accepts `private_key_jwt` with the realm issuer as audience once the JWT `kid` is base64url(SHA-256(SubjectPublicKeyInfo DER)), Keycloak's `KeyUtils.createKeyId`; the default thumbprint `kid` fails with "Unable to load public key". Alternative: the client attribute `jwt.credential.kid`.
 4. **Done.** The worker records traffic: `AddMonitoring` runs in every host.
 

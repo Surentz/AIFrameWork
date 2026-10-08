@@ -71,9 +71,16 @@ files. The PFX must contain the intermediates: Linux sends only what the PFX hol
    public `SetForceRenewal` on the request) in the same chain position. Verified: exactly one resend
    with a fresh token, also for `WithoutRetry` clients. This drops Duende's DPoP-nonce retry; no
    system here uses DPoP.
-2. **Linux sends the full chain.** Pending the PR's first Linux CI run (`backend` job,
-   `Send_WithALeafIssuedByTheIntermediate_Succeeds`). A Windows pass proves nothing, because Windows
-   can fill gaps from its certificate store.
+2. **Linux sends the full chain.** Verified by CI's Linux `backend (Debug)` and
+   `backend (Release)` jobs on PR #107 (commit `0a090ab`): `Send_WithALeafIssuedByTheIntermediate_Succeeds`
+   passes against a server that trusts only the root, and `Ping_WithALeafSentWithoutItsIntermediate_FailsTheHandshake`
+   is rejected. A Windows pass proves nothing, because Windows fills gaps from its certificate store.
+   That bit the first CI run in the other direction: the simulator's *server* leaf was issued by the
+   intermediate and sent without it, so every handshake failed on Linux with `PartialChain` while
+   Windows found the intermediate in `CurrentUser\CA`. The simulator's server certificate is now
+   issued by the root. Sending the intermediate instead would have let a Windows server complete a
+   chainless client chain from its own context and hollowed out the test above. A real partner
+   that omits its intermediates fails the same way, and is the partner's configuration to fix.
 3. **Keycloak and `private_key_jwt`.** Keycloak 26.4 accepts the assertion with the audience set to
    the realm issuer, once the JWT `kid` equals base64url(SHA-256(SubjectPublicKeyInfo DER)). That is
    Keycloak's `KeyUtils.createKeyId` for a certificate registered on the client; the default SHA-1
