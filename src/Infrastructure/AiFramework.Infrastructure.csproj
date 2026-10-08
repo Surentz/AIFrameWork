@@ -41,6 +41,9 @@
     -->
     <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.10.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <!-- IHealthCheck for the external-system checks (ExternalSystems/Health). Same 10.0.12 train as
+         the other Microsoft.Extensions pins, so NU1605 cannot split them. ADR 0031. -->
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.12" />
     <!--
       For PasswordHasher<T> alone (Security/PasswordHasher.cs). This is the plain hashing
       primitive - PBKDF2, versioned format, constant-time compare - not the ASP.NET Core Identity
