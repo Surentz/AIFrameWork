@@ -133,7 +133,14 @@ public sealed class TestPki : IDisposable
         }
 
         var expiry = notAfter ?? now.AddYears(2);
-        var notBefore = expiry < now ? expiry.AddDays(-30) : now.AddDays(-1);
+        var notBefore = now.AddDays(-1);
+        if (expiry < now)
+        {
+            // An already-expired leaf must still start inside its issuer's validity, or Create throws.
+            var issuerStart = new DateTimeOffset(Intermediate.NotBefore);
+            notBefore = expiry.AddDays(-30) < issuerStart ? issuerStart : expiry.AddDays(-30);
+        }
+
         using var issued = request.Create(Intermediate, notBefore, expiry, NewSerial());
         return issued.CopyWithPrivateKey(key);
     }

@@ -1,4 +1,5 @@
 using AiFramework.Infrastructure.ExternalSystems.Certificates;
+using AiFramework.Infrastructure.ExternalSystems.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -25,6 +26,7 @@ public static class ExternalSystemsRegistration
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ICertificateProvider, FileCertificateProvider>();
+        services.AddSingleton<ExternalSystemHandlerFactory>();
 
         var snapshot = section.Get<ExternalSystemsOptions>() ?? new ExternalSystemsOptions();
         return new ExternalSystemsBuilder(services, snapshot);
