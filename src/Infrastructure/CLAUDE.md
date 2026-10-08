@@ -122,6 +122,20 @@ writing the *next* typed client.
 
 See ADR 0014.
 
+## External systems
+
+`ExternalSystems/` is the plumbing every outbound integration shares; the `external-systems` skill has the
+how-to and ADR 0031 the why. Rules that are easy to break:
+
+- **Every client goes through `ExternalSystemsBuilder.AddClient<TApi>`**, which fixes the chain: Outbound
+  traffic, standard resilience, OutboundAttempt traffic, the zero-delay `token-resend` pipeline, Duende's
+  token handler, then the certificate-presenting primary handler. `HandlerChainTests` asserts the order. A
+  hand-wired `AddHttpClient` for a partner skips traffic, per-system retry and the certificate, silently.
+- **Names are composed only in `ExternalSystemNames`.** The system name is the config key, health-check name,
+  traffic name and token client name; composing one elsewhere lets them drift with no error.
+- **No certificate validation callback, anywhere.** Server trust is `CertificateChainPolicy`.
+- **Secrets are file paths in options, never values.**
+
 ## Outbox
 
 `Outbox/` implements the event half of the messaging design: an aggregate raises a domain
