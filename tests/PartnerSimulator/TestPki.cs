@@ -59,15 +59,21 @@ public sealed class TestPki : IDisposable
 
     /// <summary>A client-authentication leaf issued by the intermediate.</summary>
     public X509Certificate2 IssueClient(string commonName, DateTimeOffset? notAfter = null) =>
-        Issue($"CN={commonName}", "1.3.6.1.5.5.7.3.2", notAfter, sans: null);
+        Issue(Intermediate, $"CN={commonName}", "1.3.6.1.5.5.7.3.2", notAfter, sans: null);
 
-    /// <summary>A server-authentication leaf for localhost and 127.0.0.1.</summary>
+    /// <summary>
+    /// A server-authentication leaf for localhost and 127.0.0.1, issued by the ROOT directly. A
+    /// server leaf issued by the intermediate made the handshake depend on the server sending that
+    /// intermediate (PartialChain on Linux), and sending it let a Windows server complete a
+    /// chainless client chain from its own context, hollowing out the chain test. Issued by the
+    /// root, the server chain is complete on every OS and the intermediate stays the client's alone.
+    /// </summary>
     public X509Certificate2 IssueServer()
     {
         var sans = new SubjectAlternativeNameBuilder();
         sans.AddDnsName("localhost");
         sans.AddIpAddress(System.Net.IPAddress.Loopback);
-        return Issue("CN=localhost", "1.3.6.1.5.5.7.3.1", notAfter: null, sans);
+        return Issue(Root, "CN=localhost", "1.3.6.1.5.5.7.3.1", notAfter: null, sans);
     }
 
     /// <summary>Leaf (with its key) plus the intermediate, the shape of a real OCES3 PFX.</summary>
@@ -152,8 +158,8 @@ public sealed class TestPki : IDisposable
         }
     }
 
-    private X509Certificate2 Issue(
-        string subject, string extendedKeyUsageOid, DateTimeOffset? notAfter, SubjectAlternativeNameBuilder? sans)
+    private static X509Certificate2 Issue(
+        X509Certificate2 issuer, string subject, string extendedKeyUsageOid, DateTimeOffset? notAfter, SubjectAlternativeNameBuilder? sans)
     {
         var now = DateTimeOffset.UtcNow;
         using var key = RSA.Create(2048);
@@ -163,7 +169,7 @@ public sealed class TestPki : IDisposable
             X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
         request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid(extendedKeyUsageOid)], false));
         request.CertificateExtensions.Add(
-            X509AuthorityKeyIdentifierExtension.CreateFromCertificate(Intermediate, true, false));
+            X509AuthorityKeyIdentifierExtension.CreateFromCertificate(issuer, true, false));
         if (sans is not null)
         {
             request.CertificateExtensions.Add(sans.Build());
@@ -174,11 +180,11 @@ public sealed class TestPki : IDisposable
         if (expiry < now)
         {
             // An already-expired leaf must still start inside its issuer's validity, or Create throws.
-            var issuerStart = new DateTimeOffset(Intermediate.NotBefore);
+            var issuerStart = new DateTimeOffset(issuer.NotBefore);
             notBefore = expiry.AddDays(-30) < issuerStart ? issuerStart : expiry.AddDays(-30);
         }
 
-        using var issued = request.Create(Intermediate, notBefore, expiry, NewSerial());
+        using var issued = request.Create(issuer, notBefore, expiry, NewSerial());
         return issued.CopyWithPrivateKey(key);
     }
 
