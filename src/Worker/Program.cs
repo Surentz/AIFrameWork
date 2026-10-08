@@ -2,6 +2,8 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
+using AiFramework.Infrastructure.ExternalSystems;
+using AiFramework.Infrastructure.ExternalSystems.Health;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Jobs.Scheduling;
 using AiFramework.Infrastructure.Monitoring;
@@ -10,6 +12,7 @@ using AiFramework.Infrastructure.Security;
 using AiFramework.Infrastructure.Resilience;
 using AiFramework.Worker.Observability;
 using JasperFx;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -67,6 +70,10 @@ builder.Services.AddOptions<OrderExportOptions>().ValidateOnStart();
 builder.Services.Configure<CacheOptions>(builder.Configuration.GetSection("Cache"));
 builder.Services.Configure<ResilienceOptions>(builder.Configuration.GetSection("Resilience"));
 
+// External systems, as in src/Api/Program.cs: both hosts get every client, because writes to a
+// partner run here as jobs. ADR 0031.
+builder.Services.AddExternalSystems(builder.Configuration.GetSection(ExternalSystemsOptions.SectionName));
+
 // .NET's default is 30 seconds, which would abandon a heavy job long before Kubernetes was
 // willing to: k8s/base/worker.yaml sets terminationGracePeriodSeconds: 300. The two numbers are
 // meaningless apart — raising one without the other either wastes the grace period or gets the
@@ -115,7 +122,7 @@ var app = builder.Build();
 // for its preStop hook. /health stays database-free so a liveness probe cannot be failed by
 // Postgres being briefly unreachable; /health/ready is the one that may.
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
-app.MapHealthChecks("/health/ready");
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = ExternalSystemHealth.IsNotExternal });
 
 // Same split as src/Api/Program.cs, for the same two reasons: `codegen write` is a JasperFx
 // command and RunAsync offers no way to invoke one, while JasperFx discovers commands by

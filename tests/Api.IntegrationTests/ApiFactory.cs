@@ -145,11 +145,21 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // RatesEndpointTests proves the resulting 503 + Retry-After; no test here needs a
         // successful rate, so nothing more elaborate than "reliably unreachable" is required.
         builder.UseSetting("Resilience:ExchangeRateBaseAddress", "http://127.0.0.1:1");
+        UseUnreachableExternalSystem(builder);
 
         // Split out to a method of its own so ConfigureWebHost stays under MA0051's line limit
         // now that it also carries the Cache:Enabled setting above — the split is purely
         // mechanical, the ConfigureServices callback itself is unchanged.
         builder.ConfigureServices(ConfigureServicesForTests);
+    }
+
+    // Its own method for the same MA0051 reason as ConfigureServicesForTests below.
+    private static void UseUnreachableExternalSystem(IWebHostBuilder builder)
+    {
+        // A permanently unreachable external system (port 1 on loopback refuses at once). Its
+        // probe is Unhealthy by construction, which is what makes ReadinessTests' 200 meaningful:
+        // /health/ready must ignore it. ADR 0031.
+        builder.UseSetting("ExternalSystems:Systems:Unreachable:BaseAddress", "https://127.0.0.1:1/");
     }
 
     private static void ConfigureServicesForTests(IServiceCollection services)
