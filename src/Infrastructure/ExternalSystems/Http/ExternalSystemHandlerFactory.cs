@@ -41,9 +41,18 @@ internal sealed class ExternalSystemHandlerFactory(
             {
                 return new FailFastHandler(systemName, "the server trust bundle could not be read");
             }
+            catch (UnauthorizedAccessException)
+            {
+                return new FailFastHandler(systemName, "the server trust bundle could not be read");
+            }
             catch (CryptographicException)
             {
                 return new FailFastHandler(systemName, "the server trust bundle is not valid PEM");
+            }
+
+            if (roots.Count == 0)
+            {
+                return new FailFastHandler(systemName, "the server trust bundle contains no certificates");
             }
 
             var policy = new X509ChainPolicy

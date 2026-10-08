@@ -137,6 +137,22 @@ public sealed class ExternalSystemHandlerFactoryTests : IAsyncLifetime, IDisposa
     }
 
     [Fact]
+    public async Task Send_WhenTheTrustBundleHoldsNoCertificates_FailsFastWithoutTheNetwork()
+    {
+        var factory = Factory(s =>
+        {
+            s.ClientCertificate = WriteClientPfx(_pki);
+            File.WriteAllText(s.ServerTrust!.CaBundlePath, "# no certificates here"); // Factory always sets ServerTrust.
+        });
+
+        var act = () => PingAsync(factory);
+
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .WithMessage("*contains no certificates*");
+        _simulator.PingRequests.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Send_ForAnUnconfiguredSystem_FailsFast()
     {
         var factory = Factory(_ => { });
