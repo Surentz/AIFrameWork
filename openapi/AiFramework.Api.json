@@ -4512,7 +4512,9 @@
         "enum": [
           "Http",
           "Command",
-          "Query"
+          "Query",
+          "Outbound",
+          "OutboundAttempt"
         ],
         "description": "What kind of work a traffic measurement counted."
       },

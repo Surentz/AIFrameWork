@@ -2845,7 +2845,7 @@ export interface components {
          * @description What kind of work a traffic measurement counted.
          * @enum {unknown}
          */
-        readonly TrafficKind: "Http" | "Command" | "Query";
+        readonly TrafficKind: "Http" | "Command" | "Query" | "Outbound" | "OutboundAttempt";
         /** @description One minute of the whole application's traffic. */
         readonly TrafficPointResponse: {
             /** Format: date-time */

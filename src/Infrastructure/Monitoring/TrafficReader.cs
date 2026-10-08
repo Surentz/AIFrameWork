@@ -22,12 +22,19 @@ namespace AiFramework.Infrastructure.Monitoring;
 /// </remarks>
 internal sealed class TrafficReader(AiFrameworkDbContext context) : ITrafficReader
 {
+    /// <summary>
+    /// The traffic page's numbers are the application's OWN work. Outbound calls are a different
+    /// question — how a partner is doing — and summing them in would double-count every request
+    /// that makes one (and triple-count it with attempts). ADR 0031.
+    /// </summary>
+    private static readonly TrafficKind[] InboundKinds = [TrafficKind.Http, TrafficKind.Command, TrafficKind.Query];
+
     public async Task<TrafficSummaryView> SummarizeAsync(
         DateTimeOffset since, CancellationToken cancellationToken)
     {
         var grouped = await context.TrafficBuckets
             .AsNoTracking()
-            .Where(bucket => bucket.BucketStart >= since)
+            .Where(bucket => bucket.BucketStart >= since && InboundKinds.Contains(bucket.Kind))
             .GroupBy(bucket => new { bucket.Kind, bucket.Name })
             .Select(group => new Totals
             {
@@ -73,7 +80,7 @@ internal sealed class TrafficReader(AiFrameworkDbContext context) : ITrafficRead
     {
         var grouped = await context.TrafficBuckets
             .AsNoTracking()
-            .Where(bucket => bucket.BucketStart >= since)
+            .Where(bucket => bucket.BucketStart >= since && InboundKinds.Contains(bucket.Kind))
             .GroupBy(bucket => bucket.BucketStart)
             .Select(group => new Totals
             {
