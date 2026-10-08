@@ -37,6 +37,32 @@ public sealed class PartnerSimulatorTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    [Fact]
+    public async Task Ping_WithAClientCertificateFromAnotherPki_FailsTheHandshake()
+    {
+        using var pki = TestPki.Create();
+        using var stranger = TestPki.Create("Stranger");
+        await using var simulator = await StartAsync(pki);
+        using var client = ClientPresenting(
+            pki, TestPki.Usable(stranger.IssueClient("client")), stranger.Intermediate);
+
+        var act = () => client.GetAsync(new Uri(simulator.BaseAddress, "ping"));
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact]
+    public async Task Ping_WithALeafSentWithoutItsIntermediate_FailsTheHandshake()
+    {
+        using var pki = TestPki.Create();
+        await using var simulator = await StartAsync(pki);
+        using var client = ClientPresenting(pki, TestPki.Usable(pki.IssueClient("client")), intermediate: null);
+
+        var act = () => client.GetAsync(new Uri(simulator.BaseAddress, "ping"));
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
     internal static Task<PartnerSimulatorApp> StartAsync(TestPki pki, string? jwtAuthority = null) =>
         PartnerSimulatorApp.StartAsync(
             new PartnerSimulatorOptions
@@ -47,13 +73,20 @@ public sealed class PartnerSimulatorTests
             },
             CancellationToken.None);
 
-    private static HttpClient ClientPresenting(TestPki pki, X509Certificate2? certificate)
+    private static HttpClient ClientPresenting(TestPki pki, X509Certificate2? certificate) =>
+        ClientPresenting(pki, certificate, pki.Intermediate);
+
+    /// <summary>Server trust always comes from <paramref name="pki"/>; <paramref name="intermediate"/> is what the client sends with its leaf.</summary>
+    private static HttpClient ClientPresenting(
+        TestPki pki, X509Certificate2? certificate, X509Certificate2? intermediate)
     {
         var ssl = new SslClientAuthenticationOptions();
         if (certificate is not null)
         {
-            ssl.ClientCertificateContext = SslStreamCertificateContext.Create(
-                certificate, [X509CertificateLoader.LoadCertificate(pki.Intermediate.RawData)], offline: true);
+            X509Certificate2[] sent = intermediate is null
+                ? []
+                : [X509CertificateLoader.LoadCertificate(intermediate.RawData)];
+            ssl.ClientCertificateContext = SslStreamCertificateContext.Create(certificate, [.. sent], offline: true);
         }
 
         var trust = new X509ChainPolicy
