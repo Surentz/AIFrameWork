@@ -15,7 +15,7 @@ Rationale lives in `docs/adr/`.
 | Target framework | net10.0 | `Directory.Build.props`, alongside `LangVersion` 14.0 |
 | Node | 24.20.0 | `.github/workflows/ci.yml` and `e2e.yml`. 24.15.0 is the hard floor — see below |
 | React | 19.3.0 | `frontend/package-lock.json`, declared `^19.2.8` |
-| Vite | 8.3.1 | `frontend/package-lock.json`, declared `^8.3.1` |
+| Vite | 8.3.2 | `frontend/package-lock.json`, declared `^8.3.2` |
 | TypeScript | 6.0.3 | `frontend/package-lock.json`, declared `~6.0.2` |
 
 Read resolved versions from the *lockfile*, not `package.json` — the declared ranges are carets.
@@ -46,7 +46,7 @@ outright (npm's own `engines`, jsdom, and a resolver crash:
 | `src/Api` | Controllers, DTOs, exception handling, composition root |
 | `src/Worker` | The job host: composition, health endpoints, its own generated adapters |
 | `frontend` | Vite + React workspace (`frontend/e2e`: Playwright) |
-| `tests` | Test projects, one per layer |
+| `tests` | Test projects, one per layer, and `PartnerSimulator` (test-only: a throwaway PKI and an in-process mTLS partner) |
 | `k8s`, `deploy` | Kustomize manifests and the kind-cluster scripts |
 | `docs/adr` | Architecture decisions — the "why" behind every rule here |
 
@@ -212,6 +212,14 @@ notifications nobody is pushed. The worker writes outbox rows; it never calls `A
 **Resilience** (`resilience`, ADR 0014) — Polly cannot see a failed `Result<T>`: the pipeline
 sits under the port, never around it. With `EnableRetryOnFailure` on, an explicit transaction
 must go through `CreateExecutionStrategy().ExecuteAsync(...)`.
+
+**External systems** (`external-systems`, ADR 0031) — Every partner client goes through
+`ExternalSystemsBuilder.AddClient<TApi>`; a hand-wired `AddHttpClient` silently skips traffic,
+per-system retry and the certificate. Both hosts' `/health/ready` must keep the
+`ExternalSystemHealth.IsNotExternal` predicate, or one partner's outage pulls every pod. Server
+trust is `CertificateChainPolicy`, **never a validation callback**. Secrets are file paths in
+options, never values. **A Windows green proves nothing about certificate chains** — Windows
+completes chains from its own store; CI's Linux jobs are the evidence.
 
 ## Pull requests: one type each
 

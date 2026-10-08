@@ -14,6 +14,11 @@ its own), `INotificationPush` (SignalR), and the outbox pumps via `AddOutboxPump
 only here because only this host can push (ADR 0028). `ApiFactory` refuses to build a host that
 lost that call.
 
+It also calls `AddExternalSystems(configuration.GetSection("ExternalSystems"))` itself rather than
+through `AddInfrastructure`, because the set of named clients must be known at registration time,
+and maps `/health/ready` with the `ExternalSystemHealth.IsNotExternal` predicate, so a partner's
+outage never fails this pod's readiness. `ReadinessTests` guards both (ADR 0031).
+
 ## Rules
 
 - **Controllers are thin.** Bind, delegate to an Application handler, map the
@@ -27,8 +32,11 @@ lost that call.
   and auto-returns 400, so a duplicated annotation silently pre-empts the validation
   behavior and returns a differently-shaped response than `result.Problem()` would.
 - **`Infrastructure` may only be referenced for DI registration** in the composition
-  root. A controller reaching into a repository is a violation. This one is not
-  hook-enforceable, so it is on you and on `dotnet-reviewer`.
+  root. A controller reaching into a repository is a violation. The hook cannot tell the two
+  apart; `ArchitectureTests` can — it reads the IL with ArchUnitNET and fails on any type outside
+  `CompositionTypes` (`Program`, `ObservabilityRegistration`, and the generated adapters) that
+  depends on an Infrastructure type. A new composition file joins that list deliberately, with a
+  reason; a controller never does.
 - **Authorize by capability, never by role.** A privileged action takes a policy from
   `Auth/AuthorizationPolicies.cs` (`Orders.Fulfil`, `Catalogue.Manage`, `Monitoring.Read`, …),
   never `[Authorize(Roles = "Admin")]`. A new one is listed in `AuthorizationPolicies.All` or

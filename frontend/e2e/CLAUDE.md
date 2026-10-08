@@ -198,7 +198,7 @@ first, or set `API_PORT` / `WORKER_PORT`.
 | Area | Specs |
 |---|---|
 | Auth | sign-in, remember me, reveal password, navigation, registration (+ validation), change password (+ validation), sign out everywhere, lockout |
-| Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation), shipment confirmed via the broker, export (request, built by the worker, notified, downloaded) |
+| Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation), shipment confirmed via the broker, export to PDF (request, built by the worker, notified, read in the in-app viewer — drawn by pdf.js, Esc closes, focus returns — and downloaded) |
 | Products | create, edit, edit-from-detail, duplicate sku, field validation (all as the operator), member refused the form, paging |
 | Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
 | Monitoring | access, overview, drill-downs, traffic window, jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |

@@ -9,9 +9,10 @@ architectural rules are enforced by tooling rather than by convention.
 The domain is deliberately small — users place orders against a catalogue — so that the
 interesting part is the scaffolding around it: a hook that blocks a layering violation at edit
 time, a transactional outbox, RabbitMQ for every asynchronous hop behind a durable Wolverine
-outbox, background jobs in a worker host of their own, an API contract generated from the application and committed to
-the repository, and a local Kubernetes cluster that runs the whole stack at two replicas to
-rehearse the failures that only appear above one.
+outbox, background jobs in a worker host of their own, outbound integrations over mTLS (OCES3
+certificates) and OAuth 2.0 client credentials, an API contract generated from the application
+and committed to the repository, and a local Kubernetes cluster that runs the whole stack at two
+replicas to rehearse the failures that only appear above one.
 
 ## Table of contents
 
@@ -22,6 +23,7 @@ rehearse the failures that only appear above one.
 - [Install](#install)
 - [Usage](#usage)
   - [Running locally](#running-locally)
+  - [External systems in development](#external-systems-in-development)
   - [Running on Kubernetes](#running-on-kubernetes)
   - [Ports](#ports)
 - [API](#api)
@@ -90,28 +92,37 @@ inward only.
 the two share one Wolverine generated-code tree, and keeping them separate is what makes each
 host's `codegen write` independently correct.
 
-`.claude/hooks/dependency-rule.ps1` blocks an edit that would violate any cell except
-`Api → Infrastructure` and `Worker → Infrastructure`, which cannot be distinguished mechanically
-from a legitimate `services.AddScoped<>()` registration and are carried by review instead.
+The rule is enforced twice. `.claude/hooks/dependency-rule.ps1` blocks the edit, and an
+`ArchitectureTests` class in every test project fails CI on any commit, Claude's or not:
+
+- **The inner layers' tests** check assembly references by reflection and reject every
+  `AiFramework.*` reference the table does not allow.
+- **The Api and Worker tests** enforce "DI only" with ArchUnitNET, which reads the compiled IL:
+  outside a short composition allowlist (`Program`, each host's observability registration, and
+  the generated Wolverine adapters), no type may depend on an Infrastructure type — method
+  bodies, lambdas and async methods included. That is what
+  tells a controller reaching into a repository apart from a `services.AddScoped<>()` line.
+
 `Domain` additionally may not reference EF Core, ASP.NET Core, the DI abstractions,
 `System.Data`, or `System.ComponentModel.DataAnnotations`.
 
-Two caveats are worth knowing before trusting the ✗ marks in that table:
+Three caveats about the hook, all covered by the tests in CI:
 
 > **The hooks are PowerShell, and they are invoked as `powershell.exe`.** On Linux or macOS
 > without PowerShell installed, none of them run — the dependency rule, the secrets guard, and
-> the migration guard are all silently inert. Architecture tests in `Domain.Tests`,
-> `Application.Tests`, and `Infrastructure.Tests` assert the inward-pointing rules from inside
-> the suite and run everywhere, but they do not currently cover the `Api` or `Worker` rows, so
-> on a non-Windows machine those two are carried by review alone.
+> the migration guard are all silently inert at edit time. The architecture tests run
+> everywhere, so a violation still fails `dotnet test`.
 
-> **Three cells are unenforced by accident**, and are tracked in [`CLAUDE.md`](CLAUDE.md):
-> the hook's banned-namespace table lists `Worker` only under `Api`, so `Domain → Worker`,
-> `Application → Worker`, and `Infrastructure → Worker` pass it. Nothing in the repository
-> violates them today. The hook also matches `using` directives only, so a fully-qualified
-> inline reference is invisible to it, as is a `<ProjectReference>` in a `.csproj`.
+> **The hook's banned-namespace table lists `Worker` only under `Api`**, so `Domain → Worker`,
+> `Application → Worker`, and `Infrastructure → Worker` pass it at edit time. The inner layers'
+> tests reject them.
 
-Four mechanisms are worth knowing about before reading the code:
+> **The hook reads `using` directives in `.cs` files only**, so a fully-qualified inline
+> reference passes it. The tests read what the compiler emitted, so they catch it — but not a
+> `<ProjectReference>` that no code uses yet, which nothing catches until the first type is
+> named across it.
+
+Five mechanisms are worth knowing about before reading the code:
 
 - **In-process messaging without MediatR.** `ICommandHandler<TCommand, TResponse>` and
   `IQueryHandler<TQuery, TResponse>` are dispatched through `ICommandDispatcher` and
@@ -130,6 +141,16 @@ Four mechanisms are worth knowing about before reading the code:
   publishes but listens to nothing**; the worker is the only host with listeners, which is
   asserted from the runtime's own endpoint list rather than intended. Scheduled jobs use Quartz
   as the clock and fire on exactly one worker. See ADR 0016 and ADR 0017.
+- **Outbound integrations with external systems.** Each system is configured by name under
+  `ExternalSystems:Systems:<Name>`, with secrets as mounted *file paths*, never values. One
+  registration, `AddClient<TApi>(name)`, builds a Refit client with a fixed handler chain:
+  outbound traffic counting, the standard resilience handler with this system's own options,
+  per-attempt counting, a zero-delay resend on a 401 with a fresh token, the OAuth 2.0
+  client-credentials token handler (Keycloak; a client secret or `private_key_jwt`), and a
+  primary handler that presents the system's OCES3 certificate with its full chain. Each system
+  gets probe, certificate-expiry and token health checks, kept out of `/health/ready` so that a
+  partner's outage never takes a pod out of rotation. See ADR 0031 and the `external-systems`
+  skill.
 
 ## Tech stack
 
@@ -147,6 +168,8 @@ Four mechanisms are worth knowing about before reading the code:
 | Validation | FluentValidation |
 | Auth | Cookie session with a rotating security stamp; Data Protection key ring in PostgreSQL; capability-named policies over a `Member`/`Admin` role |
 | Resilience | `Microsoft.Extensions.Http.Resilience` outbound; `EnableRetryOnFailure` on Npgsql |
+| Integrations | Refit 16 (source-generated) typed clients; Duende.AccessTokenManagement 4 for OAuth 2.0 client credentials against Keycloak; OCES3 client certificates over mTLS |
+| Documents | PDFsharp + MigraDoc 6 for the order-export PDF, rendered in the worker |
 | Observability | `Microsoft.Extensions.Logging` + OpenTelemetry logs, traces and metrics over OTLP; Seq locally; OpenSearch, Prometheus and Grafana in-cluster |
 | API docs | `Microsoft.AspNetCore.OpenApi` rendered by Scalar |
 | Analysis | .NET analyzers, SonarAnalyzer, Meziantou.Analyzer, AsyncFixer — all as errors |
@@ -160,6 +183,7 @@ Four mechanisms are worth knowing about before reading the code:
 | Routing | React Router 7 |
 | Server state | TanStack Query 5 |
 | API types | Generated from the committed OpenAPI document |
+| PDF viewing | react-pdf (pdf.js), lazy-loaded only on the exports page |
 | Styling | Plain CSS with design tokens |
 | Lint/format | ESLint (`--max-warnings 0`) and Prettier |
 
@@ -167,12 +191,12 @@ Four mechanisms are worth knowing about before reading the code:
 
 | | |
 | --- | --- |
-| Backend tests | xUnit, FluentAssertions, NSubstitute, Testcontainers |
+| Backend tests | xUnit, FluentAssertions, NSubstitute, Testcontainers (PostgreSQL, RabbitMQ, Keycloak), ArchUnitNET, an in-process mTLS partner simulator |
 | Frontend tests | Vitest, React Testing Library, MSW |
 | End-to-end | Playwright against a built preview bundle |
 | Containers | Docker Compose for development, chiselled images for deployment |
 | Orchestration | kind with Kustomize overlays and ingress-nginx |
-| CI | GitHub Actions, Debug and Release |
+| CI | GitHub Actions, Debug and Release; CodeQL default setup |
 
 Exact pins live in [`CLAUDE.md`](CLAUDE.md), `Directory.Build.props`, the `.csproj` files, and
 `frontend/package.json`. CI pins the SDK and Node versions in `.github/workflows/ci.yml`.
@@ -184,7 +208,8 @@ Exact pins live in [`CLAUDE.md`](CLAUDE.md), `Directory.Build.props`, the `.cspr
 ├── src/
 │   ├── Domain/            Entities, value objects, domain events, domain exceptions
 │   ├── Application/       Use cases, ports, Result<T>, validators
-│   ├── Infrastructure/    EF Core, repositories, outbox, caching, Wolverine, jobs, security
+│   ├── Infrastructure/    EF Core, repositories, outbox, caching, Wolverine, jobs, security, exports,
+│   │                      and ExternalSystems/ — the outbound integration plumbing
 │   ├── Api/               Controllers, DTOs, the SignalR hub, the outbox pumps, exception handling, composition root
 │   │   └── Internal/Generated/    Wolverine adapters for the event path — committed
 │   └── Worker/            The job host: handlers, Quartz scheduling, the inbound shipments listener
@@ -194,14 +219,15 @@ Exact pins live in [`CLAUDE.md`](CLAUDE.md), `Directory.Build.props`, the `.cspr
 │   ├── Application.Tests/
 │   ├── Infrastructure.Tests/     Testcontainers-backed PostgreSQL fixtures
 │   ├── Api.IntegrationTests/     WebApplicationFactory over the real pipeline
-│   └── Worker.IntegrationTests/  Job delivery, scheduling, and the worker's codegen
+│   ├── Worker.IntegrationTests/  Job delivery, scheduling, and the worker's codegen
+│   └── PartnerSimulator/         Test-only: a throwaway PKI and an in-process mTLS partner
 ├── frontend/              Vite + React workspace, Vitest specs, Playwright e2e
 ├── k8s/
 │   ├── base/              api, web, worker, postgres, rabbitmq, redis, ingress, autoscaling
 │   ├── components/        observability — OTel Collector, OpenSearch, Prometheus, Grafana; opt-in
 │   └── overlays/          local, and local-observability
 ├── deploy/                kind cluster definition and deployment scripts
-├── scripts/               Development loop and prerequisite scripts
+├── scripts/               Development loop, prerequisite and dev-certificate scripts
 ├── local-run/             control-panel.bat, a double-clickable menu
 ├── openapi/               The committed API contract
 ├── docs/
@@ -288,6 +314,25 @@ the backend, which is what lets the session cookie be same-origin.
 
 Further detail, including one-keystroke startup in Rider and Visual Studio, is in
 [`docs/local-development.md`](docs/local-development.md).
+
+### External systems in development
+
+No external system is configured by default, so the dev loop needs nothing extra. To try one,
+generate a throwaway PKI into the git-ignored `.certs/` folder and point a system at the files:
+
+```powershell
+./scripts/new-dev-certs.ps1          # ca.pem, client.pfx/.pass, server.pfx/.pass; -Force to replace
+```
+
+```powershell
+$env:ExternalSystems__Systems__Partner__BaseAddress = "https://partner.example/api/"
+$env:ExternalSystems__Systems__Partner__ClientCertificate__Path = "$PWD/.certs/client.pfx"
+$env:ExternalSystems__Systems__Partner__ClientCertificate__PasswordFile = "$PWD/.certs/client.pass"
+```
+
+Secrets are always **file paths**, never values — in a deployed environment they are files that
+Vault Secrets Operator mounts (the contract is in ADR 0031; the manifests are not written yet).
+The `external-systems` skill has the full configuration, including OAuth.
 
 ### Running on Kubernetes
 
@@ -395,7 +440,7 @@ defence, so no antiforgery token is issued.
 | `POST` | `/api/monitoring/jobs/trigger`, `…/dead-letters/{messageId}/retry` | `Monitoring.Operate` | Run a scheduled job now; put a dead letter back in play |
 | `GET`/`POST` | `/api/monitoring/users/*` | `Users.Manage` | List accounts, promote or demote, revoke sessions, an account's history |
 | `GET` | `/health` | anonymous | Liveness; never touches the database |
-| `GET` | `/health/ready` | anonymous | Readiness; checks PostgreSQL |
+| `GET` | `/health/ready` | anonymous | Readiness; checks PostgreSQL. External systems' health checks are deliberately excluded |
 
 **Auth** is `cookie` for any signed-in user, or a capability policy that only an `Admin` holds
 (ADRs 0020, 0024, 0025). Controllers name the capability, never the role, so a later permission
@@ -407,6 +452,12 @@ RabbitMQ and the worker records it (ADR 0026).
 
 The worker serves `/health` and `/health/ready` of its own on 5235, and nothing else — it is a
 web host only so that Kubernetes has something to probe.
+
+Both hosts register each configured external system's probe, certificate and token checks,
+tagged `external`, and both `/health/ready` endpoints filter them out
+(`ExternalSystemHealth.IsNotExternal`). A partner that is down makes its own checks Unhealthy;
+it never takes an API or worker pod out of rotation. Showing those checks to an operator is the
+next planned step (a monitoring page), not something either endpoint does.
 
 `/hubs/notifications` is a SignalR hub, mapped only when `Realtime__Enabled` is on. It is
 **best-effort by contract**: the feed is the truth, and the push only closes the window in which
@@ -551,7 +602,7 @@ refused even if you delete the file first.
 ## Testing
 
 ```bash
-dotnet test                          # five projects; needs Docker for Postgres and RabbitMQ
+dotnet test                          # five test projects; needs Docker for Postgres, RabbitMQ and Keycloak
 npm test --prefix frontend -- --run  # Vitest
 npm run e2e --prefix frontend        # Playwright
 ```
@@ -564,7 +615,7 @@ is not installed rather than reporting a false pass.
 | --- | --- |
 | `Domain.Tests` | Invariants and domain events, no infrastructure |
 | `Application.Tests` | Handlers against substituted ports; architecture tests |
-| `Infrastructure.Tests` | Repositories, outbox, caching, against real PostgreSQL via Testcontainers |
+| `Infrastructure.Tests` | Repositories, outbox, caching, against real PostgreSQL via Testcontainers; external systems over real TLS against the in-process partner simulator and a Keycloak container |
 | `Api.IntegrationTests` | The real pipeline through `WebApplicationFactory`, including authorization policies |
 | `Worker.IntegrationTests` | Job delivery, Quartz scheduling, inbound shipments, and the worker's own codegen |
 | `frontend/src/**/*.test.tsx` | Components and hooks, with MSW standing in for the API |
@@ -581,7 +632,14 @@ Several suites exist specifically to catch a class of regression that review alo
 against the runtime's own endpoint list that no `aiframework.jobs.*` queue has a listener on the API host,
 `SensitiveCommandLoggingTests` catches a logging change that would write plaintext passwords to
 the log store, and `WolverineCodegenTests`/`WorkerCodegenTests` catch stale adapters in Debug —
-where they would otherwise stay invisible until Release.
+where they would otherwise stay invisible until Release. For external systems,
+`NoAcceptAnyCertificateTests` fails on any certificate-validation callback under `src/` (the
+only way to write "accept any certificate"), `HandlerChainTests` pins the handler order, and
+`ReadinessTests` in both hosts prove an unreachable partner leaves `/health/ready` at 200.
+
+**Certificate tests are only proven on Linux.** Windows can complete a certificate chain from
+its own store, so a TLS test that passes locally may still fail in CI's Linux jobs. That has
+happened once already, and CI is the authority here.
 
 ## Continuous integration
 
@@ -590,7 +648,7 @@ pull request:
 
 | Job | What it proves |
 | --- | --- |
-| `backend (Debug)` / `backend (Release)` | Builds and tests in both configurations |
+| `backend (Debug)` / `backend (Release)` | Builds and tests in both configurations; Debug also fails on unformatted C# (`dotnet format whitespace --verify-no-changes`) |
 | `generated code is current` | Re-runs `codegen write` for **both** trees and fails on any diff |
 | `api contract is current` | Regenerates the OpenAPI document and the TypeScript schema, and fails on any diff |
 | `frontend` | Lint, build, and Vitest |
@@ -599,6 +657,11 @@ pull request:
 
 Every one of these must pass before a pull request can merge into `main`. The branch ruleset
 requires them **by name**, so renaming a job means updating the ruleset in the same change.
+
+**CodeQL** scans C#, TypeScript and the workflows on every pull request and weekly, from
+repository settings (*default setup*) rather than a workflow file, so there is no `codeql.yml` —
+GitHub rejects one while default setup is on. Results land in the Security tab; it is not a
+required check.
 
 Release is a separate matrix leg rather than an afterthought: Release was broken in this
 repository for the whole life of the Wolverine spike without anyone noticing, because
@@ -654,11 +717,15 @@ Non-negotiable, and mostly machine-checked:
   logging behavior that records outcome and duration, and it logs `typeof(TRequest).Name` rather
   than the request instance — `SignIn`, `RegisterUser`, and `ChangePassword` all carry a
   plaintext password field. See ADR 0015.
+- **An external system's secrets are file paths, and nothing accepts any certificate.**
+  Certificates, passwords and client secrets are mounted files named in configuration; server
+  trust is a per-system CA bundle through `CertificateChainPolicy`, never a validation callback.
+  See ADR 0031.
 
 Per-language detail lives in the `dotnet-conventions`, `dotnet-testing`, `react-conventions`, and
 `react-testing` skills; `regenerate` and `jobs` cover the two procedures most likely to be got
-wrong — which generated artifact to rebuild after a change, and the job framework's traps. Each
-layer has a `CLAUDE.md` of its own.
+wrong — which generated artifact to rebuild after a change, and the job framework's traps — and
+`external-systems` covers adding a partner. Each layer has a `CLAUDE.md` of its own.
 
 ## Architecture decision records
 
@@ -696,6 +763,7 @@ All accepted, in [`docs/adr/`](docs/adr/).
 | [0028](docs/adr/0028-the-outbox-is-delivered-only-where-the-push-transport-lives.md) | The outbox is delivered only where the push transport lives |
 | [0029](docs/adr/0029-order-exports-are-stored-in-postgres-and-fail-by-staleness.md) | Order exports are stored in Postgres and fail by staleness |
 | [0030](docs/adr/0030-order-exports-are-pdfs-rendered-by-migradoc.md) | Order exports are PDFs rendered by MigraDoc |
+| [0031](docs/adr/0031-outbound-integrations-with-external-systems.md) | Outbound integrations with external systems: mTLS, OAuth 2.0, one fixed handler chain |
 
 Record a new one with `/adr <title>`. **Check the open branches as well as `docs/adr/` before
 taking a number** — two branches that each take "the next one" produce a duplicate, which has
@@ -726,6 +794,18 @@ is a 401 with nothing in the logs. Use the HTTPS ingress.
 **`kind create cluster` fails to bind port 80.** Something is holding it through `http.sys`,
 usually IIS or BranchCache. The cluster definition already publishes 8080/8443 instead; if you
 changed that back, either free the port from an elevated shell or restore the remap.
+
+**Certificate tests start failing on Windows after many runs.** The .NET TLS stack on Windows
+copies each test PKI's intermediate certificate into `Cert:\CurrentUser\CA`, and at about a
+hundred same-named certificates chain building fails. The test PKI removes its own certificates
+when disposed, so this now grows by well under one per run. If it ever bites, delete the
+`AiFramework … Intermediate CA` and `… Root CA` test certificates from that store. Never delete
+anything else.
+
+**A TLS handshake fails with `PartialChain`.** The server did not send its intermediate
+certificate and the client trusts only the root. Windows often hides this by finding the
+intermediate in its own store; Linux does not. For a partner, it is the partner's server
+configuration to fix.
 
 **A Vite proxy `ECONNREFUSED` for `/api/...` at startup.** The frontend came up before the API
 finished starting. `scripts/dev.ps1` pauses five seconds between the two for exactly this;

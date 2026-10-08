@@ -6,7 +6,7 @@ One project per layer, mirroring `src/`.
 |---|---|---|
 | `Domain.Tests` | Entities, value objects, invariants | Pure. No mocks, no I/O. |
 | `Application.Tests` | Use-case handlers | Ports substituted with NSubstitute |
-| `Infrastructure.Tests` | Repositories, EF mapping | Real database via Testcontainers |
+| `Infrastructure.Tests` | Repositories, EF mapping, external systems | Real database via Testcontainers; real TLS against `PartnerSimulator`; Keycloak via Testcontainers |
 | `Api.IntegrationTests` | HTTP contract | `WebApplicationFactory<Program>` |
 | `Worker.IntegrationTests` | Job delivery, lanes, scoping | The real worker host + Testcontainers |
 
@@ -103,6 +103,33 @@ earlier test left in the queue. The contract this proves is: everything currentl
 deterministically, with no waiting — not "one poll cycle runs." It does not exercise the channel
 hop (`ChannelWriter`/`ChannelReader`), backpressure, or `WorkerCount` parallelism; those are
 `Infrastructure.Tests/Outbox/OutboxRegistrationTests.cs`'s job instead.
+
+## External-system tests
+
+`tests/PartnerSimulator` is a test-only project, never deployed, and
+`Infrastructure.Tests/ExternalSystems/*` builds on it (ADR 0031):
+
+- **`TestPki` generates every certificate in memory** — root → intermediate → client leaf.
+  Never commit a key, test keys included; `scripts/new-dev-certs.ps1` writes the dev ones into
+  git-ignored `.certs/`. `TestPki.Usable(...)` round-trips a generated certificate through
+  PKCS#12, because Windows' TLS stack cannot use the ephemeral key `CopyWithPrivateKey` produces.
+- **The simulator runs in-process on a random port with real TLS** — never `TestServer`, which
+  skips the handshake that half of these tests are about. It trusts only the root, so a client
+  that omits its intermediate is rejected: that is what proves the client sends its chain. Its
+  *server* leaf is issued by the root directly, so the server's chain needs no intermediate on
+  any OS and the intermediate stays the client's alone.
+- **Tests script the simulator directly**: `EnqueueEchoStatus(...)` sets the next `/echo` answer
+  (a 503, a 401), and `EchoRequests` reads back what arrived — the token and the client
+  certificate's subject.
+- **Keycloak is one container per run** (`[Collection(nameof(KeycloakCollection))]`), with a
+  realm generated at start-up so its `private_key_jwt` client can carry this run's certificate.
+- **A Windows green proves nothing about chains.** Windows completes a chain from
+  `CurrentUser\CA`, where its TLS stack also copies each test intermediate; CI's Linux jobs are
+  the evidence. `TestPki.Dispose` removes its own certificates from that store by thumbprint.
+  Parallel runs still leave the odd one behind (well under one a run); never delete anything
+  else from a user's store.
+- **`NoAcceptAnyCertificateTests` scans `src/`** for certificate-validation callbacks and fails
+  on any; its sentinel test keeps the scan from passing vacuously.
 
 ## Coverage
 

@@ -161,6 +161,24 @@ an e2e run**, or set `API_PORT` and `WORKER_PORT`.
 `API_PORT` is read by both `vite.config.ts` and the e2e setup, so moving the API keeps the proxy
 pointed at it.
 
+## External systems and dev certificates
+
+The dev loop calls no external system unless you configure one under
+`ExternalSystems:Systems:<Name>`, so a fresh checkout needs nothing here. To try one locally:
+
+```powershell
+./scripts/new-dev-certs.ps1          # throwaway PKI into .certs/; -Force to regenerate
+```
+
+It writes `ca.pem`, `client.pfx`/`client.pass` and `server.pfx`/`server.pass` into `.certs/`,
+which is git-ignored — never commit anything from it. Point a system's
+`ClientCertificate__Path`, `ClientCertificate__PasswordFile` and `ServerTrust__CaBundlePath` at
+those files (environment variables or user-secrets; the values are paths, never secrets
+themselves). The `external-systems` skill has the full configuration and how to add a partner.
+
+The tests do not use `.certs/` — they generate their own certificates in memory and start
+Keycloak in a container, so `dotnet test` needs Docker but no setup step.
+
 ## Two things that look like bugs and are not
 
 **A failed API call immediately after launch.** A Rider Compound starts both stacks in parallel,

@@ -144,6 +144,13 @@ recorded per pod in memory and flushed to `traffic_buckets` on a minute boundary
 across instances, which is what makes two API replicas one number rather than whichever pod
 answered.
 
+**Outbound calls are recorded too, but not on this page.** External-system clients record
+`TrafficKind.Outbound` (one per call, retries included in its duration) and `OutboundAttempt`
+(one per physical attempt), with `Name` the system name. `TrafficReader` restricts the summary
+and the series to the inbound kinds (`Http`, `Command`, `Query`): otherwise every request that
+calls a partner would be counted twice, and three times with attempts. A timeout is `Faulted`; only
+the caller's own cancellation records nothing. ADR 0031 and the `external-systems` skill.
+
 `TrafficMiddleware` keys HTTP on `"{method} {route template}"`, taken off the matched endpoint
 **after** `next()` has run — a raw path would give one row per order id, and routing has not
 matched an endpoint yet on the way in. Commands and queries need no new instrumentation at all:
