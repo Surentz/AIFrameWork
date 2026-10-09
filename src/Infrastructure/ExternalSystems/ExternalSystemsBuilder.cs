@@ -76,7 +76,8 @@ public sealed partial class ExternalSystemsBuilder
                 http.Timeout = Timeout.InfiniteTimeSpan; // the standard handler owns both timeouts.
             })
             .AddHttpMessageHandler(sp => new OutboundTrafficHandler(
-                sp.GetRequiredService<ITrafficRecorder>(), sp.GetRequiredService<TimeProvider>(), systemName, TrafficKind.Outbound));
+                sp.GetRequiredService<ITrafficRecorder>(), sp.GetRequiredService<TimeProvider>(), systemName, TrafficKind.Outbound,
+                sp.GetRequiredService<ExternalSystemMetrics>()));
 
         client.AddStandardResilienceHandler().Configure((resilience, sp) => ConfigureStandardResilience(resilience, sp, systemName));
 

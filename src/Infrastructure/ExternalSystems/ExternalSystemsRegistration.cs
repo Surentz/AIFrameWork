@@ -30,6 +30,8 @@ public static class ExternalSystemsRegistration
         services.AddSingleton<IValidateOptions<ExternalSystemsOptions>, ExternalSystemsOptionsValidator>();
 
         services.TryAddSingleton(TimeProvider.System);
+        services.AddMetrics();
+        services.TryAddSingleton<ExternalSystemMetrics>();
         services.AddSingleton<ICertificateProvider, FileCertificateProvider>();
         services.AddSingleton<ExternalSystemHandlerFactory>();
 

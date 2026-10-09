@@ -1,3 +1,4 @@
+using AiFramework.Infrastructure.ExternalSystems;
 using AiFramework.Infrastructure.Observability;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
@@ -154,6 +155,7 @@ public static class ObservabilityRegistration
             // Wolverine names its meter "Wolverine:<ServiceName>", and ServiceName defaults to the
             // entry assembly's name — a wildcard keeps this true if either ever changes.
             .AddMeter("Wolverine:*")
+            .AddMeter(ExternalSystemMetrics.MeterName)
             .AddInfrastructureMetrics();
 
         if (options.Otlp.Enabled && options.Otlp.Metrics)
