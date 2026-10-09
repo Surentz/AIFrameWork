@@ -103,3 +103,7 @@ public sealed record TrafficPointView(
 
 public sealed record TrafficSeriesView(
     DateTimeOffset Since, IReadOnlyList<TrafficPointView> Points);
+
+/// <summary>One external system's outbound traffic over a window. Calls include retries in their duration.</summary>
+public sealed record OutboundTrafficView(
+    string System, long Calls, long Failed, long Faulted, long Attempts, double? P95Ms);
