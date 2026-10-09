@@ -3,6 +3,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import type { ApiError } from '../../api/client';
 import {
   changeUserRole,
+  getExternalSystems,
   getJobHealth,
   getMonitoringAccess,
   getSignInHealth,
@@ -21,6 +22,7 @@ import type {
   AdminActionPage,
   AdministeredUserPage,
   DeadLetterPage,
+  ExternalSystems,
   JobHealth,
   JobRunPage,
   JobRunStatus,
@@ -50,6 +52,7 @@ export const monitoringKeys = {
     [...monitoringKeys.traffic(), 'summary', windowMinutes] as const,
   trafficSeries: (windowMinutes: number) =>
     [...monitoringKeys.traffic(), 'series', windowMinutes] as const,
+  externalSystems: () => [...monitoringKeys.all, 'external-systems'] as const,
   users: () => [...monitoringKeys.all, 'users'] as const,
   userList: (search: string, page: number) =>
     [...monitoringKeys.users(), 'list', search, page] as const,
@@ -187,6 +190,21 @@ export function useTrafficSeries(windowMinutes: number): UseQueryResult<TrafficS
     queryKey: monitoringKeys.trafficSeries(windowMinutes),
     queryFn: () => getTrafficSeries(windowMinutes),
     refetchInterval: TrafficRefreshMs,
+    retry: false,
+  });
+}
+
+/**
+ * The worker rewrites external_system_status once a minute (ADR 0032), so asking more often than
+ * every thirty seconds returns the same rows.
+ */
+const ExternalSystemsRefreshMs = 30_000;
+
+export function useExternalSystems(): UseQueryResult<ExternalSystems, ApiError> {
+  return useQuery({
+    queryKey: monitoringKeys.externalSystems(),
+    queryFn: getExternalSystems,
+    refetchInterval: ExternalSystemsRefreshMs,
     retry: false,
   });
 }

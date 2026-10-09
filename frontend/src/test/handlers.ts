@@ -176,6 +176,25 @@ export const handlers = [
       ],
     }),
   ),
+  http.get('/api/monitoring/external-systems', () =>
+    HttpResponse.json({
+      trafficSince: '2026-10-09T11:00:00+00:00',
+      systems: [
+        {
+          name: 'PartnerSimulator', state: 'Healthy', description: 'PartnerSimulator reachable (200)',
+          checkedAt: '2026-10-09T11:59:30+00:00', stale: false,
+          certificateNotAfter: '2027-10-09T00:00:00+00:00', tokenOk: null,
+          calls: 120, failed: 2, faulted: 1, attempts: 124, p95Ms: 85,
+        },
+        {
+          name: 'Unreachable', state: 'Unhealthy', description: 'Unreachable unreachable: ConnectionError',
+          checkedAt: '2026-10-09T11:59:30+00:00', stale: false,
+          certificateNotAfter: null, tokenOk: null,
+          calls: 0, failed: 0, faulted: 0, attempts: 0, p95Ms: null,
+        },
+      ],
+    }),
+  ),
   http.get('/api/monitoring/sign-ins/health', () =>
     HttpResponse.json({
       succeeded: 9,

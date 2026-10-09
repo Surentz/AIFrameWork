@@ -1,5 +1,11 @@
 import { Link } from 'react-router-dom';
-import { useJobHealth, useMonitoringAccess, useSignInHealth, useTrafficSummary } from './queries';
+import {
+  useExternalSystems,
+  useJobHealth,
+  useMonitoringAccess,
+  useSignInHealth,
+  useTrafficSummary,
+} from './queries';
 import { ErrorPanel } from '../../components/ErrorPanel';
 import './monitoring.css';
 
@@ -16,6 +22,7 @@ export function MonitoringPage(): React.JSX.Element {
   const health = useJobHealth();
   const signIns = useSignInHealth();
   const traffic = useTrafficSummary(60);
+  const external = useExternalSystems();
 
   if (access.isPending) {
     return <p role="status">Loading monitoring…</p>;
@@ -89,6 +96,31 @@ export function MonitoringPage(): React.JSX.Element {
 
       <p>
         <Link to="/monitoring/traffic">Request rates, latency and the per-endpoint breakdown</Link>
+      </p>
+
+      <h2>External systems</h2>
+
+      {external.error && <ErrorPanel error={external.error} />}
+
+      {external.isSuccess &&
+        (external.data.systems.length === 0 ? (
+          <p className="muted">No external system is configured.</p>
+        ) : (
+          <ul className="tiles" aria-label="External systems">
+            {external.data.systems.map((row) => (
+              <li
+                key={row.name}
+                className={row.stale || row.state !== 'Healthy' ? 'tile tile--attention' : 'tile'}
+              >
+                <span className="tile__value">{row.stale ? 'Stale' : (row.state ?? 'Not checked')}</span>
+                <span className="tile__label">{row.name}</span>
+              </li>
+            ))}
+          </ul>
+        ))}
+
+      <p>
+        <Link to="/monitoring/integrations">External system health and traffic</Link>
       </p>
 
       <h2>Users</h2>

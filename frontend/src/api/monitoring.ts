@@ -2,6 +2,7 @@ import type {
   AdminActionPage,
   AdministeredUserPage,
   DeadLetterPage,
+  ExternalSystems,
   JobHealth,
   JobRunPage,
   JobRunStatus,
@@ -86,6 +87,10 @@ export function getTrafficSeries(windowMinutes: number): Promise<TrafficSeries> 
   return request<TrafficSeries>(
     `/api/monitoring/traffic/series?windowMinutes=${String(windowMinutes)}`,
   );
+}
+
+export function getExternalSystems(): Promise<ExternalSystems> {
+  return request<ExternalSystems>('/api/monitoring/external-systems');
 }
 
 export function listUsers(params: {

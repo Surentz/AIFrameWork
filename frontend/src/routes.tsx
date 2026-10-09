@@ -6,6 +6,7 @@ import { RegisterPage } from './features/auth/RegisterPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { RequireRole } from './features/auth/RequireRole';
 import { FulfilmentPage } from './features/fulfilment/FulfilmentPage';
+import { IntegrationsPage } from './features/monitoring/IntegrationsPage';
 import { JobsPage } from './features/monitoring/JobsPage';
 import { LoginsPage } from './features/monitoring/LoginsPage';
 import { MonitoringPage } from './features/monitoring/MonitoringPage';
@@ -58,6 +59,7 @@ export function AppRoutes(): React.JSX.Element {
               gated by being declared here rather than by each one remembering. */}
           <Route element={<RequireRole allow="Admin" />}>
             <Route path="/monitoring" element={<MonitoringPage />} />
+            <Route path="/monitoring/integrations" element={<IntegrationsPage />} />
             <Route path="/monitoring/jobs" element={<JobsPage />} />
             <Route path="/monitoring/logins" element={<LoginsPage />} />
             <Route path="/monitoring/traffic" element={<TrafficPage />} />
