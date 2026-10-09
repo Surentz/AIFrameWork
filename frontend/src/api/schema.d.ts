@@ -1036,6 +1036,54 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/monitoring/external-systems": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ExternalSystemsResponse"];
+                        readonly "application/json": components["schemas"]["ExternalSystemsResponse"];
+                        readonly "text/json": components["schemas"]["ExternalSystemsResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/monitoring/jobs/runs": {
         readonly parameters: {
             readonly query?: never;
@@ -2443,6 +2491,39 @@ export interface components {
             /** Format: date */
             readonly asOf: string;
         };
+        /** @description One external system. ExternalSystemState? ExternalSystemRowResponse.State is null until the worker has checked it once. */
+        readonly ExternalSystemRowResponse: {
+            readonly name: string;
+            readonly state?: null | components["schemas"]["ExternalSystemState"];
+            /** @description The worst check's description. Never a host, path, body or secret. */
+            readonly description?: null | string;
+            /** Format: date-time */
+            readonly checkedAt?: null | string;
+            /** @description The worker has not rewritten this row for three minutes: it is history, not health. */
+            readonly stale: boolean;
+            /** Format: date-time */
+            readonly certificateNotAfter?: null | string;
+            /** @description Null when the system uses no token. */
+            readonly tokenOk?: null | boolean;
+            /** Format: int64 */
+            readonly calls: number | string;
+            /** Format: int64 */
+            readonly failed: number | string;
+            /** Format: int64 */
+            readonly faulted: number | string;
+            /** Format: int64 */
+            readonly attempts: number | string;
+            /** Format: double */
+            readonly p95Ms?: null | number | string;
+        };
+        /** @description Every external system's last health and last hour of traffic. */
+        readonly ExternalSystemsResponse: {
+            /** Format: date-time */
+            readonly trafficSince: string;
+            readonly systems: readonly components["schemas"]["ExternalSystemRowResponse"][];
+        };
+        /** @enum {unknown} */
+        readonly ExternalSystemState: "Healthy" | "Degraded" | "Unhealthy" | null;
         readonly FulfilmentOrderPageResponse: {
             readonly items: readonly components["schemas"]["FulfilmentOrderResponse"][];
             readonly nextCursor: null | string;
