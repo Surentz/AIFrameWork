@@ -14,6 +14,8 @@
 // Teardown is teardown-database.ts, which run.ts runs after Playwright exits - not Playwright's
 // globalTeardown, which runs before the webServers stop.
 import { execFileSync } from 'node:child_process';
+import { existsSync, statSync } from 'node:fs';
+import path from 'node:path';
 import { E2E_CERT_DIR, E2E_CONNECTION_STRING } from '../support/env.ts';
 
 // dotnet-ef is a local tool (.config/dotnet-tools.json); without a restore this only works
@@ -54,17 +56,38 @@ for (const host of ['../src/Api', '../src/Worker', '../tests/PartnerSimulator'])
   execFileSync('dotnet', ['build', host], { stdio: 'inherit' });
 }
 
-// A fresh throwaway PKI per run for the simulator and the worker's client certificate.
-execFileSync(
-  'dotnet',
-  [
-    'run',
-    '--project',
-    '../tests/PartnerSimulator',
-    '--no-build',
-    '--',
-    'generate-certs',
-    E2E_CERT_DIR,
-  ],
-  { stdio: 'inherit' },
-);
+// The throwaway PKI for the simulator and the worker's client certificate, generated once and
+// REUSED, not regenerated per run. On Windows the worker's SslStreamCertificateContext.Create
+// copies the client's intermediate into CurrentUser\CA, and nothing removes it; every new PKI
+// adds another "CN=AiFramework Dev Intermediate CA", and at about a hundred same-subject copies
+// Windows chain building fails outright (see TestPki.RemoveFromUserStores). A reused PKI adds one.
+//
+// Regenerated when a file is missing, or when client.pfx is a year old. The client leaf is the
+// shortest-lived certificate TestPki issues (two years; the intermediate four, the root five), and
+// the certificate check reports Degraded within 30 days of its expiry, which would turn the
+// simulator's row from "Healthy" and fail integrations.spec.ts. Half the leaf's life keeps that
+// far away. CI runners start clean, so CI generates on every run.
+const certFiles = ['ca.pem', 'client.pfx', 'client.pass', 'server.pfx', 'server.pass'];
+const RegenerateAfterMs = 365 * 24 * 60 * 60 * 1000;
+const certsMissing = certFiles.some((file) => !existsSync(path.join(E2E_CERT_DIR, file)));
+const certsAgeing =
+  !certsMissing &&
+  Date.now() - statSync(path.join(E2E_CERT_DIR, 'client.pfx')).mtimeMs > RegenerateAfterMs;
+
+if (certsMissing || certsAgeing) {
+  execFileSync(
+    'dotnet',
+    [
+      'run',
+      '--project',
+      '../tests/PartnerSimulator',
+      '--no-build',
+      '--',
+      'generate-certs',
+      E2E_CERT_DIR,
+    ],
+    { stdio: 'inherit' },
+  );
+} else {
+  console.log(`Reusing the e2e partner PKI in ${E2E_CERT_DIR}.`);
+}
