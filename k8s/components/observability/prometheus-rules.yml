@@ -108,3 +108,35 @@ groups:
           job: aiframework-api
         annotations:
           summary: No telemetry from the API for over 5 minutes.
+
+      - alert: ExternalSystemFailing
+        # Spec §3: over 20% of a system's calls faulted in 5 minutes, with at least 10 calls in
+        # that window so one failed call at night pages nobody. Calls are counted outside retry,
+        # so a call that failed after its retries counts once.
+        expr: |
+          (
+            sum by (system) (increase(aiframework_external_system_calls_total{outcome="faulted"}[5m]))
+            / sum by (system) (increase(aiframework_external_system_calls_total[5m]))
+          ) > 0.2
+          and
+          sum by (system) (increase(aiframework_external_system_calls_total[5m])) >= 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.system }} is failing.'
+          description: >-
+            {{ $value | humanizePercentage }} of calls to {{ $labels.system }} faulted over the last
+            5 minutes. The monitoring page's External systems view shows its last health check.
+
+      - alert: ExternalSystemCertificateExpiring
+        # Spec §3: under 14 days. min across pods: the API and the worker read the same file.
+        expr: min by (system) (aiframework_external_system_certificate_time_remaining_seconds) < 14 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.system }}'s client certificate expires in under 14 days."
+          description: >-
+            Renew it in Vault; Vault Secrets Operator mounts the new file and the pods restart onto
+            it (ADR 0031).
