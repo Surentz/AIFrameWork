@@ -36,6 +36,8 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
 
     public DbSet<TrafficBucket> TrafficBuckets => Set<TrafficBucket>();
 
+    public DbSet<ExternalSystemStatusRow> ExternalSystemStatuses => Set<ExternalSystemStatusRow>();
+
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
