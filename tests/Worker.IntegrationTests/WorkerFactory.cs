@@ -144,6 +144,10 @@ public sealed class WorkerFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // probe is Unhealthy by construction, which is what makes ReadinessTests' 200 meaningful:
         // /health/ready must ignore it. ADR 0031.
         builder.UseSetting("ExternalSystems:Systems:Unreachable:BaseAddress", "https://127.0.0.1:1/");
+
+        // The status publisher (ADR 0032) checks every second here rather than every minute, so a
+        // test sees the Unreachable system's row without waiting a minute.
+        builder.UseSetting("Monitoring:ExternalSystemStatusPeriod", "00:00:01");
     }
 
     /// <summary>
