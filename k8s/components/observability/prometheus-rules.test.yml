@@ -216,6 +216,30 @@ tests:
         alertname: ExternalSystemFailing
         exp_alerts: []
 
+  # Plenty of calls (10 a minute) but only 1 in 10 faulted: 10%, under the 20% line, so quiet.
+  - interval: 1m
+    input_series:
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Healthy", outcome="succeeded"}'
+        values: '0+9x20'
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Healthy", outcome="faulted"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExternalSystemFailing
+        exp_alerts: []
+
+  # Just under the line: 9 of every 50 calls fault, 18%, so quiet.
+  - interval: 1m
+    input_series:
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Borderline", outcome="succeeded"}'
+        values: '0+41x20'
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Borderline", outcome="faulted"}'
+        values: '0+9x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExternalSystemFailing
+        exp_alerts: []
+
   # 10 days left: under the 14-day line.
   - interval: 1m
     input_series:
