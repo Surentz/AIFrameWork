@@ -33,12 +33,16 @@ internal sealed class ExternalSystemStatusStore(AiFrameworkDbContext context)
                 ? row.Description[..MaxDescriptionLength]
                 : row.Description;
 
+            // Npgsql writes only offset-0 values to timestamptz; a certificate's NotAfter often is not.
+            var checkedAt = row.CheckedAt.ToUniversalTime();
+            var certificateNotAfter = row.CertificateNotAfter?.ToUniversalTime();
+
             await context.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                 INSERT INTO external_system_status
                     ("Name", "State", "Description", "CheckedAt", "CertificateNotAfter", "TokenOk")
                 VALUES
-                    ({row.Name}, {state}, {description}, {row.CheckedAt}, {row.CertificateNotAfter}, {row.TokenOk})
+                    ({row.Name}, {state}, {description}, {checkedAt}, {certificateNotAfter},{row.TokenOk})
                 ON CONFLICT ("Name") DO UPDATE SET
                     "State" = EXCLUDED."State",
                     "Description" = EXCLUDED."Description",

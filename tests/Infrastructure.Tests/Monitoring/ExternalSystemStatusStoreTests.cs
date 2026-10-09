@@ -33,6 +33,25 @@ public sealed class ExternalSystemStatusStoreTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task ReplaceAsync_WithNonUtcOffsets_StoresTheSameInstants()
+    {
+        var name = Unique("partner");
+        var checkedAt = new DateTimeOffset(2026, 8, 30, 14, 0, 0, TimeSpan.FromHours(2));
+        var notAfter = new DateTimeOffset(2026, 11, 30, 3, 30, 0, TimeSpan.FromHours(-5));
+        await using var context = _fixture.CreateContext();
+        var store = new ExternalSystemStatusStore(context);
+
+        await store.ReplaceAsync(
+            [Row(name, ExternalSystemState.Healthy, checkedAt) with { CertificateNotAfter = notAfter }],
+            CancellationToken.None);
+
+        var row = (await store.ListAsync(CancellationToken.None))
+            .Single(r => string.Equals(r.Name, name, StringComparison.Ordinal));
+        row.CheckedAt.Should().Be(checkedAt);
+        row.CertificateNotAfter.Should().Be(notAfter);
+    }
+
+    [Fact]
     public async Task ReplaceAsync_CalledTwiceForTheSameSystem_KeepsOneRowWithTheLatestValues()
     {
         var name = Unique("partner");
