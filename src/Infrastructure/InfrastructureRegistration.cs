@@ -163,6 +163,7 @@ public static class InfrastructureRegistration
         services.AddQuery<GetSignInHealth, SignInHealthView, GetSignInHealthHandler>();
         services.AddQuery<GetTrafficSummary, TrafficSummaryView, GetTrafficSummaryHandler>();
         services.AddQuery<GetTrafficSeries, TrafficSeriesView, GetTrafficSeriesHandler>();
+        services.AddQuery<GetExternalSystemStatus, ExternalSystemsView, GetExternalSystemStatusHandler>();
         services.AddQuery<ListUsers, AdministeredUserPage, ListUsersHandler>();
         services.AddQuery<GetUserActions, AdminActionPage, GetUserActionsHandler>();
         services.AddCommand<ChangeUserRole, bool, ChangeUserRoleHandler>();
