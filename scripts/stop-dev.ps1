@@ -42,6 +42,9 @@ function Stop-PortOwner {
 Stop-PortOwner -Port $apiPort -Name 'API'
 Stop-PortOwner -Port $workerPort -Name 'Job worker'
 Stop-PortOwner -Port $webPort -Name 'Vite dev server'
+# dev.ps1 -WithPartners only; reports "not running" harmlessly otherwise. Its health port (55691)
+# belongs to the same process.
+Stop-PortOwner -Port 55690 -Name 'Partner simulator'
 
 Write-Host '==> Stopping the dev database (and Seq, if it was started)' -ForegroundColor Cyan
 # --profile observability is passed UNCONDITIONALLY, not just when dev.ps1 -WithSeq was used.

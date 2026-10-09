@@ -3,7 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 export const overviewHeading = (p: Page): Locator =>
   p.getByRole('heading', { name: 'Monitoring', level: 1 });
 
-/** A monitoring sub-page's <h1>: 'Traffic', 'Job runs', 'Sign-ins', 'Users'. */
+/** A monitoring sub-page's <h1>: 'Traffic', 'Job runs', 'Sign-ins', 'Users', 'External systems'. */
 export const pageHeading = (p: Page, name: string): Locator =>
   p.getByRole('heading', { name, level: 1 });
 
@@ -139,3 +139,9 @@ export const lockedAccountsTable = (p: Page): Locator =>
 
 export const noUsersMatch = (p: Page): Locator =>
   p.getByText('No accounts match that search.', { exact: true });
+
+// --- /monitoring/integrations -------------------------------------------------------------------
+
+/** One external system's row, located by its `<th scope="row">` name. */
+export const systemRow = (p: Page, name: string): Locator =>
+  p.getByRole('row').filter({ has: p.getByRole('rowheader', { name, exact: true }) });

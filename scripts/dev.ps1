@@ -18,7 +18,11 @@ param(
     # the launched API at it via Observability__Otlp__Enabled / Observability__Otlp__Endpoint.
     # Off by default: appsettings.json already defaults Otlp:Enabled to false, so a plain
     # dev.ps1 run costs nothing extra and never tries to export to a collector that isn't there.
-    [switch]$WithSeq
+    [switch]$WithSeq,
+    # Starts a real mTLS partner (tests/PartnerSimulator) in its own window and points the launched
+    # worker at it via ExternalSystems__Systems__PartnerSimulator__*, so the External systems page
+    # has something to show. Off by default: without it the worker has no external system at all.
+    [switch]$WithPartners
 )
 
 Set-StrictMode -Version Latest
@@ -46,6 +50,12 @@ $apiPort = 5234
 # spawned window nobody is looking at, with the rest of the stack starting normally around it.
 $workerPort = 5235
 $webPort = 5173
+
+# Only read with -WithPartners. Fixed: the e2e run's simulator takes 55692/55693, so the two can
+# run side by side. The certificates are the throwaway dev PKI scripts\new-dev-certs.ps1 writes.
+$partnerPort = 55690
+$partnerHealthPort = 55691
+$partnerCerts = Join-Path $repoRoot '.certs'
 
 function Invoke-Step {
     param([string]$Name, [scriptblock]$Action)
@@ -80,6 +90,10 @@ Invoke-Step 'Checking the ports are free' {
     Assert-PortFree -Port $apiPort -Purpose 'API'
     Assert-PortFree -Port $workerPort -Purpose 'job worker'
     Assert-PortFree -Port $webPort -Purpose 'Vite dev server'
+    if ($WithPartners) {
+        Assert-PortFree -Port $partnerPort -Purpose 'partner simulator'
+        Assert-PortFree -Port $partnerHealthPort -Purpose 'partner simulator health'
+    }
     $global:LASTEXITCODE = 0
 }
 
@@ -164,6 +178,29 @@ Invoke-Step 'Launching the API' {
     $global:LASTEXITCODE = 0
 }
 
+# -WithPartners: a real mTLS partner for the External systems page (ADR 0032), on 55690 with its
+# health on 55691, from the throwaway PKI in .certs/ (generated here if missing). Launched before
+# the worker so its first check usually finds it up; if not, the next check a minute later does.
+if ($WithPartners) {
+    if (-not (Test-Path (Join-Path $partnerCerts 'client.pfx'))) {
+        Invoke-Step 'Generating the dev certificates' {
+            & (Join-Path $PSScriptRoot 'new-dev-certs.ps1')
+            # new-dev-certs.ps1 leaves an existing .certs/ alone, so one without client.pfx stays
+            # incomplete. Say so rather than start a simulator that cannot load its files.
+            if (-not (Test-Path (Join-Path $partnerCerts 'client.pfx'))) {
+                throw ".certs/ has no client.pfx. Run scripts\new-dev-certs.ps1 -Force to regenerate it."
+            }
+        }
+    }
+    Invoke-Step 'Launching the partner simulator' {
+        Start-Process powershell -WorkingDirectory $repoRoot -ArgumentList @(
+            '-NoExit', '-Command',
+            "dotnet run --project tests/PartnerSimulator -- serve `"$partnerCerts`" $partnerPort $partnerHealthPort"
+        )
+        $global:LASTEXITCODE = 0
+    }
+}
+
 # The job worker, in a window of its own. The compose loop runs the same host split the cluster
 # does (ADR 0016) rather than a convenient approximation: the API here listens on no job queue, so
 # without this window an enqueued job simply sits on its RabbitMQ queue and nothing says so.
@@ -178,6 +215,16 @@ Invoke-Step 'Launching the job worker' {
         $env:Observability__Otlp__Enabled = 'true'
         $env:Observability__Otlp__Endpoint = "http://localhost:$seqPort/ingest/otlp"
     }
+    # The worker only: it runs the external-system checks (ADR 0032); the API reads their results
+    # from the database. Removed after spawning like the OTLP pair.
+    if ($WithPartners) {
+        $env:ExternalSystems__Systems__PartnerSimulator__BaseAddress = "https://127.0.0.1:$partnerPort/"
+        $env:ExternalSystems__Systems__PartnerSimulator__Probe__Path = 'ping'
+        $env:ExternalSystems__Systems__PartnerSimulator__ClientCertificate__Path = (Join-Path $partnerCerts 'client.pfx')
+        $env:ExternalSystems__Systems__PartnerSimulator__ClientCertificate__PasswordFile = (Join-Path $partnerCerts 'client.pass')
+        $env:ExternalSystems__Systems__PartnerSimulator__ServerTrust__CaBundlePath = (Join-Path $partnerCerts 'ca.pem')
+        $env:ExternalSystems__Systems__PartnerSimulator__ServerTrust__CheckRevocation = 'false'
+    }
     try {
         Start-Process powershell -WorkingDirectory $repoRoot -ArgumentList @(
             '-NoExit', '-Command', 'dotnet run --project src/Worker'
@@ -188,6 +235,14 @@ Invoke-Step 'Launching the job worker' {
         if ($WithSeq) {
             Remove-Item Env:\Observability__Otlp__Enabled -ErrorAction SilentlyContinue
             Remove-Item Env:\Observability__Otlp__Endpoint -ErrorAction SilentlyContinue
+        }
+        if ($WithPartners) {
+            Remove-Item Env:\ExternalSystems__Systems__PartnerSimulator__BaseAddress -ErrorAction SilentlyContinue
+            Remove-Item Env:\ExternalSystems__Systems__PartnerSimulator__Probe__Path -ErrorAction SilentlyContinue
+            Remove-Item Env:\ExternalSystems__Systems__PartnerSimulator__ClientCertificate__Path -ErrorAction SilentlyContinue
+            Remove-Item Env:\ExternalSystems__Systems__PartnerSimulator__ClientCertificate__PasswordFile -ErrorAction SilentlyContinue
+            Remove-Item Env:\ExternalSystems__Systems__PartnerSimulator__ServerTrust__CaBundlePath -ErrorAction SilentlyContinue
+            Remove-Item Env:\ExternalSystems__Systems__PartnerSimulator__ServerTrust__CheckRevocation -ErrorAction SilentlyContinue
         }
     }
     $global:LASTEXITCODE = 0
@@ -266,6 +321,9 @@ Write-Host "  Postgres         localhost:$pgPort" -ForegroundColor Green
 Write-Host "  RabbitMQ         amqp://localhost:$rabbitPort   UI http://localhost:$rabbitUiPort  (aiframework / aiframework)" -ForegroundColor Green
 if ($WithSeq) {
     Write-Host "  Seq              http://localhost:$seqPort" -ForegroundColor Green
+}
+if ($WithPartners) {
+    Write-Host "  Partner          https://127.0.0.1:$partnerPort (mTLS)   health http://127.0.0.1:$partnerHealthPort/health" -ForegroundColor Green
 }
 Write-Host ''
 Write-Host '  Both tabs open by themselves. Ctrl-C in a window stops that process;' -ForegroundColor DarkGray

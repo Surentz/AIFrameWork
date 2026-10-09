@@ -14,7 +14,7 @@
 // Teardown is teardown-database.ts, which run.ts runs after Playwright exits - not Playwright's
 // globalTeardown, which runs before the webServers stop.
 import { execFileSync } from 'node:child_process';
-import { E2E_CONNECTION_STRING } from '../support/env.ts';
+import { E2E_CERT_DIR, E2E_CONNECTION_STRING } from '../support/env.ts';
 
 // dotnet-ef is a local tool (.config/dotnet-tools.json); without a restore this only works
 // by accident, on a machine that also happens to have it installed globally.
@@ -45,11 +45,26 @@ execFileSync(
   },
 );
 
-// Both hosts are built HERE, once, and playwright.config.ts starts them with `--no-build`.
-// Playwright launches its webServers in parallel, so two `dotnet run`s would each build the
-// projects they share (Application, Infrastructure, Domain) at the same moment and race on the
-// same obj/ files. A compile error is also readable here, where a webServer reports only "Process
-// from config.webServer was not able to start. Exit code: 1".
-for (const host of ['../src/Api', '../src/Worker']) {
+// Both hosts, and the partner simulator, are built HERE, once, and playwright.config.ts starts
+// them with `--no-build`. Playwright launches its webServers in parallel, so two `dotnet run`s
+// would each build the projects they share (Application, Infrastructure, Domain) at the same
+// moment and race on the same obj/ files. A compile error is also readable here, where a
+// webServer reports only "Process from config.webServer was not able to start. Exit code: 1".
+for (const host of ['../src/Api', '../src/Worker', '../tests/PartnerSimulator']) {
   execFileSync('dotnet', ['build', host], { stdio: 'inherit' });
 }
+
+// A fresh throwaway PKI per run for the simulator and the worker's client certificate.
+execFileSync(
+  'dotnet',
+  [
+    'run',
+    '--project',
+    '../tests/PartnerSimulator',
+    '--no-build',
+    '--',
+    'generate-certs',
+    E2E_CERT_DIR,
+  ],
+  { stdio: 'inherit' },
+);
