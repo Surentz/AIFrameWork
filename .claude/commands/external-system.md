@@ -110,6 +110,15 @@ without its configuration fails its calls fast as `Unavailable` instead of refus
 or user-secrets in development. **The API and the worker need the same values**: both host every
 client. Secrets are file paths; there is no key that holds a secret's value.
 
+**Never in `appsettings.Development.json` either.** `WebApplicationFactory` runs both test hosts as
+Development and e2e starts them as Development, so the test suites and CI would call the real
+partner, and the worker tests' one-second status publisher would probe it constantly. For the dev
+loop, put a partner with no secrets in both hosts' `Properties/launchSettings.json`
+`environmentVariables`, which `dotnet run` and IDEs read and which `WebApplicationFactory` and e2e's
+`--no-launch-profile` do not (`StatisticsDenmark` is the example; a profile variable beats the shell
+and user-secrets, so the profile is where it is changed); a partner with secrets goes in
+user-secrets. In a cluster, the `app-config` ConfigMap (the skill's "Deploying a partner").
+
 | Key | Default | When |
 |---|---|---|
 | `BaseAddress` | — (required) | Always. Include the partner's base path. |
@@ -162,7 +171,14 @@ recorded or dead-lettered, and say which.
 
 `./scripts/dev.ps1 -WithPartners` points the worker at the simulator, which serves only `/ping`
 and `/echo`, so it shows the plumbing (certificate, health, the page), not your adapter. Against
-the real partner, configure the system in user-secrets and start the dev loop as usual.
+the real partner, configure the system as step 4 says and start the dev loop as usual.
+
+**Once, before the PR, call the real partner.** The simulator proves your mapping against bodies
+you captured; only the real partner proves the request: encoding (a non-ASCII field name), the
+content type it really answers with, and whether strict JSON accepts its full response. A
+throwaway test that builds `AddExternalSystems` against the real base address, prints what the
+port returns and is deleted afterwards is enough; never commit one, because CI must not depend
+on a third party.
 
 ## 8. Finish
 

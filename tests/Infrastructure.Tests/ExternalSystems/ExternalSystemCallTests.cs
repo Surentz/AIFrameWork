@@ -184,6 +184,23 @@ public sealed class ExternalSystemCallTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public void NotItsContract_IsUnavailableWithNoRetryAfter()
+    {
+        var result = ExternalSystemCall.NotItsContract<string>(System, _logger, "no cell");
+
+        result.Error.Should().Be(new Error(ErrorKind.Unavailable, ExternalSystemCall.UnavailableCode, "Things is unavailable."));
+    }
+
+    [Fact]
+    public void NotItsContract_LogsTheAdaptersReasonAtWarning()
+    {
+        ExternalSystemCall.NotItsContract<string>(System, _logger, "no cell");
+
+        _logs.Records.Should().ContainSingle()
+            .Which.Should().Be(new CapturedLogRecord(LogLevel.Warning, "Things answered with a body that is not its contract: no cell"));
+    }
+
+    [Fact]
     public async Task SendAsync_WhenTheFailureOutlastsTheRetries_IsUnavailable()
     {
         _answers.Enqueue(Results.StatusCode(StatusCodes.Status503ServiceUnavailable));

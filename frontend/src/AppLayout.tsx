@@ -37,6 +37,7 @@ export function AppLayout(): React.JSX.Element {
           <NavLink to="/products" end>
             Catalogue
           </NavLink>
+          <NavLink to="/statistics/population">Population</NavLink>
           <NavLink to="/account/password">Password</NavLink>
           {/* Cosmetics, not the control: the API refuses a non-administrator with a 403 whether
               or not this renders. Hiding it keeps a page nobody can open out of everyone's nav.

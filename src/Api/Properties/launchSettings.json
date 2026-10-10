@@ -8,7 +8,9 @@
       "launchUrl": "scalar/v1",
       "applicationUrl": "http://localhost:5234",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ExternalSystems__Systems__StatisticsDenmark__BaseAddress": "https://api.statbank.dk/v1/",
+        "ExternalSystems__Systems__StatisticsDenmark__Probe__Path": "subjects"
       }
     },
     "https": {
@@ -18,7 +20,9 @@
       "launchUrl": "scalar/v1",
       "applicationUrl": "https://localhost:7181;http://localhost:5234",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ExternalSystems__Systems__StatisticsDenmark__BaseAddress": "https://api.statbank.dk/v1/",
+        "ExternalSystems__Systems__StatisticsDenmark__Probe__Path": "subjects"
       }
     }
   }

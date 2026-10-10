@@ -29,3 +29,9 @@ data:
   # k8s/base/redis.yaml. See ADR 0019.
   Realtime__Enabled: 'true'
   Realtime__RedisConnectionString: 'redis:6379'
+  # The external systems pilot (ADR 0031): Statistics Denmark's StatBank, a public API with no
+  # certificate and no token, so it needs no Secret volume. The api and the worker both read this
+  # ConfigMap, which keeps their two copies identical. The cluster needs outbound internet; without
+  # it the system reads Unhealthy on /monitoring/integrations and the population page says so.
+  ExternalSystems__Systems__StatisticsDenmark__BaseAddress: 'https://api.statbank.dk/v1/'
+  ExternalSystems__Systems__StatisticsDenmark__Probe__Path: 'subjects'

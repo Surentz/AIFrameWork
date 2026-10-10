@@ -442,6 +442,8 @@ defence, so no antiforgery token is issued.
 | `POST` | `/api/notifications/{id}/read` | cookie | Mark one notification read |
 | `POST` | `/api/notifications/read-all` | cookie | Mark every unread notification read |
 | `GET` | `/api/rates?from=&to=` | cookie | An exchange rate; 503 once the provider's retry budget is spent |
+| `GET` | `/api/statistics/population?area=` | cookie | The latest quarter's population for an area (Statistics Denmark, the external systems pilot); 400 for a malformed area, 404 for an unpublished one, 503 when the source is down |
+| `GET` | `/api/statistics/population/areas` | cookie | Every area population figures are published for |
 | `GET` | `/api/monitoring/external-systems` | `Monitoring.Read` | Each external system's last health check, certificate expiry and outbound traffic; written by the worker (ADR 0032) |
 | `GET` | `/api/monitoring/*` | `Monitoring.Read` | The operator's views: access, sign-ins, traffic, job runs and dead letters |
 | `POST` | `/api/monitoring/jobs/trigger`, `…/dead-letters/{messageId}/retry` | `Monitoring.Operate` | Run a scheduled job now; put a dead letter back in play |
@@ -536,6 +538,7 @@ frontend/src/
 | `/products/:id` | `ProductDetail` | authenticated |
 | `/products/:id/edit` | `EditProductForm` | administrator |
 | `/notifications` | `NotificationList` | authenticated |
+| `/statistics/population` | `PopulationPage` | authenticated |
 | `/account/password` | `ChangePasswordPage` | authenticated |
 | `/fulfilment` | `FulfilmentPage` | administrator |
 | `/monitoring` | `MonitoringPage` | administrator |

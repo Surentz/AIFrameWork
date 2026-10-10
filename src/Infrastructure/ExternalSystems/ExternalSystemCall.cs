@@ -141,6 +141,21 @@ internal static partial class ExternalSystemCall
             or HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests
         || (int)status >= 500;
 
+    /// <summary>
+    /// For an adapter's <c>map</c>: the body deserialized but breaks the partner's documented shape
+    /// in a way no DTO can express (no value where exactly one is promised). Logged at Warning,
+    /// like any contract break, and <see cref="ErrorKind.Unavailable"/>. <c>reason</c> is the
+    /// adapter's own constant text, never anything taken from the partner's body.
+    /// </summary>
+    public static Result<T> NotItsContract<T>(string system, ILogger logger, string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(system);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        LogShapeBroken(logger, system, reason);
+        return Unavailable<T>(system, retryAfter: null);
+    }
+
     private static Result<T> Unavailable<T>(string system, TimeSpan? retryAfter) =>
         Result.Failure<T>(new Error(ErrorKind.Unavailable, UnavailableCode, $"{system} is unavailable.", RetryAfter: retryAfter));
 
@@ -170,6 +185,9 @@ internal static partial class ExternalSystemCall
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{System} answered {StatusCode} with a body that is not its contract ({Cause})")]
     private static partial void LogNotItsContract(ILogger logger, string system, int? statusCode, Type? cause);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{System} answered with a body that is not its contract: {Reason}")]
+    private static partial void LogShapeBroken(ILogger logger, string system, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{System} answered {StatusCode} with no body where its contract has one")]
     private static partial void LogNoBody(ILogger logger, string system, int? statusCode);

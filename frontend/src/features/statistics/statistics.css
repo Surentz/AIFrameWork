@@ -1,0 +1,22 @@
+.statistics__picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 24rem;
+  margin-block: 1rem;
+}
+
+.statistics__figure {
+  max-width: 24rem;
+}
+
+.statistics__value {
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.statistics__note {
+  color: var(--muted, #5a6472);
+  font-size: 0.875rem;
+}

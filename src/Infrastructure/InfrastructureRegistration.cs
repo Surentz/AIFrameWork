@@ -6,6 +6,7 @@ using AiFramework.Application.Notifications;
 using AiFramework.Application.Orders;
 using AiFramework.Application.Products;
 using AiFramework.Application.Rates;
+using AiFramework.Application.Statistics;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
@@ -69,6 +70,7 @@ public static class InfrastructureRegistration
         // GetExchangeRate exists in the Application assembly; nothing here needs the provider to
         // be resolvable, only the descriptor to exist. ADR 0014.
         services.AddQuery<GetExchangeRate, ExchangeRateView, GetExchangeRateHandler>();
+        RegisterStatistics(services);
 
         services.AddCommand<RegisterUser, SessionView, RegisterUserHandler>();
         services.AddCommand<SignIn, SessionView, SignInHandler>();
@@ -99,6 +101,17 @@ public static class InfrastructureRegistration
         services.AddScoped<IDomainEventHandler<OrderExportRequested>, OrderExportJobEnqueuer>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Official statistics, read from Statistics Denmark through <c>IPopulationStatistics</c>,
+    /// which <c>ExternalSystemPartners</c> registers (the external systems pilot, ADR 0031). Split
+    /// out of <see cref="AddMessaging"/> for MA0051, like the groups below.
+    /// </summary>
+    private static void RegisterStatistics(IServiceCollection services)
+    {
+        services.AddQuery<GetPopulation, PopulationView, GetPopulationHandler>();
+        services.AddQuery<GetPopulationAreas, PopulationAreasView, GetPopulationAreasHandler>();
     }
 
     /// <summary>

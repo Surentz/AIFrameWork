@@ -11,7 +11,9 @@ only when it has a real call. ADR 0031 has the reasoning.
 ## Adding a partner
 
 Run `/external-system <Name>`: it walks the port, the Refit client, the adapter, the registration,
-the configuration keys and the tests, in that order. The four rules it rests on:
+the configuration keys and the tests, in that order. `ExternalSystems/StatisticsDenmark/` (the pilot:
+Statistics Denmark's StatBank, behind `IPopulationStatistics`) is the worked example, its tests
+`StatBankAdapterTests`. The four rules it rests on:
 
 1. Configure it under `ExternalSystems:Systems:<Name>` (env: `ExternalSystems__Systems__<Name>__BaseAddress`),
    identically for the API and the worker. Secrets are FILE PATHS: `ClientCertificate:Path`,
