@@ -117,6 +117,7 @@ generated-code tree, and keeping them apart is what makes each host's `codegen w
 | `/verify` | Build, test, and lint both stacks, plus the codegen and contract diffs |
 | `/adr <title>` | Record an architecture decision |
 | `/job <name>` | Add a background job: message, handler, registration, tests, regenerated adapters |
+| `/external-system <Name>` | Add a partner integration: Application port, Refit client, adapter, registration, configuration, tests |
 
 | Skill | Load it when |
 |---|---|

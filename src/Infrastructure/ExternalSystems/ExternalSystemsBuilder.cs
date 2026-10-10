@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using AiFramework.Application.Abstractions;
 using AiFramework.Infrastructure.ExternalSystems.Http;
 using AiFramework.Infrastructure.Resilience;
@@ -25,6 +26,12 @@ public sealed partial class ExternalSystemsBuilder
     private const string NotConfiguredAddress = "https://not-configured.invalid";
 
     private const string TokenResendPipeline = "token-resend";
+
+    // A partner's DTOs say which fields its contract guarantees. System.Text.Json ignores that by
+    // default, so a body missing one, or null where the DTO says non-null, would deserialize into
+    // a record that lies about it; with these two on it is a deserialization error, which
+    // ExternalSystemCall reports as Unavailable. Built once: RefitSettings are immutable in use.
+    private static readonly RefitSettings PartnerJson = new(new SystemTextJsonContentSerializer(StrictJsonOptions()));
 
     private readonly HashSet<Type> _clientTypes = [];
 
@@ -68,7 +75,7 @@ public sealed partial class ExternalSystemsBuilder
         var systemName = Snapshot.CanonicalName(name);
         var system = Snapshot.Find(systemName);
 
-        var client = Services.AddRefitGeneratedClient<TApi>()
+        var client = Services.AddRefitGeneratedClient<TApi>(PartnerJson)
             .ConfigureHttpClient((sp, http) =>
             {
                 var current = sp.GetRequiredService<IOptionsMonitor<ExternalSystemsOptions>>().CurrentValue.Find(systemName);
@@ -94,6 +101,14 @@ public sealed partial class ExternalSystemsBuilder
             sp.GetRequiredService<ExternalSystemHandlerFactory>().CreatePrimaryHandler(systemName));
 
         return new ExternalSystemClientBuilder<TApi>(Services, systemName);
+    }
+
+    private static JsonSerializerOptions StrictJsonOptions()
+    {
+        var options = SystemTextJsonContentSerializer.GetDefaultJsonSerializerOptions();
+        options.RespectNullableAnnotations = true;
+        options.RespectRequiredConstructorParameters = true;
+        return options;
     }
 
     /// <summary>This system's timeouts and retry budget; retry off globally, by WithoutRetry, or when unconfigured.</summary>

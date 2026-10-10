@@ -133,6 +133,14 @@ how-to and ADR 0031 the why. Rules that are easy to break:
   traffic, standard resilience, OutboundAttempt traffic, the zero-delay `token-resend` pipeline, Duende's
   token handler, then the certificate-presenting primary handler. `HandlerChainTests` asserts the order. A
   hand-wired `AddHttpClient` for a partner skips traffic, per-system retry and the certificate, silently.
+- **Partners are registered in `ExternalSystemPartners.Add`**, which `AddExternalSystems` calls: both hosts
+  get every partner, and neither `Program.cs` names a partner type. `/external-system` adds the line.
+- **Every adapter call goes through `ExternalSystemCall.SendAsync`.** It is the one mapping from Refit's
+  answer to `Result<T>` (statuses the adapter names, otherwise `Unavailable`; the caller's cancellation
+  propagates). An adapter that catches or inspects `IApiResponse` itself is re-deriving it, and wrong in a
+  way only a timeout or a 401 shows. This is about partners: ADR 0014's `ExchangeRateClient` in
+  `Resilience/` is a plain `HttpClient` against an open API, keeps its own catches, and is not a pattern
+  for a partner adapter.
 - **Names are composed only in `ExternalSystemNames`.** The system name is the config key, health-check name,
   traffic name and token client name; composing one elsewhere lets them drift with no error.
 - **No certificate validation callback, anywhere.** Server trust is `CertificateChainPolicy`.

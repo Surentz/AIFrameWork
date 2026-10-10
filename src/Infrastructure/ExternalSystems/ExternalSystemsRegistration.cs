@@ -79,7 +79,9 @@ public static class ExternalSystemsRegistration
             }
         }
 
-        return new ExternalSystemsBuilder(services, snapshot);
+        var builder = new ExternalSystemsBuilder(services, snapshot);
+        ExternalSystemPartners.Add(builder);
+        return builder;
     }
 
     /// <summary>

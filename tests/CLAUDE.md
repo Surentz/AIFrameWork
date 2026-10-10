@@ -121,6 +121,10 @@ hop (`ChannelWriter`/`ChannelReader`), backpressure, or `WorkerCount` parallelis
 - **Tests script the simulator directly**: `EnqueueEchoStatus(...)` sets the next `/echo` answer
   (a 503, a 401), and `EchoRequests` reads back what arrived — the token and the client
   certificate's subject.
+- **A partner's own routes go in `PartnerSimulatorOptions.Endpoints`**, mapped on the same mTLS
+  listener: that is how an adapter test stands in for one real partner's API.
+  `ExternalSystemCallTests` is the template, and pins the `Result` mapping every adapter shares,
+  so an adapter's own tests cover only its contract (its success shape and the statuses it names).
 - **Keycloak is one container per run** (`[Collection(nameof(KeycloakCollection))]`), with a
   realm generated at start-up so its `private_key_jwt` client can carry this run's certificate.
 - **A Windows green proves nothing about chains.** Windows completes a chain from
