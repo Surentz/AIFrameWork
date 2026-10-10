@@ -5,6 +5,7 @@ import type { FulfilmentOrder } from '../features/fulfilment/types';
 import type { Notification } from '../features/notifications/types';
 import type { Order, OrderExport } from '../features/orders/types';
 import type { Product } from '../features/products/types';
+import type { Population, PopulationAreas } from '../features/statistics/types';
 
 // Typed against the generated schema, not loose. An untyped fixture is how a renamed backend
 // property leaves the frontend tests passing while the app breaks — the tests would keep
@@ -84,6 +85,28 @@ export const aSession: Session = {
 
 /** The same person, promoted. For the screens that render differently for an administrator. */
 export const anAdminSession: Session = { ...aSession, role: 'Admin' };
+
+// Statistics Denmark's FOLK1A, as the API relays it (the external systems pilot). Real figures
+// from 2026Q3, trimmed to three areas.
+export const populationAreas: PopulationAreas = {
+  areas: [
+    { code: '000', name: 'All Denmark' },
+    { code: '084', name: 'Region Hovedstaden' },
+    { code: '101', name: 'Copenhagen' },
+  ],
+  source: 'Statistics Denmark (CC BY 4.0)',
+};
+
+export function aPopulation(areaCode: string): Population {
+  const area = populationAreas.areas.find((candidate) => candidate.code === areaCode);
+  return {
+    areaCode,
+    areaName: area?.name ?? areaCode,
+    period: '2026Q3',
+    population: areaCode === '101' ? 670389 : 6013891,
+    source: 'Statistics Denmark (CC BY 4.0)',
+  };
+}
 
 export const handlers = [
   http.post('/api/auth/login', () => HttpResponse.json(aSession)),
@@ -380,6 +403,10 @@ export const handlers = [
   // every suite that mounts AppLayout takes this path and falls back to polling. It also has to
   // exist at all, since onUnhandledFrame is 'error'.
   http.post('/hubs/notifications/negotiate', () => new HttpResponse(null, { status: 404 })),
+  http.get('/api/statistics/population/areas', () => HttpResponse.json(populationAreas)),
+  http.get('/api/statistics/population', ({ request }) =>
+    HttpResponse.json(aPopulation(new URL(request.url).searchParams.get('area') ?? '')),
+  ),
 ];
 
 export const server = setupServer(...handlers);

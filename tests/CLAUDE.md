@@ -125,6 +125,12 @@ hop (`ChannelWriter`/`ChannelReader`), backpressure, or `WorkerCount` parallelis
   listener: that is how an adapter test stands in for one real partner's API.
   `ExternalSystemCallTests` is the template, and pins the `Result` mapping every adapter shares,
   so an adapter's own tests cover only its contract (its success shape and the statuses it names).
+  `StatBankAdapterTests` is a complete partner example: canned bodies captured from the real API,
+  served with its real content type (`text/json`), and the request it sent read back.
+- **A route lambda taking only `HttpContext` and returning `Task` is a `RequestDelegate`.** ASP.NET
+  Core then discards the `IResult` an async lambda returns and answers an empty 200, which the
+  adapter reports as "no body" and the test as a baffling Unavailable. Take `HttpRequest` (or any
+  second parameter) instead: `async (HttpRequest request) => …`.
 - **Keycloak is one container per run** (`[Collection(nameof(KeycloakCollection))]`), with a
   realm generated at start-up so its `private_key_jwt` client can carry this run's certificate.
 - **A Windows green proves nothing about chains.** Windows completes a chain from

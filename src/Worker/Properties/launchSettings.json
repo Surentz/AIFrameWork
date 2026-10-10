@@ -7,7 +7,9 @@
       "launchBrowser": false,
       "applicationUrl": "http://localhost:5235",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ExternalSystems__Systems__StatisticsDenmark__BaseAddress": "https://api.statbank.dk/v1/",
+        "ExternalSystems__Systems__StatisticsDenmark__Probe__Path": "subjects"
       }
     }
   }

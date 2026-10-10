@@ -21,6 +21,7 @@ import { CreateProductForm } from './features/products/CreateProductForm';
 import { EditProductForm } from './features/products/EditProductForm';
 import { ProductDetail } from './features/products/ProductDetail';
 import { ProductList } from './features/products/ProductList';
+import { PopulationPage } from './features/statistics/PopulationPage';
 
 export function AppRoutes(): React.JSX.Element {
   return (
@@ -52,6 +53,7 @@ export function AppRoutes(): React.JSX.Element {
           </Route>
           <Route path="/products/:id" element={<ProductDetail />} />
           <Route path="/notifications" element={<NotificationList />} />
+          <Route path="/statistics/population" element={<PopulationPage />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
 
           {/* A second layout route inside RequireAuth: signed in AND an administrator. Nested

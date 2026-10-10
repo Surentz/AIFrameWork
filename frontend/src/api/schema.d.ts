@@ -37,6 +37,128 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/statistics/population": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** The latest quarter's population for a three-digit area code (000 is all of Denmark). */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly area?: string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["PopulationResponse"];
+                        readonly "application/json": components["schemas"]["PopulationResponse"];
+                        readonly "text/json": components["schemas"]["PopulationResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                readonly 503: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/statistics/population/areas": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Every area figures are published for: all of Denmark, the regions and the municipalities. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["PopulationAreasResponse"];
+                        readonly "application/json": components["schemas"]["PopulationAreasResponse"];
+                        readonly "text/json": components["schemas"]["PopulationAreasResponse"];
+                    };
+                };
+                /** @description Service Unavailable */
+                readonly 503: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/rates": {
         readonly parameters: {
             readonly query?: never;
@@ -2803,6 +2925,24 @@ export interface components {
             readonly sku: string;
             /** Format: int32 */
             readonly quantity: number | string;
+        };
+        readonly PopulationAreaResponse: {
+            readonly code: string;
+            readonly name: string;
+        };
+        readonly PopulationAreasResponse: {
+            readonly areas: readonly components["schemas"]["PopulationAreaResponse"][];
+            readonly source: string;
+        };
+        /** @description An area's latest published population, with the attribution its licence requires. */
+        readonly PopulationResponse: {
+            readonly areaCode: string;
+            readonly areaName: string;
+            /** @description The quarter the figure is for, as the source labels it (e.g. `2026Q3`). */
+            readonly period: string;
+            /** Format: int64 */
+            readonly population: number | string;
+            readonly source: string;
         };
         readonly ProblemDetails: {
             readonly type?: null | string;

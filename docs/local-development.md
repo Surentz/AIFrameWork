@@ -166,8 +166,16 @@ pointed at it.
 
 ## External systems and dev certificates
 
-The dev loop calls no external system unless you configure one under
-`ExternalSystems:Systems:<Name>`, so a fresh checkout needs nothing here. To try one locally:
+**One partner is configured out of the box: Statistics Denmark** (the external systems pilot), set
+in both hosts' `Properties/launchSettings.json`, so `dev.ps1`, `dotnet run` and IDE launches call
+its public StatBank API (no certificate, no key). It needs internet: offline, `/statistics/population`
+shows the source as unavailable and `/monitoring/integrations` shows `StatisticsDenmark` unhealthy,
+and nothing else is affected. Tests and e2e never call it: they do not use launch profiles.
+A launch profile's variables override both the shell's and user-secrets, so to point the dev loop
+elsewhere or switch it off, edit the profile (or pass `--no-launch-profile`); `$env:` will not win.
+
+Any other external system is called only once you configure it under
+`ExternalSystems:Systems:<Name>`. To try one with a certificate locally:
 
 ```powershell
 ./scripts/new-dev-certs.ps1          # throwaway PKI into .certs/; -Force to regenerate

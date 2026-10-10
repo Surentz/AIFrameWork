@@ -17,6 +17,155 @@
         }
       }
     },
+    "/api/statistics/population": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "The latest quarter's population for a three-digit area code (000 is all of Denmark).",
+        "parameters": [
+          {
+            "name": "area",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PopulationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PopulationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PopulationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/statistics/population/areas": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Every area figures are published for: all of Denmark, the regions and the municipalities.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PopulationAreasResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PopulationAreasResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PopulationAreasResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/rates": {
       "get": {
         "tags": [
@@ -4325,6 +4474,73 @@
         },
         "description": "Business-rule validation (non-empty, max length, positive quantity) is owned by\n`PlaceOrderValidator` in the validation behavior — not duplicated here as\nDataAnnotations. See `src/Api/CLAUDE.md`."
       },
+      "PopulationAreaResponse": {
+        "required": [
+          "code",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PopulationAreasResponse": {
+        "required": [
+          "areas",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PopulationAreaResponse"
+            }
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "PopulationResponse": {
+        "required": [
+          "areaCode",
+          "areaName",
+          "period",
+          "population",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "areaCode": {
+            "type": "string"
+          },
+          "areaName": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string",
+            "description": "The quarter the figure is for, as the source labels it (e.g. `2026Q3`)."
+          },
+          "population": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "description": "An area's latest published population, with the attribution its licence requires."
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -4953,6 +5169,9 @@
   "tags": [
     {
       "name": "AiFramework.Api"
+    },
+    {
+      "name": "Statistics"
     },
     {
       "name": "Rates"

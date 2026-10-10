@@ -19,6 +19,8 @@ internal static class ExternalSystemPartners
 
         // One chain per partner, in name order: AddClient of the partner's Refit interface under
         // its configuration name, then WithAdapter of the Application port and its adapter, and
-        // WithoutRetry(reason) when its writes take no idempotency key. None yet.
+        // WithoutRetry(reason) when its writes take no idempotency key.
+        builder.AddClient<StatisticsDenmark.IStatBankApi>(StatisticsDenmark.StatBankAdapter.SystemName)
+            .WithAdapter<Application.Statistics.IPopulationStatistics, StatisticsDenmark.StatBankAdapter>();
     }
 }
