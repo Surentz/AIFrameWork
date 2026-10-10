@@ -2,8 +2,9 @@ namespace AiFramework.Infrastructure.ExternalSystems.Http;
 
 /// <summary>
 /// The primary handler for a system that cannot be called — no usable certificate, no trust
-/// bundle, not configured. Throws the same exception a failed handshake would, so the adapter's
-/// existing HttpRequestException → Unavailable mapping covers it, and never touches the network.
+/// bundle, not configured. Throws the same exception a failed handshake would, so it reaches the
+/// adapter as a send that got no response, which ExternalSystemCall maps to Unavailable, and it
+/// never touches the network.
 /// </summary>
 /// <remarks>
 /// IHttpClientFactory caches a primary handler for its lifetime (two minutes), so a fixed

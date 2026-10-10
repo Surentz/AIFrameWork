@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +33,13 @@ public sealed class PartnerSimulatorOptions
     /// certificate (Playwright's webServer). Null: none.
     /// </summary>
     public int? HealthPort { get; init; }
+
+    /// <summary>
+    /// A partner's own routes, mapped on the mTLS listener beside /ping and /echo: how a test
+    /// stands in for one real partner's API (the /external-system command's adapter tests).
+    /// Null: only the built-in routes.
+    /// </summary>
+    public Action<IEndpointRouteBuilder>? Endpoints { get; init; }
 }
 
 public sealed record SimulatorRequest(string? Authorization, string? ClientCertificateSubject);
@@ -154,6 +162,8 @@ public sealed class PartnerSimulatorApp : IAsyncDisposable
         {
             echo.RequireAuthorization();
         }
+
+        options.Endpoints?.Invoke(app);
 
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
 

@@ -10,21 +10,31 @@ only when it has a real call. ADR 0031 has the reasoning.
 
 ## Adding a partner
 
-1. Configure it under `ExternalSystems:Systems:<Name>` (env: `ExternalSystems__Systems__<Name>__BaseAddress`).
-   Secrets are FILE PATHS: `ClientCertificate:Path`, `ClientCertificate:PasswordFile`, `Auth:ClientSecretFile`,
-   `ServerTrust:CaBundlePath`. There is no option that holds a secret's value — do not add one.
+Run `/external-system <Name>`: it walks the port, the Refit client, the adapter, the registration,
+the configuration keys and the tests, in that order. The four rules it rests on:
+
+1. Configure it under `ExternalSystems:Systems:<Name>` (env: `ExternalSystems__Systems__<Name>__BaseAddress`),
+   identically for the API and the worker. Secrets are FILE PATHS: `ClientCertificate:Path`,
+   `ClientCertificate:PasswordFile`, `Auth:ClientSecretFile`, `ServerTrust:CaBundlePath`. There is no option
+   that holds a secret's value — do not add one.
 2. In `src/Infrastructure/ExternalSystems/<Name>/`: an `internal` Refit interface whose methods return
    `IApiResponse<T>` (never `Task<T>`, which throws `ApiException`), the partner's DTOs, and an adapter
-   implementing the Application port. The adapter converts the FINAL outcome to `Result<T>` exactly as
-   `ExchangeRateClient` does: `HttpRequestException`, `TimeoutRejectedException`, `BrokenCircuitException` →
-   `ErrorKind.Unavailable`; a caller's cancellation propagates. Refit 16's `StatusCode` is nullable and
-   `Error` is `ApiExceptionBase` (`Content` lives on `ApiException`), so check `IsReceived` first.
-3. Register inside `AddExternalSystems`: `builder.AddClient<IPartnerApi>("<Name>").WithAdapter<IPort, PartnerAdapter>()`.
-   `AddClient` uses the source-generated `AddRefitGeneratedClient<T>()`; one interface per system
-   (a second `AddClient` with the same type throws).
-4. A non-GET call runs only in a worker job and carries an idempotency key from the job's message id. If the
-   partner takes none: `.WithoutRetry("why")` (the reason is required, and logged once when the host starts:
-   the standard handler's options are `ValidateOnStart`, and building them runs our configuration).
+   implementing the Application port. **Every adapter call goes through `ExternalSystemCall.SendAsync`**, which
+   turns the FINAL outcome into `Result<T>`: the rejections the adapter names (status, and body when the partner
+   keeps its meaning there) become its errors, everything
+   else — a refused connection, a timeout, a 5xx after retries, a 401/403, a body not in the partner's shape —
+   is `Unavailable` (`external_system.unavailable`), and the caller's cancellation propagates. Refit 16
+   reports a failed send inside the response (`IsReceived` false), except the caller's cancellation, which it
+   rethrows; `ExternalSystemCallTests` pins each case. Never hand-write that mapping again.
+3. Register it in `ExternalSystemPartners.Add`, one chain per partner:
+   `builder.AddClient<IPartnerApi>("<Name>").WithAdapter<IPort, PartnerAdapter>()`. `AddExternalSystems`
+   calls it, so both hosts get it and neither `Program.cs` names a partner type. `AddClient` uses the
+   source-generated `AddRefitGeneratedClient<T>()`; one interface per system (a second `AddClient` with the
+   same type throws).
+4. A non-GET call runs only in a worker job and carries an idempotency key that is a field on the job's
+   message, minted once at enqueue, so every redelivery and retry sends the same one. If the partner takes
+   none: `.WithoutRetry("why")` (the reason is required, and logged once when the host starts: the standard
+   handler's options are `ValidateOnStart`, and building them runs our configuration).
 
 ## Things that will cost you an afternoon
 
@@ -46,7 +56,7 @@ only when it has a real call. ADR 0031 has the reasoning.
 - **An IdP outage can look like a partner 401.** When token acquisition fails, Duende 4.2's
   `AccessTokenRequestHandler` logs a warning and sends the request anyway: with no `Authorization` header, or,
   on the resend, still carrying the token the partner just rejected. The partner answers 401, the resend
-  fails the same way, and the adapter sees a final 401. Map a 401 that survived the resend to `Unavailable`,
+  fails the same way, and the adapter sees a final 401. `ExternalSystemCall` maps a 401 that survived the resend to `Unavailable`,
   never to a business error; the `<Name>:token` health entry says which side is down.
 - **The circuit breaker is per Refit interface, not per system.** Two interfaces for one system are two
   named clients with two breakers, and one can be open while the other keeps calling.
