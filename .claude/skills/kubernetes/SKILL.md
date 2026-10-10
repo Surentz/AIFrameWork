@@ -100,7 +100,8 @@ out of rotation.
 environment's Vault Secrets Operator must meet — one Secret per system mounted at
 `/var/run/secrets/external-systems/<system>/`, `rolloutRestartTargets` naming the api and worker
 Deployments — but the local overlay mounts none and configures no system, so nothing here calls
-one.
+one. The external-systems skill's "Deploying a partner" section has the ConfigMap keys, a
+`VaultStaticSecret` and the volume patch for when one does.
 
 `./deploy/e2e-k8s.ps1` runs the Playwright suite against this cluster — a gate that exercises
 durable Wolverine, caching on, two replicas, and the real rate limit, none of which the compose

@@ -64,6 +64,98 @@ only when it has a real call. ADR 0031 has the reasoning.
   provides it. Certificate rotation does not — the provider re-reads the file every two minutes.
 - **Outbound traffic is not on the traffic page's totals.** `TrafficReader` counts inbound kinds only.
 
+## Deploying a partner (Kubernetes)
+
+Nothing in `k8s/` configures a partner: the kind overlay calls none, so this is the recipe for a real
+cluster, built on ADR 0031's Vault Secrets Operator (VSO) contract. Use the system name in lower case
+in paths and resource names (`Acme` → `acme`).
+
+**1. Settings → the `app-config` ConfigMap.** Both the api and the worker Deployments `envFrom` it,
+which is what gives them the identical values they must have. File paths are not secrets, so they
+belong here too:
+
+```yaml
+  ExternalSystems__Systems__Acme__BaseAddress: 'https://api.acme.example/v1/'
+  ExternalSystems__Systems__Acme__Probe__Path: 'health'   # no leading '/'
+  ExternalSystems__Systems__Acme__ClientCertificate__Path: '/var/run/secrets/external-systems/acme/client.pfx'
+  ExternalSystems__Systems__Acme__ClientCertificate__PasswordFile: '/var/run/secrets/external-systems/acme/client.pass'
+  ExternalSystems__Systems__Acme__Auth__Kind: 'ClientSecret'
+  ExternalSystems__Systems__Acme__Auth__TokenEndpoint: 'https://idp.example/realms/partners/protocol/openid-connect/token'
+  ExternalSystems__Systems__Acme__Auth__ClientId: 'aiframework'
+  ExternalSystems__Systems__Acme__Auth__ClientSecretFile: '/var/run/secrets/external-systems/acme/client-secret'
+```
+
+Double underscores throughout: a single one binds nothing and warns nothing.
+
+**2. Secret files → one Kubernetes Secret per system, synced by VSO.** Keys `client.pfx`, `client.pass`,
+and optionally `client-secret` and `ca.pem` (ADR 0031). `rolloutRestartTargets` names both Deployments,
+because Duende reads a client secret once; a renewed certificate alone would be picked up within a few
+minutes without it (the provider re-reads the file every two minutes, after the kubelet has updated it).
+
+```yaml
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: external-system-acme
+  namespace: aiframework
+spec:
+  vaultAuthRef: aiframework          # your cluster's VaultAuth
+  mount: kv
+  type: kv-v2
+  path: aiframework/external-systems/acme
+  refreshAfter: 1h
+  destination:
+    name: external-system-acme
+    create: true
+    transformation:
+      excludeRaw: true
+      templates:
+        # KV holds text, so the PFX is stored base64-encoded and decoded back into bytes here.
+        client.pfx:
+          text: '{{- get .Secrets "client_pfx_base64" | b64dec -}}'
+        client.pass:
+          text: '{{- get .Secrets "client_pass" -}}'
+        client-secret:
+          text: '{{- get .Secrets "client_secret" -}}'
+  rolloutRestartTargets:
+    - kind: Deployment
+      name: api
+    - kind: Deployment
+      name: worker
+```
+
+Not exercised in this repo (kind runs no VSO): check the transformation syntax against your VSO
+version, and that the decoded `client.pfx` opens (`openssl pkcs12 -info -in client.pfx -noout`) before
+pointing a pod at it. **The PFX must hold the intermediates** — Linux sends only what it holds.
+
+**3. Mount it in both Deployments**, from your overlay (one patch per Deployment; the container is
+`api` in one and `worker` in the other):
+
+```yaml
+spec:
+  template:
+    spec:
+      volumes:
+        - name: external-system-acme
+          secret:
+            secretName: external-system-acme
+      containers:
+        - name: api
+          volumeMounts:
+            - name: external-system-acme
+              mountPath: /var/run/secrets/external-systems/acme
+              readOnly: true
+```
+
+Leave the volume's `defaultMode` alone: the images run as a non-root user (`$APP_UID`), so `0400` would
+leave the files root-only and the certificate check would report them unreadable. `readOnlyRootFilesystem`
+is unaffected; a Secret volume is its own mount.
+
+**4. Check it.** Once the pods restart, `/monitoring/integrations` shows the system within a minute (the
+worker's status publisher), and the `<Name>:certificate` and `<Name>:token` entries say which part fails.
+`/health/ready` never does, by design. A host that starts but cannot read a file does not crash: that
+system fails fast as `Unavailable` and its certificate check says why.
+
 ## Monitoring (ADR 0032)
 
 - **Status table.** `external_system_status` holds one row per configured system: worst status,
