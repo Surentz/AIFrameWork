@@ -334,6 +334,10 @@ Secrets are always **file paths**, never values — in a deployed environment th
 Vault Secrets Operator mounts (the contract is in ADR 0031; the manifests are not written yet).
 The `external-systems` skill has the full configuration, including OAuth.
 
+To see the monitoring page with a real partner, `./scripts/dev.ps1 -WithPartners` starts the test
+partner simulator (mTLS on 55690, health on 55691) from `.certs/` (generated if missing) and points
+the worker at it. Without the flag the worker has no external system and the page is empty.
+
 ### Running on Kubernetes
 
 A local kind cluster that runs the stack at **two API replicas across two worker nodes**, to
@@ -397,6 +401,8 @@ so draining that node will not reschedule it. Target a different node for a drai
 | 55432 | End-to-end PostgreSQL, throwaway | `docker-compose.e2e.yml` |
 | 55672/55673 | Development RabbitMQ: AMQP / management UI (`aiframework`/`aiframework`) | `docker-compose.yml` |
 | 55682/55683 | End-to-end RabbitMQ, throwaway | `docker-compose.e2e.yml` |
+| 55690/55691 | Dev partner simulator: mTLS / health, only with `dev.ps1 -WithPartners` | `tests/PartnerSimulator` |
+| 55692/55693 | End-to-end partner simulator: mTLS / health | `frontend/playwright.config.ts` |
 | 55341 | Seq, only with `dev.ps1 -WithSeq` | `docker-compose.yml` (`observability` profile) |
 | 8080/8443 | kind ingress | `deploy/kind-cluster.yaml` |
 
@@ -436,6 +442,7 @@ defence, so no antiforgery token is issued.
 | `POST` | `/api/notifications/{id}/read` | cookie | Mark one notification read |
 | `POST` | `/api/notifications/read-all` | cookie | Mark every unread notification read |
 | `GET` | `/api/rates?from=&to=` | cookie | An exchange rate; 503 once the provider's retry budget is spent |
+| `GET` | `/api/monitoring/external-systems` | `Monitoring.Read` | Each external system's last health check, certificate expiry and outbound traffic; written by the worker (ADR 0032) |
 | `GET` | `/api/monitoring/*` | `Monitoring.Read` | The operator's views: access, sign-ins, traffic, job runs and dead letters |
 | `POST` | `/api/monitoring/jobs/trigger`, `…/dead-letters/{messageId}/retry` | `Monitoring.Operate` | Run a scheduled job now; put a dead letter back in play |
 | `GET`/`POST` | `/api/monitoring/users/*` | `Users.Manage` | List accounts, promote or demote, revoke sessions, an account's history |
@@ -456,8 +463,9 @@ web host only so that Kubernetes has something to probe.
 Both hosts register each configured external system's probe, certificate and token checks,
 tagged `external`, and both `/health/ready` endpoints filter them out
 (`ExternalSystemHealth.IsNotExternal`). A partner that is down makes its own checks Unhealthy;
-it never takes an API or worker pod out of rotation. Showing those checks to an operator is the
-next planned step (a monitoring page), not something either endpoint does.
+it never takes an API or worker pod out of rotation. The worker's status publisher records
+those checks every minute and the monitoring page shows them (`/monitoring/integrations`, ADR
+0032); neither endpoint does.
 
 `/hubs/notifications` is a SignalR hub, mapped only when `Realtime__Enabled` is on. It is
 **best-effort by contract**: the feed is the truth, and the push only closes the window in which
@@ -532,6 +540,7 @@ frontend/src/
 | `/fulfilment` | `FulfilmentPage` | administrator |
 | `/monitoring` | `MonitoringPage` | administrator |
 | `/monitoring/jobs`, `/logins`, `/traffic`, `/users` | `JobsPage`, `LoginsPage`, `TrafficPage`, `UsersPage` | administrator |
+| `/monitoring/integrations` | `IntegrationsPage` | administrator |
 
 `/products/new` and `/orders/exports` are declared before `/products/:id` and `/orders/:id`, so
 that `new` and `exports` match their literal routes rather than being captured as an id.
@@ -764,6 +773,7 @@ All accepted, in [`docs/adr/`](docs/adr/).
 | [0029](docs/adr/0029-order-exports-are-stored-in-postgres-and-fail-by-staleness.md) | Order exports are stored in Postgres and fail by staleness |
 | [0030](docs/adr/0030-order-exports-are-pdfs-rendered-by-migradoc.md) | Order exports are PDFs rendered by MigraDoc |
 | [0031](docs/adr/0031-outbound-integrations-with-external-systems.md) | Outbound integrations with external systems: mTLS, OAuth 2.0, one fixed handler chain |
+| [0032](docs/adr/0032-external-system-status-is-published-by-the-worker.md) | External system status is published by the worker, not by a job |
 
 Record a new one with `/adr <title>`. **Check the open branches as well as `docs/adr/` before
 taking a number** — two branches that each take "the next one" produce a duplicate, which has

@@ -155,7 +155,7 @@ budget nor the administrator: it publishes `shipment.confirmed.v1` through the b
 management HTTP API directly from the host (`support/broker.ts`), and only the stack
 `playwright.config.ts` starts exposes that port — the kind cluster does not.
 
-**A `kind` run therefore executes 28 of the 58 tests** — `npm run e2e` runs all of them, where
+**A `kind` run therefore executes 28 of the 59 tests** — `npm run e2e` runs all of them, where
 the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
@@ -189,9 +189,15 @@ Playwright launches them in parallel, and two `dotnet run` builds of the project
 on the same `obj/` files. A consequence: `npx playwright test` run directly, bypassing `run.ts`,
 starts whatever was last built.
 
-The managed stack uses ports 5234 (API), 5235 (worker), 4173 (preview), 55432 (Postgres) and
-55682/55683 (RabbitMQ, AMQP and management UI) — the first two are also the dev loop's. Stop it
+The managed stack uses ports 5234 (API), 5235 (worker), 4173 (preview), 55432 (Postgres),
+55682/55683 (RabbitMQ, AMQP and management UI) and 55692/55693 (the partner simulator: mTLS and health; `SIMULATOR_PORT` / `SIMULATOR_HEALTH_PORT`) — the first two are also the dev loop's. Stop it
 first, or set `API_PORT` / `WORKER_PORT`.
+
+The simulator is a fourth `webServer` (`tests/PartnerSimulator -- serve`). Its certificates live in
+`frontend/e2e/.certs/` (git-ignored) and are **reused across local runs**, regenerated only when a
+file is missing or `client.pfx` is over 365 days old: each fresh PKI leaks one same-subject
+intermediate into Windows `CurrentUser\CA`. CI generates them every run. `integrations.spec.ts` is
+`@local-only` and `test.slow()` (it waits on the worker's one-minute publisher).
 
 ## What is covered
 
@@ -201,7 +207,7 @@ first, or set `API_PORT` / `WORKER_PORT`.
 | Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation), shipment confirmed via the broker, export to PDF (request, built by the worker, notified, read in the in-app viewer — drawn by pdf.js, Esc closes, focus returns — and downloaded) |
 | Products | create, edit, edit-from-detail, duplicate sku, field validation (all as the operator), member refused the form, paging |
 | Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
-| Monitoring | access, overview, drill-downs, traffic window, jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
+| Monitoring | access, overview, drill-downs, traffic window, external systems (simulator healthy, dead address unhealthy), jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
 
 Not covered end to end, deliberately: the dead-letter retry (nothing dead-letters on purpose),
 traffic numbers (a clock race against the minute flush — ADR 0021), and realtime push (off in the

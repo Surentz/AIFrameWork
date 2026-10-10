@@ -58,11 +58,36 @@ only when it has a real call. ADR 0031 has the reasoning.
   handler's own validation requires it, against a 30 s default).
 - **Names come only from `ExternalSystemNames`.** Never compose a client or check name by hand.
 - **A missing certificate does not stop the host.** That system fails fast (`FailFastHandler`) and reports
-  Unhealthy; check the `<Name>:certificate` health entry (and `/api/monitoring/external-systems` once PR 3
-  lands). The failure is retried before it surfaces, except for a system that is not configured.
+  Unhealthy; check the `<Name>:certificate` health entry (and `/api/monitoring/external-systems`, which shows it, ADR 0032).
+  The failure is retried before it surfaces, except for a system that is not configured.
 - **Client-secret rotation needs a restart** (Duende reads the secret once); VSO's `rolloutRestartTargets`
   provides it. Certificate rotation does not — the provider re-reads the file every two minutes.
 - **Outbound traffic is not on the traffic page's totals.** `TrafficReader` counts inbound kinds only.
+
+## Monitoring (ADR 0032)
+
+- **Status table.** `external_system_status` holds one row per configured system: worst status,
+  description, `checked_at` (UTC), `certificate_not_after`, `token_ok`. The worker's
+  `ExternalSystemStatusPublisher` (an `IHealthCheckPublisher`, registered by
+  `AddExternalSystemStatusPublisher`, **never in the API**) rewrites it every
+  `Monitoring:ExternalSystemStatusPeriod` (default 1 minute; 5 s delay, 30 s timeout, `external`
+  checks only): last-write-wins upsert, plus delete of systems no longer configured. It is not a
+  Quartz job, so it never appears on the Jobs page.
+- **Stale after 3 minutes.** An older row means the worker is not running and reads as stale, never
+  as its last status. A check that threw is described as `check failed: <ExceptionType>`, never by
+  its message, because descriptions reach the browser.
+- **Page.** `GET /api/monitoring/external-systems` (`Monitoring.Read`) joins the rows with the last
+  hour of outbound traffic; `/monitoring/integrations` and the strip on `/monitoring` refresh every
+  30 s. Opening it never probes a partner.
+- **Metrics and alerts.** Meter `AiFramework.ExternalSystems`: `aiframework.external_system.calls`
+  and `aiframework.external_system.certificate.time_remaining`. Alerts `ExternalSystemFailing` and
+  `ExternalSystemCertificateExpiring` (see the `kubernetes` skill).
+- **The framework logs every Unhealthy check at Error.** The worker's `appsettings.json` sets the
+  `Microsoft.Extensions.Diagnostics.HealthChecks.DefaultHealthCheckService` category to `Critical`;
+  as a side effect the worker's own `/health/ready` failures are not logged (the 503 still counts).
+- **Seeing it locally.** `./scripts/dev.ps1 -WithPartners` runs the simulator (55690/55691) and
+  points the worker at it. The e2e run's simulator is on 55692/55693 and its certificates are kept
+  in `frontend/e2e/.certs/` between local runs.
 
 ## Local development
 

@@ -8,6 +8,7 @@ description: Use when starting, stopping or debugging the local dev loop - dev.p
 ```powershell
 ./scripts/dev.ps1                                            # all of the below, in three windows
 ./scripts/dev.ps1 -WithSeq                                   # same, plus Seq at localhost:55341
+./scripts/dev.ps1 -WithPartners                              # same, plus a real mTLS test partner on 55690 (health 55691)
 ./scripts/worker.ps1                                         # just the job worker, in this window
 ./scripts/new-dev-certs.ps1                                  # throwaway PKI into .certs/, for trying an external system
 ```
@@ -20,6 +21,13 @@ see the `external-systems` skill.
 The three windows are the API (5234), the **job worker** (5235) and Vite (5173). `worker.ps1` is
 for restarting only the worker — which `dotnet run --project src/Worker -- codegen write` requires
 before new adapters take effect, and which is otherwise a stop-everything-and-start-again.
+
+`-WithPartners` launches `tests/PartnerSimulator` in a window of its own (mTLS on 55690, health on
+55691) from `.certs/`, running `new-dev-certs.ps1` first if `client.pfx` is missing, and gives the
+launched worker `ExternalSystems__Systems__PartnerSimulator__*` so `/monitoring/integrations` has a
+system to show. It checks both ports are free, and `stop-dev.ps1` frees 55690. The e2e simulator
+uses 55692/55693, so the two run side by side. The control panel has no entry for it: run the flag
+from a terminal.
 
 `-WithSeq` starts `docker-compose.yml`'s `observability` profile alongside Postgres and points
 the launched API at it (`Observability__Otlp__Enabled`/`__Endpoint`, set on the API's own

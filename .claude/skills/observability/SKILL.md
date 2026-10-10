@@ -113,6 +113,11 @@ the Postgres traffic rollup below, which stays the monitoring page's source.
   `dotnet.thread_pool.*`), Npgsql (`db.client.operation.duration`, `db.client.connection.count`
   by state against `db.client.connection.max`), and `Wolverine:*` (`wolverine-execution-time`,
   `wolverine-messages-received`/`-succeeded`, `wolverine-dead-letter-queue`, inbox/outbox counts).
+  `AiFramework.ExternalSystems` (ADR 0032): the counter `aiframework.external_system.calls`
+  (`system`, `outcome` of succeeded/failed/faulted; logical calls, counted outside retry) and the
+  gauge `aiframework.external_system.certificate.time_remaining` (seconds, `system`; set only by
+  the worker's status publisher). Prometheus names them `aiframework_external_system_calls_total`
+  and `aiframework_external_system_certificate_time_remaining_seconds`. Both hosts `AddMeter` it.
   **API only:** ASP.NET Core's built-in meters (`http.server.request.duration`, Kestrel, auth,
   rate limiting). The worker skips them for the reason it skips ASP.NET tracing.
 - **No `OpenTelemetry.Instrumentation.Runtime`.** On .NET 9+ it only subscribes to

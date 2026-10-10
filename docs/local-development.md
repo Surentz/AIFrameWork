@@ -9,6 +9,7 @@ the reference; the script and the IDE sections build on it.
 ./scripts/dev.ps1                  # database, broker, migrations, API, job worker, dev server
 ./scripts/dev.ps1 -SkipMigrations  # when you know the schema is current
 ./scripts/dev.ps1 -WithSeq         # same, plus Seq (structured logs) at localhost:55341
+./scripts/dev.ps1 -WithPartners    # same, plus a real mTLS test partner (simulator) on 55690
 ```
 
 It checks Docker is running and that 5234, 5235 and 5173 are free, starts Postgres and RabbitMQ
@@ -152,6 +153,8 @@ direction.
 | 55432 | e2e Postgres | `PG_PORT` |
 | 55672/55673 | Dev RabbitMQ: AMQP / management UI | `RABBITMQ_PORT` / `RABBITMQ_UI_PORT` |
 | 55682/55683 | e2e RabbitMQ: AMQP / management UI | `E2E_RABBITMQ_PORT` / `E2E_RABBITMQ_UI_PORT` |
+| 55690/55691 | Dev partner simulator: mTLS / health (`-WithPartners` only) | none, fixed |
+| 55692/55693 | e2e partner simulator: mTLS / health | `SIMULATOR_PORT` / `SIMULATOR_HEALTH_PORT` |
 
 The two *databases* and the two *brokers* are designed to run at the same time. The API and
 worker processes are not: `npm run e2e` starts its own API on 5234 and worker on 5235 with
@@ -175,6 +178,13 @@ which is git-ignored — never commit anything from it. Point a system's
 `ClientCertificate__Path`, `ClientCertificate__PasswordFile` and `ServerTrust__CaBundlePath` at
 those files (environment variables or user-secrets; the values are paths, never secrets
 themselves). The `external-systems` skill has the full configuration and how to add a partner.
+
+To see the monitoring page's External systems view with a real partner, run
+`./scripts/dev.ps1 -WithPartners`. It checks 55690 and 55691 are free, starts
+`tests/PartnerSimulator` in its own window from `.certs/` (running `new-dev-certs.ps1` first if
+`client.pfx` is missing), and gives the worker a `PartnerSimulator` system pointed at it. The
+worker's publisher checks it every minute (ADR 0032), so allow up to a minute for the first row.
+`stop-dev.ps1` stops the simulator. Without the flag the worker has no external system.
 
 The tests do not use `.certs/` — they generate their own certificates in memory and start
 Keycloak in a container, so `dotnet test` needs Docker but no setup step.
