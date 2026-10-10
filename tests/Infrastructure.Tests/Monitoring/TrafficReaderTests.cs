@@ -62,4 +62,30 @@ public sealed class TrafficReaderTests(PostgresFixture fixture)
 
         series.Points.Should().ContainSingle(point => point.BucketStart == minute).Which.Total.Should().Be(2);
     }
+
+    [Fact]
+    public async Task OutboundAsync_SumsCallsAndAttemptsPerSystem()
+    {
+        var minute = new DateTimeOffset(2026, 8, 25, 12, 9, 0, TimeSpan.Zero);
+        var system = $"sys-{Guid.NewGuid():N}"[..20];
+        var instance = $"pod-{Guid.NewGuid():N}"[..20];
+        await using (var context = _fixture.CreateContext())
+        {
+            context.TrafficBuckets.AddRange(
+                new TrafficBucket { BucketStart = minute, Kind = TrafficKind.Outbound, Name = system, InstanceId = instance, Succeeded = 8, Failed = 1, Faulted = 1 },
+                new TrafficBucket { BucketStart = minute, Kind = TrafficKind.OutboundAttempt, Name = system, InstanceId = instance, Succeeded = 8, Failed = 1, Faulted = 4 },
+                new TrafficBucket { BucketStart = minute, Kind = TrafficKind.Http, Name = $"GET /{system}", InstanceId = instance, Succeeded = 50 });
+            await context.SaveChangesAsync();
+        }
+
+        await using var reading = _fixture.CreateContext();
+        var rows = await new TrafficReader(reading).OutboundAsync(minute.AddMinutes(-1), CancellationToken.None);
+
+        var row = rows.Should().ContainSingle(r => r.System == system).Subject;
+        row.Calls.Should().Be(10);
+        row.Failed.Should().Be(1);
+        row.Faulted.Should().Be(1);
+        row.Attempts.Should().Be(13);
+        rows.Should().NotContain(r => r.System == $"GET /{system}");
+    }
 }

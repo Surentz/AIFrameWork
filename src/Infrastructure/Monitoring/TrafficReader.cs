@@ -29,34 +29,15 @@ internal sealed class TrafficReader(AiFrameworkDbContext context) : ITrafficRead
     /// </summary>
     private static readonly TrafficKind[] InboundKinds = [TrafficKind.Http, TrafficKind.Command, TrafficKind.Query];
 
+    private static readonly TrafficKind[] OutboundKinds = [TrafficKind.Outbound, TrafficKind.OutboundAttempt];
+
     public async Task<TrafficSummaryView> SummarizeAsync(
         DateTimeOffset since, CancellationToken cancellationToken)
     {
-        var grouped = await context.TrafficBuckets
-            .AsNoTracking()
-            .Where(bucket => bucket.BucketStart >= since && InboundKinds.Contains(bucket.Kind))
-            .GroupBy(bucket => new { bucket.Kind, bucket.Name })
-            .Select(group => new Totals
-            {
-                Kind = group.Key.Kind,
-                Name = group.Key.Name,
-                Succeeded = group.Sum(b => (long)b.Succeeded),
-                Failed = group.Sum(b => (long)b.Failed),
-                Faulted = group.Sum(b => (long)b.Faulted),
-                DurationMsTotal = group.Sum(b => b.DurationMsTotal),
-                B0 = group.Sum(b => (long)b.Bucket0),
-                B1 = group.Sum(b => (long)b.Bucket1),
-                B2 = group.Sum(b => (long)b.Bucket2),
-                B3 = group.Sum(b => (long)b.Bucket3),
-                B4 = group.Sum(b => (long)b.Bucket4),
-                B5 = group.Sum(b => (long)b.Bucket5),
-                B6 = group.Sum(b => (long)b.Bucket6),
-                B7 = group.Sum(b => (long)b.Bucket7),
-                B8 = group.Sum(b => (long)b.Bucket8),
-                B9 = group.Sum(b => (long)b.Bucket9),
-                B10 = group.Sum(b => (long)b.Bucket10),
-            })
-            .ToListAsync(cancellationToken)
+        var grouped = await TotalsByKindAndNameAsync(
+                context.TrafficBuckets.AsNoTracking()
+                    .Where(bucket => bucket.BucketStart >= since && InboundKinds.Contains(bucket.Kind)),
+                cancellationToken)
             .ConfigureAwait(false);
 
         var rows = grouped
@@ -118,6 +99,58 @@ internal sealed class TrafficReader(AiFrameworkDbContext context) : ITrafficRead
 
         return new TrafficSeriesView(since, points);
     }
+
+    public async Task<IReadOnlyList<OutboundTrafficView>> OutboundAsync(
+        DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        var grouped = await TotalsByKindAndNameAsync(
+                context.TrafficBuckets.AsNoTracking()
+                    .Where(bucket => bucket.BucketStart >= since && OutboundKinds.Contains(bucket.Kind)),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var attempts = grouped
+            .Where(totals => totals.Kind == TrafficKind.OutboundAttempt)
+            .ToDictionary(totals => totals.Name, totals => totals.Total, StringComparer.Ordinal);
+
+        return grouped
+            .Where(totals => totals.Kind == TrafficKind.Outbound)
+            .Select(totals => new OutboundTrafficView(
+                totals.Name,
+                totals.Total,
+                totals.Failed,
+                totals.Faulted,
+                attempts.GetValueOrDefault(totals.Name),
+                TrafficHistogram.Percentile(totals.Histogram, 0.95)))
+            .OrderBy(view => view.System, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static Task<List<Totals>> TotalsByKindAndNameAsync(
+        IQueryable<TrafficBucket> buckets, CancellationToken cancellationToken) =>
+        buckets
+            .GroupBy(bucket => new { bucket.Kind, bucket.Name })
+            .Select(group => new Totals
+            {
+                Kind = group.Key.Kind,
+                Name = group.Key.Name,
+                Succeeded = group.Sum(b => (long)b.Succeeded),
+                Failed = group.Sum(b => (long)b.Failed),
+                Faulted = group.Sum(b => (long)b.Faulted),
+                DurationMsTotal = group.Sum(b => b.DurationMsTotal),
+                B0 = group.Sum(b => (long)b.Bucket0),
+                B1 = group.Sum(b => (long)b.Bucket1),
+                B2 = group.Sum(b => (long)b.Bucket2),
+                B3 = group.Sum(b => (long)b.Bucket3),
+                B4 = group.Sum(b => (long)b.Bucket4),
+                B5 = group.Sum(b => (long)b.Bucket5),
+                B6 = group.Sum(b => (long)b.Bucket6),
+                B7 = group.Sum(b => (long)b.Bucket7),
+                B8 = group.Sum(b => (long)b.Bucket8),
+                B9 = group.Sum(b => (long)b.Bucket9),
+                B10 = group.Sum(b => (long)b.Bucket10),
+            })
+            .ToListAsync(cancellationToken);
 
     private static TrafficRowView ToRow(Totals totals) => new(
         totals.Kind,

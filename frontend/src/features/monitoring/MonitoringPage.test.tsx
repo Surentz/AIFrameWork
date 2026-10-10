@@ -63,4 +63,16 @@ describe('MonitoringPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
     expect(screen.getByRole('link', { name: 'Job runs and dead letters' })).toBeInTheDocument();
   });
+
+  it('shows one status per external system and links to the integrations page', async () => {
+    renderPage();
+
+    const systems = within(await screen.findByRole('list', { name: 'External systems' }));
+    expect(systems.getByText(/PartnerSimulator/)).toBeInTheDocument();
+    expect(systems.getByText(/Unhealthy/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /External system health and traffic/ })).toHaveAttribute(
+      'href',
+      '/monitoring/integrations',
+    );
+  });
 });

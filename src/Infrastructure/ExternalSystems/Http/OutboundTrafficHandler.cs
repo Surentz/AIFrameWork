@@ -18,7 +18,8 @@ namespace AiFramework.Infrastructure.ExternalSystems.Http;
 /// Without it (a handler used alone), the handler's own token is the caller's.
 /// </remarks>
 internal sealed class OutboundTrafficHandler(
-    ITrafficRecorder recorder, TimeProvider time, string systemName, TrafficKind kind) : DelegatingHandler
+    ITrafficRecorder recorder, TimeProvider time, string systemName, TrafficKind kind,
+    ExternalSystemMetrics? metrics = null) : DelegatingHandler
 {
     private static readonly HttpRequestOptionsKey<CancellationToken> CallerToken =
         new("AiFramework.ExternalSystems.CallerCancellationToken");
@@ -53,6 +54,12 @@ internal sealed class OutboundTrafficHandler(
             if (record)
             {
                 recorder.Record(kind, systemName, outcome, (long)time.GetElapsedTime(started).TotalMilliseconds);
+
+                // Calls, not attempts: the alert rule wants one count per call, outside retry.
+                if (kind == TrafficKind.Outbound)
+                {
+                    metrics?.RecordCall(systemName, outcome);
+                }
             }
         }
     }

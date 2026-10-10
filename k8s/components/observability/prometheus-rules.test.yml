@@ -187,3 +187,79 @@ tests:
           - exp_labels: { severity: critical, job: aiframework-api }
             exp_annotations:
               summary: No telemetry from the API for over 5 minutes.
+
+  # 3 of every 10 calls fault: 30%, over 20% with at least 10 calls per 5 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Partner", outcome="succeeded"}'
+        values: '0+7x20'
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Partner", outcome="faulted"}'
+        values: '0+3x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExternalSystemFailing
+        exp_alerts:
+          - exp_labels: { severity: warning, system: Partner }
+            exp_annotations:
+              summary: Partner is failing.
+              description: 30% of calls to Partner faulted over the last 5 minutes. The monitoring page's External systems view shows its last health check.
+
+  # 3 faulted of 4 calls in 5 minutes: a high ratio but under the 10-call floor, so quiet.
+  - interval: 1m
+    input_series:
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Quiet", outcome="succeeded"}'
+        values: '0+0.2x20'
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Quiet", outcome="faulted"}'
+        values: '0+0.6x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExternalSystemFailing
+        exp_alerts: []
+
+  # Plenty of calls (10 a minute) but only 1 in 10 faulted: 10%, under the 20% line, so quiet.
+  - interval: 1m
+    input_series:
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Healthy", outcome="succeeded"}'
+        values: '0+9x20'
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Healthy", outcome="faulted"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExternalSystemFailing
+        exp_alerts: []
+
+  # Just under the line: 9 of every 50 calls fault, 18%, so quiet.
+  - interval: 1m
+    input_series:
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Borderline", outcome="succeeded"}'
+        values: '0+41x20'
+      - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Borderline", outcome="faulted"}'
+        values: '0+9x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ExternalSystemFailing
+        exp_alerts: []
+
+  # 10 days left: under the 14-day line.
+  - interval: 1m
+    input_series:
+      - series: 'aiframework_external_system_certificate_time_remaining_seconds{job="aiframework-worker", system="Partner"}'
+        values: '864000x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: ExternalSystemCertificateExpiring
+        exp_alerts:
+          - exp_labels: { severity: warning, system: Partner }
+            exp_annotations:
+              summary: Partner's client certificate expires in under 14 days.
+              description: Renew it in Vault; Vault Secrets Operator mounts the new file and the pods restart onto it (ADR 0031).
+
+  # 60 days left: quiet.
+  - interval: 1m
+    input_series:
+      - series: 'aiframework_external_system_certificate_time_remaining_seconds{job="aiframework-worker", system="Partner"}'
+        values: '5184000x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: ExternalSystemCertificateExpiring
+        exp_alerts: []

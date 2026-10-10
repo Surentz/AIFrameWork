@@ -15,4 +15,11 @@ public interface ITrafficReader
 
     public Task<TrafficSeriesView> SeriesAsync(
         DateTimeOffset since, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Per external system: calls (<c>Outbound</c>) and physical attempts (<c>OutboundAttempt</c>),
+    /// summed across instances. The only read that sees outbound kinds; the others exclude them.
+    /// </summary>
+    public Task<IReadOnlyList<OutboundTrafficView>> OutboundAsync(
+        DateTimeOffset since, CancellationToken cancellationToken);
 }

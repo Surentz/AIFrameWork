@@ -74,6 +74,10 @@ builder.Services.Configure<ResilienceOptions>(builder.Configuration.GetSection("
 // partner run here as jobs. ADR 0031.
 builder.Services.AddExternalSystems(builder.Configuration.GetSection(ExternalSystemsOptions.SectionName));
 
+// The worker alone runs the external checks on a timer and writes external_system_status, which
+// the API's monitoring page reads (ADR 0032). The API registers the same checks but never publishes.
+builder.Services.AddExternalSystemStatusPublisher();
+
 // .NET's default is 30 seconds, which would abandon a heavy job long before Kubernetes was
 // willing to: k8s/base/worker.yaml sets terminationGracePeriodSeconds: 300. The two numbers are
 // meaningless apart — raising one without the other either wastes the grace period or gets the

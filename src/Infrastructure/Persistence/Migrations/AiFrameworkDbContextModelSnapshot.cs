@@ -336,6 +336,35 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                     b.ToTable("job_runs", (string)null);
                 });
 
+            modelBuilder.Entity("AiFramework.Infrastructure.Monitoring.ExternalSystemStatusRow", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("CertificateNotAfter")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool?>("TokenOk")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Name");
+
+                    b.ToTable("external_system_status", (string)null);
+                });
+
             modelBuilder.Entity("AiFramework.Infrastructure.Monitoring.TrafficBucket", b =>
                 {
                     b.Property<DateTimeOffset>("BucketStart")

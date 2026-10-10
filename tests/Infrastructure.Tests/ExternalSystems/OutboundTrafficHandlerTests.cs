@@ -1,8 +1,11 @@
+using System.Diagnostics.Metrics;
 using System.Net;
 using AiFramework.Application.Abstractions;
+using AiFramework.Infrastructure.ExternalSystems;
 using AiFramework.Infrastructure.ExternalSystems.Http;
 using AiFramework.Infrastructure.Tests.Resilience;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
 namespace AiFramework.Infrastructure.Tests.ExternalSystems;
@@ -66,5 +69,54 @@ public sealed class OutboundTrafficHandlerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
         stub.CallCount.Should().Be(1);
         _recorder.DidNotReceiveWithAnyArgs().Record(default, default!, default, default);
+    }
+
+    [Fact]
+    public async Task Send_AsTheOutboundCounter_RecordsTheCallMetric()
+    {
+        var calls = await SendWithMetricsAsync(TrafficKind.Outbound);
+
+        calls.Should().ContainSingle().Which.Should().Be(("Sim", "faulted"));
+    }
+
+    [Fact]
+    public async Task Send_AsTheAttemptCounter_RecordsNoCallMetric()
+    {
+        var calls = await SendWithMetricsAsync(TrafficKind.OutboundAttempt);
+
+        calls.Should().BeEmpty();
+    }
+
+    private static async Task<List<(string System, string Outcome)>> SendWithMetricsAsync(TrafficKind kind)
+    {
+        var calls = new List<(string System, string Outcome)>();
+        await using var services = new ServiceCollection().AddMetrics().BuildServiceProvider();
+        var metrics = new ExternalSystemMetrics(
+            services.GetRequiredService<IMeterFactory>(), TimeProvider.System);
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (string.Equals(instrument.Meter.Name, ExternalSystemMetrics.MeterName, StringComparison.Ordinal))
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            var tagged = tags.ToArray().ToDictionary(t => t.Key, t => (string?)t.Value, StringComparer.Ordinal);
+            calls.Add((tagged["system"]!, tagged["outcome"]!)); // the counter always sets both.
+        });
+        listener.Start();
+
+        using var handler = new OutboundTrafficHandler(
+            Substitute.For<ITrafficRecorder>(), TimeProvider.System, "Sim", kind, metrics)
+        {
+            InnerHandler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)),
+        };
+        using var invoker = new HttpMessageInvoker(handler);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://partner.example/echo");
+        using var response = await invoker.SendAsync(request, CancellationToken.None);
+
+        return calls;
     }
 }

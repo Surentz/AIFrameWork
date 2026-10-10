@@ -1,3 +1,4 @@
+using AiFramework.Infrastructure.ExternalSystems.Health;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure.ExternalSystems;
@@ -24,6 +25,11 @@ internal sealed class ExternalSystemsOptionsValidator : IValidateOptions<Externa
     private static void Check(string name, ExternalSystemOptions system, List<string> failures)
     {
         var at = $"ExternalSystems:Systems:{name}";
+
+        if (string.Equals(name, ExternalSystemHealth.Tag, StringComparison.OrdinalIgnoreCase))
+        {
+            failures.Add($"{at}: the system name must not be \"{ExternalSystemHealth.Tag}\" (any case): it is the tag that marks external health checks, so the system would never get a status row.");
+        }
 
         // The name ends up in health-check names, metric labels and a traffic row's Name, and
         // ":" is the separator in the first of those.

@@ -1,9 +1,13 @@
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import {
   API_PORT,
+  E2E_CERT_DIR,
   E2E_CONNECTION_STRING,
   E2E_RABBITMQ_URL,
   PREVIEW_PORT,
+  SIMULATOR_HEALTH_PORT,
+  SIMULATOR_PORT,
   WORKER_PORT,
 } from './e2e/support/env.ts';
 import { ADMIN_USERNAME } from './e2e/support/identity.ts';
@@ -154,7 +158,36 @@ export default defineConfig({
               ConnectionStrings__RabbitMq: E2E_RABBITMQ_URL,
               ASPNETCORE_URLS: `http://localhost:${WORKER_PORT}`,
               ASPNETCORE_ENVIRONMENT: 'Development',
+              // Two external systems for the External systems page: the simulator over mTLS, and
+              // an address nothing listens on. Checked every 5 s instead of every minute (ADR 0032).
+              ExternalSystems__Systems__PartnerSimulator__BaseAddress: `https://127.0.0.1:${SIMULATOR_PORT}/`,
+              ExternalSystems__Systems__PartnerSimulator__Probe__Path: 'ping',
+              ExternalSystems__Systems__PartnerSimulator__ClientCertificate__Path: path.join(
+                E2E_CERT_DIR,
+                'client.pfx',
+              ),
+              ExternalSystems__Systems__PartnerSimulator__ClientCertificate__PasswordFile:
+                path.join(E2E_CERT_DIR, 'client.pass'),
+              ExternalSystems__Systems__PartnerSimulator__ServerTrust__CaBundlePath: path.join(
+                E2E_CERT_DIR,
+                'ca.pem',
+              ),
+              ExternalSystems__Systems__PartnerSimulator__ServerTrust__CheckRevocation: 'false',
+              ExternalSystems__Systems__Unreachable__BaseAddress: 'https://127.0.0.1:1/',
+              Monitoring__ExternalSystemStatusPeriod: '00:00:05',
             },
+          },
+          {
+            // A real mTLS partner for the External systems page (ADR 0032). Built by
+            // prepare-database.ts; certificates generated there too.
+            command: `dotnet run --project ../tests/PartnerSimulator --no-build -- serve "${E2E_CERT_DIR}" ${SIMULATOR_PORT} ${SIMULATOR_HEALTH_PORT}`,
+            url: `http://127.0.0.1:${SIMULATOR_HEALTH_PORT}/health`,
+            timeout: 60_000,
+            reuseExistingServer: false,
+            stdout: 'pipe',
+            stderr: 'pipe',
+            // At Information it logs five lines per probe, every 5 s, for the whole run.
+            env: serverLogging,
           },
           {
             command: `npm run build && npm run preview -- --port ${PREVIEW_PORT}`,

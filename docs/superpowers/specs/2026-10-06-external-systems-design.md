@@ -1,7 +1,7 @@
 # Outbound integrations with external systems — design
 
 **Date:** 2026-10-06
-**Status:** Plumbing built (PR 2); monitoring (PR 3) pending. Approved 2026-10-06. Amended while planning PR 2: issuer as the assertion audience, a contract change for `TrafficKind`, an inbound-only traffic page, in-process simulator scripting, and when the partner-isolation rule arrives.
+**Status:** Plumbing built (PR 2); monitoring built (PR 3). Approved 2026-10-06. Amended while planning PR 2: issuer as the assertion audience, a contract change for `TrafficKind`, an inbound-only traffic page, in-process simulator scripting, and when the partner-isolation rule arrives.
 **Type:** this document is `docs(integrations)`; the build is two `feat` pull requests (§6).
 **Builds on:** ADR 0014 (retry and resilience), ADR 0021/0027 (operational telemetry and
 metrics), ADR 0016/0026 (jobs in the worker, RabbitMQ), all of which stay in force.
@@ -136,8 +136,8 @@ still registers: its primary handler fails fast as "not configured", which the a
   health failure for that one system (§2), never a host that refuses to start.
 - The global `Resilience:Enabled=false` test switch applies to every system's retry as well.
 
-The ports `55690` (simulator) and `55691` (Keycloak) are proposed for the dev profile, following
-the repository's `556xx` convention; the e2e simulator takes `55692`.
+The dev simulator takes `55690` (HTTPS) and `55691` (health), following the repository's `556xx`
+convention; the e2e simulator takes `55692` and `55693`.
 
 ### Adapters
 
@@ -224,8 +224,11 @@ each host.
 
 ### Who runs them
 
-A worker job, scheduled by Quartz every minute, runs the `external`-tagged checks and upserts one
-row per system into a new table **`external_system_status`**:
+The worker's `IHealthCheckPublisher` (`ExternalSystemStatusPublisher`) runs the `external`-tagged
+checks every `Monitoring:ExternalSystemStatusPeriod` (default one minute) and upserts one row per
+system into a new table **`external_system_status`**. It is not a Quartz job, which this section
+first specified: that would add about 1,440 `job_runs` rows a day and bury the real jobs on the
+Jobs page. See ADR 0032.
 
 | Column | |
 |---|---|
@@ -236,7 +239,7 @@ row per system into a new table **`external_system_status`**:
 | `certificate_not_after` | Nullable |
 | `token_ok` | Nullable |
 
-Rows for systems no longer configured are deleted by the same job. The page treats a row older
+Rows for systems no longer configured are deleted by the same publisher run. The page treats a row older
 than 3 minutes as **stale** (the worker is not running), rather than trusting it — failure by
 staleness, as ADR 0029 does for exports. Opening the page never probes a partner.
 
@@ -259,8 +262,11 @@ runs in every host.
 
 ### Metrics and alerts
 
-The standard resilience handler's metrics are already emitted. Added: a gauge
-`aiframework.external_system.certificate.days_remaining{system}`, and two rules in
+The standard resilience handler's metrics are already emitted. Added, on the meter
+`AiFramework.ExternalSystems` (registered in both hosts): the counter
+`aiframework.external_system.calls{system,outcome}` (logical calls, counted outside retry) and the
+observable gauge `aiframework.external_system.certificate.time_remaining{system}`, in seconds and
+set by the worker's publisher, and two rules in
 `k8s/components/observability/prometheus-rules.yml` with promtool tests: certificate under 14 days;
 more than 20% of a system's `Outbound` calls `Faulted` over 5 minutes, with at least 10 calls in
 that window (so one failed call at night does not page anyone).
@@ -300,19 +306,21 @@ endpoints are added in PR 3 only if the containerised e2e run needs them.
 | `Api.IntegrationTests` | `/health/ready` excludes `external`; Monitoring endpoint 403 for a non-admin and its response shape. |
 | `Worker.IntegrationTests` | `/health/ready` excludes `external`; the status job writes and prunes rows. |
 | Frontend (Vitest + MSW) | The strip and the page, including stale and expiring states. |
-| e2e (Playwright) | `docker-compose.e2e.yml` adds the simulator, mTLS only, no Keycloak (its start-up stays out of every run). Two systems configured — the simulator and an address nobody listens on — and the page shows one Healthy, one Unhealthy. |
+| e2e (Playwright) | The simulator runs as a fourth Playwright `webServer` (`serve <certDir> <httpsPort> <healthPort>`), not in `docker-compose.e2e.yml`; mTLS only, no Keycloak (its start-up stays out of every run). Two systems configured — the simulator and an address nobody listens on — and the page shows one Healthy, one Unhealthy. |
 
 Retry testing follows `ExchangeRateClientTests.AdvanceUntilCompleteAsync` (`FakeTimeProvider`,
 real-delay loop bounded by real time).
 
 ### Dev loop
 
-`scripts/new-dev-certs.ps1` as above. `dev.ps1 -WithPartners` starts the simulator and Keycloak
-under a compose profile; a bare `dev.ps1` is unchanged, as with Seq and Redis.
+`scripts/new-dev-certs.ps1` as above. `dev.ps1 -WithPartners` starts the simulator only (55690, health 55691); Keycloak is not started
+in the dev loop, and OAuth stays covered by the Testcontainers tests. A bare `dev.ps1` is
+unchanged, as with Seq and Redis.
 
 ### Kubernetes
 
-The kind overlay gets a Secret created by `deploy.ps1` from `.certs/`, standing in for what VSO
+*(Not done in PR 3: nothing in the cluster calls a partner yet, so there is nothing to mount, and
+the VSO contract in ADR 0031 stands.)* The kind overlay would get a Secret created by `deploy.ps1` from `.certs/`, standing in for what VSO
 would produce, mounted read-only into the API and worker pods. **VSO manifests are not written
 now** — there is no Vault to test them against. ADR 0031 records the contract they must meet: one
 Secret per system, mounted at `/var/run/secrets/external-systems/<system>/`, with keys
@@ -346,7 +354,7 @@ Outcomes (ADR 0031 has the full text):
 |---|---|---|
 | 1 | `docs(integrations): design for outbound external systems` | This spec. |
 | 2 | `feat(integrations): call external systems over mTLS and OAuth 2.0` | `ExternalSystems/` plumbing, Duende and Refit, per-system resilience, `Outbound`/`OutboundAttempt` traffic kinds, the three health checks, the `/health/ready` filter in both hosts, `tests/PartnerSimulator`, the Keycloak realm, unit and integration tests, `new-dev-certs.ps1`. ADR 0031. A new `external-systems` skill, a row in root `CLAUDE.md`'s skills table, a section in `Infrastructure/CLAUDE.md`. API contract regenerated for the two new `TrafficKind` members only; no migration. Plan: [`2026-10-06-external-systems-plumbing.md`](../plans/2026-10-06-external-systems-plumbing.md). |
-| 3 | `feat(monitoring): show external system health and traffic` | Status job, `external_system_status` table (new migration), Monitoring endpoint, regenerated API contract and Wolverine adapters, the overview strip and `/monitoring/integrations`, the e2e case, alert rules with promtool tests, `dev.ps1 -WithPartners`. |
+| 3 | `feat(monitoring): show external system health and traffic` | Status publisher in the worker (ADR 0032, not a job), `external_system_status` table (new migration), Monitoring endpoint, regenerated API contract (no Wolverine adapters: no handler was added), the overview strip and `/monitoring/integrations`, the e2e case, the `AiFramework.ExternalSystems` meter, alert rules with promtool tests, `dev.ps1 -WithPartners`. The kind-overlay Secret mount was not done. |
 
 ## Out of scope
 

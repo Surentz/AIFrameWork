@@ -63,6 +63,27 @@ public sealed class PartnerSimulatorTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    [Fact]
+    public async Task Health_OnTheHealthPort_AnswersOverPlainHttpWithoutACertificate()
+    {
+        using var pki = TestPki.Create();
+        var healthPort = FreeTcpPort();
+        await using var simulator = await PartnerSimulatorApp.StartAsync(
+            new PartnerSimulatorOptions
+            {
+                ServerCertificate = TestPki.Usable(pki.IssueServer()),
+                TrustedClientRoot = pki.Root,
+                HealthPort = healthPort,
+            },
+            CancellationToken.None);
+        using var client = new HttpClient();
+
+        var response = await client.GetAsync(new Uri($"http://127.0.0.1:{healthPort}/health"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        simulator.BaseAddress.Scheme.Should().Be("https");
+    }
+
     internal static Task<PartnerSimulatorApp> StartAsync(TestPki pki, string? jwtAuthority = null) =>
         PartnerSimulatorApp.StartAsync(
             new PartnerSimulatorOptions
@@ -72,6 +93,13 @@ public sealed class PartnerSimulatorTests
                 JwtAuthority = jwtAuthority,
             },
             CancellationToken.None);
+
+    private static int FreeTcpPort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
 
     private static HttpClient ClientPresenting(TestPki pki, X509Certificate2? certificate) =>
         ClientPresenting(pki, certificate, pki.Intermediate);

@@ -39,6 +39,10 @@ public static class MonitoringRegistration
         services.AddScoped<ITrafficReader, TrafficReader>();
         services.AddScoped<IAdminActionReader, AdminActionReader>();
 
+        services.AddScoped<ExternalSystemStatusStore>();
+        services.AddScoped<IExternalSystemStatusReader>(sp => sp.GetRequiredService<ExternalSystemStatusStore>());
+        services.AddScoped<IExternalSystemStatusStore>(sp => sp.GetRequiredService<ExternalSystemStatusStore>());
+
         services.AddScoped<IJobRunRetention, JobRunRetention>();
         services.AddScoped<ISignInEventRetention, SignInEventRetention>();
         services.AddScoped<ITrafficRetention, TrafficRetention>();

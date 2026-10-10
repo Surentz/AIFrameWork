@@ -1,4 +1,5 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Monitoring;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Users;
 
@@ -324,4 +325,43 @@ public sealed record AdminActionPageResponse
 public sealed record ChangeUserRoleRequest
 {
     public required UserRole Role { get; init; }
+}
+
+/// <summary>Every external system's last health and last hour of traffic.</summary>
+public sealed record ExternalSystemsResponse
+{
+    public required DateTimeOffset TrafficSince { get; init; }
+
+    public required IReadOnlyList<ExternalSystemRowResponse> Systems { get; init; }
+}
+
+/// <summary>One external system. <c>State</c> is null until the worker has checked it once.</summary>
+public sealed record ExternalSystemRowResponse
+{
+    public required string Name { get; init; }
+
+    public ExternalSystemState? State { get; init; }
+
+    /// <summary>The worst check's description. Never a host, path, body or secret.</summary>
+    public string? Description { get; init; }
+
+    public DateTimeOffset? CheckedAt { get; init; }
+
+    /// <summary>The worker has not rewritten this row for three minutes: it is history, not health.</summary>
+    public required bool Stale { get; init; }
+
+    public DateTimeOffset? CertificateNotAfter { get; init; }
+
+    /// <summary>Null when the system uses no token.</summary>
+    public bool? TokenOk { get; init; }
+
+    public required long Calls { get; init; }
+
+    public required long Failed { get; init; }
+
+    public required long Faulted { get; init; }
+
+    public required long Attempts { get; init; }
+
+    public double? P95Ms { get; init; }
 }

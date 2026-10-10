@@ -28,6 +28,13 @@ export type TrafficRow = components['schemas']['TrafficRowResponse'];
 
 export type TrafficSeries = components['schemas']['TrafficSeriesResponse'];
 
+export type ExternalSystems = components['schemas']['ExternalSystemsResponse'];
+
+export type ExternalSystemRow = components['schemas']['ExternalSystemRowResponse'];
+
+// The generator puts null inside the enum because the property is nullable; the state itself is three values.
+export type ExternalSystemState = NonNullable<components['schemas']['ExternalSystemState']>;
+
 export type AdministeredUser = components['schemas']['AdministeredUserResponse'];
 
 export type AdministeredUserPage = components['schemas']['AdministeredUserPageResponse'];

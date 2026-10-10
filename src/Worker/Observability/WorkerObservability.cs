@@ -1,3 +1,4 @@
+using AiFramework.Infrastructure.ExternalSystems;
 using AiFramework.Infrastructure.Jobs.Scheduling;
 using AiFramework.Infrastructure.Observability;
 using OpenTelemetry.Exporter;
@@ -149,6 +150,7 @@ public static class WorkerObservability
             .AddMeter("System.Runtime")
             // Wolverine's meter is "Wolverine:<ServiceName>"; see the Api's ConfigureMetrics.
             .AddMeter("Wolverine:*")
+            .AddMeter(ExternalSystemMetrics.MeterName)
             .AddInfrastructureMetrics();
 
         if (options.Otlp.Enabled && options.Otlp.Metrics)

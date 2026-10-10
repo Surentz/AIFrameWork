@@ -55,4 +55,11 @@ public sealed class MonitoringOptions
     /// it becoming an archive.
     /// </summary>
     public int TrafficRetentionDays { get; set; } = 7;
+
+    /// <summary>
+    /// How often the worker re-runs the external systems' health checks and rewrites
+    /// external_system_status (ADR 0032). The page calls a row stale after three minutes, so keep
+    /// this at a minute or less.
+    /// </summary>
+    public TimeSpan ExternalSystemStatusPeriod { get; set; } = TimeSpan.FromMinutes(1);
 }

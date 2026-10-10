@@ -23,6 +23,15 @@ public sealed class PartnerSimulatorOptions
 
     /// <summary>A Keycloak realm URL. Null: /echo needs no token.</summary>
     public string? JwtAuthority { get; init; }
+
+    /// <summary>The HTTPS (mTLS) port. 0 picks a free one — what the in-process tests use.</summary>
+    public int HttpsPort { get; init; }
+
+    /// <summary>
+    /// A plain-HTTP port serving only <c>/health</c>, for a readiness check that holds no client
+    /// certificate (Playwright's webServer). Null: none.
+    /// </summary>
+    public int? HealthPort { get; init; }
 }
 
 public sealed record SimulatorRequest(string? Authorization, string? ClientCertificateSubject);
@@ -30,9 +39,10 @@ public sealed record SimulatorRequest(string? Authorization, string? ClientCerti
 public sealed record EchoResponse(string? ClientCertificateSubject, string? Subject);
 
 /// <summary>
-/// An mTLS partner on a random loopback port, in-process, with real TLS — TestServer would skip
-/// the handshake that is half of what the tests are about. Tests script /echo's next statuses and
-/// read back what it received.
+/// An mTLS partner on a loopback port, in-process, with real TLS — TestServer would skip the
+/// handshake that is half of what the tests are about. Tests script /echo's next statuses and
+/// read back what it received. The e2e run and the dev loop start one on fixed ports through
+/// Program.cs's <c>serve</c>.
 /// </summary>
 public sealed class PartnerSimulatorApp : IAsyncDisposable
 {
@@ -52,8 +62,14 @@ public sealed class PartnerSimulatorApp : IAsyncDisposable
     /// <summary>The next /echo answers with this status instead of 200, once per call.</summary>
     public void EnqueueEchoStatus(HttpStatusCode status) => _script.Enqueue(status);
 
-    private static void ConfigureTls(KestrelServerOptions kestrel, PartnerSimulatorOptions options) =>
-        kestrel.Listen(IPAddress.Loopback, 0, listen =>
+    private static void ConfigureTls(KestrelServerOptions kestrel, PartnerSimulatorOptions options)
+    {
+        if (options.HealthPort is { } healthPort)
+        {
+            kestrel.Listen(IPAddress.Loopback, healthPort);
+        }
+
+        kestrel.Listen(IPAddress.Loopback, options.HttpsPort, listen =>
             listen.UseHttps(https =>
             {
                 https.ServerCertificate = options.ServerCertificate;
@@ -74,6 +90,7 @@ public sealed class PartnerSimulatorApp : IAsyncDisposable
                 };
                 https.ClientCertificateValidation = (_, _, errors) => errors == SslPolicyErrors.None;
             }));
+    }
 
     private static void AddJwtBearer(IServiceCollection services, string authority)
     {
@@ -116,6 +133,11 @@ public sealed class PartnerSimulatorApp : IAsyncDisposable
             return Results.Text("pong");
         });
 
+        if (options.HealthPort is { } healthPort)
+        {
+            app.MapGet("/health", () => Results.Text("ok")).RequireHost($"*:{healthPort}");
+        }
+
         var echo = app.MapGet("/echo", (HttpContext context) =>
         {
             var subject = context.Connection.ClientCertificate?.Subject;
@@ -135,11 +157,16 @@ public sealed class PartnerSimulatorApp : IAsyncDisposable
 
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
+        // The HTTPS one: with a health port, a plain-HTTP address sits beside it.
         var address = (app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()
-            ?? throw new InvalidOperationException("Kestrel exposes no server addresses.")).Addresses.Single();
+            ?? throw new InvalidOperationException("Kestrel exposes no server addresses.")).Addresses
+            .Single(candidate => candidate.StartsWith("https", StringComparison.Ordinal));
         simulator.BaseAddress = new UriBuilder(address).Uri;
         return simulator;
     }
+
+    /// <summary>Completes when the host is told to stop (Ctrl+C, or the process being ended).</summary>
+    public Task WaitForShutdownAsync() => _app.WaitForShutdownAsync();
 
     public ValueTask DisposeAsync() => _app.DisposeAsync();
 }

@@ -4,6 +4,7 @@ using AiFramework.Infrastructure.ExternalSystems.Health;
 using AiFramework.Infrastructure.ExternalSystems.Http;
 using Duende.AccessTokenManagement;
 using Duende.IdentityModel.Client;
+using AiFramework.Infrastructure.Monitoring;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -30,6 +31,8 @@ public static class ExternalSystemsRegistration
         services.AddSingleton<IValidateOptions<ExternalSystemsOptions>, ExternalSystemsOptionsValidator>();
 
         services.TryAddSingleton(TimeProvider.System);
+        services.AddMetrics();
+        services.TryAddSingleton<ExternalSystemMetrics>();
         services.AddSingleton<ICertificateProvider, FileCertificateProvider>();
         services.AddSingleton<ExternalSystemHandlerFactory>();
 
@@ -71,11 +74,37 @@ public static class ExternalSystemsRegistration
                     ExternalSystemNames.TokenCheck(name),
                     sp => ActivatorUtilities.CreateInstance<TokenHealthCheck>(sp, name),
                     failureStatus: null,
-                    tags));
+                    tags,
+                    timeout: TimeSpan.FromSeconds(10))); // the backchannel client would wait 100 s on a hung IdP.
             }
         }
 
         return new ExternalSystemsBuilder(services, snapshot);
+    }
+
+    /// <summary>
+    /// The worker's status loop (ADR 0032): the external checks every
+    /// <see cref="MonitoringOptions.ExternalSystemStatusPeriod"/>, published into
+    /// external_system_status. Called by the WORKER's Program.cs only — the API never publishes.
+    /// </summary>
+    public static IServiceCollection AddExternalSystemStatusPublisher(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        // ValidateOnStart: a period past the page's stale line would show every row as stale.
+        services.AddSingleton<IValidateOptions<MonitoringOptions>, MonitoringOptionsValidator>();
+        services.AddOptions<MonitoringOptions>().ValidateOnStart();
+
+        services.AddSingleton<IHealthCheckPublisher, ExternalSystemStatusPublisher>();
+        services.AddOptions<HealthCheckPublisherOptions>()
+            .Configure<IOptions<MonitoringOptions>>((publisher, monitoring) =>
+            {
+                publisher.Delay = TimeSpan.FromSeconds(5);
+                publisher.Period = monitoring.Value.ExternalSystemStatusPeriod;
+                publisher.Timeout = TimeSpan.FromSeconds(30);
+                publisher.Predicate = registration => registration.Tags.Contains(ExternalSystemHealth.Tag);
+            });
+        return services;
     }
 
     /// <summary>

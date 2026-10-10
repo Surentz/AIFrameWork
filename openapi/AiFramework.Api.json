@@ -1326,6 +1326,55 @@
         }
       }
     },
+    "/api/monitoring/external-systems": {
+      "get": {
+        "tags": [
+          "MonitoringExternalSystems"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalSystemsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalSystemsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalSystemsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/monitoring/jobs/runs": {
       "get": {
         "tags": [
@@ -3441,6 +3490,134 @@
           }
         }
       },
+      "ExternalSystemRowResponse": {
+        "required": [
+          "name",
+          "stale",
+          "calls",
+          "failed",
+          "faulted",
+          "attempts"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExternalSystemState"
+              }
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The worst check's description. Never a host, path, body or secret."
+          },
+          "checkedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "The worker has not rewritten this row for three minutes: it is history, not health."
+          },
+          "certificateNotAfter": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "tokenOk": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Null when the system uses no token."
+          },
+          "calls": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "failed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "faulted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "attempts": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "p95Ms": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        },
+        "description": "One external system. `State` is null until the worker has checked it once."
+      },
+      "ExternalSystemsResponse": {
+        "required": [
+          "trafficSince",
+          "systems"
+        ],
+        "type": "object",
+        "properties": {
+          "trafficSince": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "systems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExternalSystemRowResponse"
+            }
+          }
+        },
+        "description": "Every external system's last health and last hour of traffic."
+      },
+      "ExternalSystemState": {
+        "enum": [
+          "Healthy",
+          "Degraded",
+          "Unhealthy",
+          null
+        ]
+      },
       "FulfilmentOrderPageResponse": {
         "required": [
           "items",
@@ -4797,6 +4974,9 @@
     },
     {
       "name": "MonitoringDeadLetters"
+    },
+    {
+      "name": "MonitoringExternalSystems"
     },
     {
       "name": "MonitoringJobRuns"

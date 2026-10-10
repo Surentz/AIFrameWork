@@ -168,9 +168,10 @@ on top, so only reach for this when the logging pipeline itself is what you're r
 - **Alert rules are `prometheus-rules.yml`, unit-tested by `prometheus-rules.test.yml`**, run
   with the pinned image's promtool:
   `docker run --rm --entrypoint promtool -v "<abs path>/k8s/components/observability:/rules" prom/prometheus:v3.15.0 test rules /rules/prometheus-rules.test.yml`.
-  Six rules: 5xx share, p95 latency (with a traffic guard), dead letters, broker backlog, pool
-  saturation, and `TelemetryMissing` (which notices when the others have gone quiet for the
-  wrong reason). No Alertmanager: firing alerts show at Prometheus's `/alerts`.
+  Eight rules: 5xx share, p95 latency (with a traffic guard), dead letters, broker backlog, pool
+  saturation, `TelemetryMissing` (which notices when the others have gone quiet for the
+  wrong reason), `ExternalSystemFailing` (over 20% of a system's calls faulted in 5 minutes, at
+  least 10 calls) and `ExternalSystemCertificateExpiring` (under 14 days, `min` across pods). No Alertmanager: firing alerts show at Prometheus's `/alerts`.
 - **`--enable-feature=created-timestamp-zero-ingestion` is load-bearing.** A counter series born
   at 1 (the first dead letter, the first 5xx on a route) is otherwise invisible to
   `increase()`/`rate()`, and `MessagesDeadLettered` stays silent for exactly the dead letter it

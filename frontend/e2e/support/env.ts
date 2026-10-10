@@ -2,6 +2,8 @@
 // string and the ports it depends on are declared once rather than triplicated (a third
 // copy lives in docker-compose.e2e.yml, which cannot import this - it reads the same
 // PG_PORT name directly via shell ${PG_PORT:-55432} substitution instead).
+import path from 'node:path';
+
 export const API_PORT = process.env.API_PORT ?? '5234';
 // The job worker's health endpoint. 5235 is also the dev loop's worker, so the two collide the
 // same way the APIs do - stop the dev loop or set this.
@@ -16,3 +18,11 @@ export const E2E_RABBITMQ_UI_PORT = process.env.E2E_RABBITMQ_UI_PORT ?? '55683';
 export const E2E_RABBITMQ_URL = `amqp://e2e:e2e@localhost:${E2E_RABBITMQ_PORT}/`;
 /** The management HTTP API, which e2e/support/broker.ts publishes through. */
 export const E2E_RABBITMQ_UI_URL = `http://localhost:${E2E_RABBITMQ_UI_PORT}`;
+
+// The e2e partner simulator (tests/PartnerSimulator `serve`): HTTPS with mTLS, and a plain-HTTP
+// health port Playwright can probe without a client certificate.
+export const SIMULATOR_PORT = process.env.SIMULATOR_PORT ?? '55692';
+export const SIMULATOR_HEALTH_PORT = process.env.SIMULATOR_HEALTH_PORT ?? '55693';
+// Relative to frontend/, where every e2e npm script runs. Generated each run; git-ignored by the
+// repository-wide `.certs/` pattern. Never committed.
+export const E2E_CERT_DIR = path.resolve('e2e', '.certs');

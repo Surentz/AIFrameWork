@@ -48,6 +48,6 @@ internal sealed partial class ProbeHealthCheck(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Probe of {System} failed: {Category}")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Probe of {System} failed: {Category}")]
     private partial void LogUnreachable(Exception exception, string system, HttpRequestError category);
 }

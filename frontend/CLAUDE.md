@@ -35,9 +35,9 @@ everything under `/api` keeps working normally. `ws: true` is what upgrades the 
 of leaving it on the long-polling fallback. Both `server` and `preview` carry both entries.
 
 Ports are fixed (5173 dev, 4173 preview, 5234 API, 5235 the job worker, 55432 the e2e Postgres,
-55682/55683 the e2e RabbitMQ's AMQP and management UI) and can collide on a busy machine. Each is
+55682/55683 the e2e RabbitMQ's AMQP and management UI, 55692/55693 the e2e partner simulator) and can collide on a busy machine. Each is
 overridable by environment variable: `DEV_PORT`, `PREVIEW_PORT`, `API_PORT`, `WORKER_PORT`,
-`PG_PORT`, `E2E_RABBITMQ_PORT` and `E2E_RABBITMQ_UI_PORT` respectively. `vite.config.ts` reads the
+`PG_PORT`, `E2E_RABBITMQ_PORT`, `E2E_RABBITMQ_UI_PORT`, `SIMULATOR_PORT` and `SIMULATOR_HEALTH_PORT` respectively. `vite.config.ts` reads the
 first three; `playwright.config.ts` and `e2e/setup/prepare-database.ts` (via the shared
 `e2e/support/env.ts`) and `docker-compose.e2e.yml` read the rest between them for the e2e run.
 
