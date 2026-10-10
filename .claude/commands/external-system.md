@@ -63,7 +63,7 @@ internal sealed class <Name>Adapter(I<Name>Api api, ILogger<<Name>Adapter> logge
             logger,
             token => api.GetThingAsync(id, token),
             body => Result.Success(new Thing(body.Id, body.Name)),
-            status => status == HttpStatusCode.NotFound
+            rejection => rejection.Status == HttpStatusCode.NotFound
                 ? new Error(ErrorKind.NotFound, "<feature>.thing_not_found", $"No thing '{id}'.")
                 : null,
             cancellationToken);
@@ -76,12 +76,15 @@ internal sealed class <Name>Adapter(I<Name>Api api, ILogger<<Name>Adapter> logge
   `https://partner/api/v1/` and `[Get("/things")]` call `https://partner/api/v1/things`. (This is
   Refit; the probe's `Probe:Path` is the opposite: no leading `/`.)
 - **The adapter goes through `ExternalSystemCall.SendAsync`, always.** It turns the final outcome
-  into a `Result`: the statuses you name in `expected` become your errors; everything else (a
+  into a `Result`: the rejections you name in `expected` become your errors; everything else (a
   refused connection, a timeout, a 5xx after retries, a 401/403, a body that is not the partner's
   shape) becomes `Unavailable` with code `external_system.unavailable`, and the caller's
   cancellation propagates. It logs the reason (a type or a status, never the body or URI), so pass
   the adapter's own `ILogger<T>`. Do not catch anything around it.
-- **Expected statuses are the partner's documented answers about this request** (404, 409, 422).
+- **Expected rejections are the partner's documented answers about this request** (404, 409, 422).
+  `expected` gets an `ExternalSystemRejection`: the status and the raw body, for a partner that says
+  what went wrong only in the body (Statistics Denmark answers every error 400 with an
+  `errorTypeCode`). Parse the body to choose your error; never copy it into the message.
   `ExternalSystemCall` ignores you for 401/403, 408, 429 and every 5xx: those are always `Unavailable`.
 - **The DTOs are the contract, and they are enforced.** Partner clients deserialize with
   `RespectNullableAnnotations` and `RespectRequiredConstructorParameters`, so a non-nullable field

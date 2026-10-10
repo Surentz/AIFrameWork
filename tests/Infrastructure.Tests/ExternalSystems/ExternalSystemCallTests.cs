@@ -118,8 +118,12 @@ public sealed class ExternalSystemCallTests : IAsyncLifetime, IDisposable
         return services.BuildServiceProvider();
     }
 
-    private static Error? NotFoundIs404(HttpStatusCode status) =>
-        status == HttpStatusCode.NotFound ? new Error(ErrorKind.NotFound, "things.not_found", "No such thing.") : null;
+    // A 404, or a 400 whose body says so: the shape of a partner that keeps its meaning in the body.
+    private static Error? NotFoundIs404(ExternalSystemRejection rejection) =>
+        rejection.Status == HttpStatusCode.NotFound
+        || (rejection.Status == HttpStatusCode.BadRequest && rejection.Content?.Contains("\"NOT-FOUND\"", StringComparison.Ordinal) == true)
+            ? new Error(ErrorKind.NotFound, "things.not_found", "No such thing.")
+            : null;
 
     private Task<Result<string>> GetNameAsync(IThingsApi api, string id, CancellationToken cancellationToken) =>
         ExternalSystemCall.SendAsync(
@@ -147,6 +151,36 @@ public sealed class ExternalSystemCallTests : IAsyncLifetime, IDisposable
         var result = await GetNameAsync("missing");
 
         result.Error.Code.Should().Be("things.not_found");
+    }
+
+    [Fact]
+    public async Task SendAsync_ForABodyTheAdapterRecognises_ReturnsTheAdaptersError()
+    {
+        _answers.Enqueue(Results.Json(new { errorTypeCode = "NOT-FOUND", message = "No thing 7 at host-a" }, statusCode: StatusCodes.Status400BadRequest));
+
+        var result = await GetNameAsync("7");
+
+        result.Error.Code.Should().Be("things.not_found");
+    }
+
+    [Fact]
+    public async Task SendAsync_ForABodyTheAdapterDoesNotRecognise_IsUnavailable()
+    {
+        _answers.Enqueue(Results.Json(new { errorTypeCode = "REQUEST-MISSING", message = "Format not found" }, statusCode: StatusCodes.Status400BadRequest));
+
+        var result = await GetNameAsync("7");
+
+        result.Error.Code.Should().Be(ExternalSystemCall.UnavailableCode);
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenThePartnersBodyIsRead_NeverLogsIt()
+    {
+        _answers.Enqueue(Results.Json(new { errorTypeCode = "REQUEST-MISSING", message = "secret detail at host-a" }, statusCode: StatusCodes.Status400BadRequest));
+
+        await GetNameAsync("7");
+
+        _logs.Records.Should().NotContain(record => record.Message.Contains("host-a", StringComparison.Ordinal));
     }
 
     [Fact]

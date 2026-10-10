@@ -35,8 +35,9 @@ internal static partial class ExternalSystemCall
 
     /// <summary>
     /// A call whose success carries a body, mapped by <c>map</c>. <c>expected</c> names the
-    /// partner's documented failures for this call — e.g. 404 → <see cref="ErrorKind.NotFound"/> —
-    /// returning null for any other status; pass null when there are none. The response is
+    /// partner's documented failures for this call — e.g. a 404, or a 400 whose body says "not
+    /// found" → <see cref="ErrorKind.NotFound"/> — returning null for anything else; pass null when
+    /// there are none. It sees the status and the raw body (<see cref="ExternalSystemRejection"/>). The response is
     /// disposed when <c>map</c> returns, so a streamed body must be consumed inside it.
     /// </summary>
     public static async Task<Result<T>> SendAsync<TBody, T>(
@@ -44,7 +45,7 @@ internal static partial class ExternalSystemCall
         ILogger logger,
         Func<CancellationToken, Task<IApiResponse<TBody>>> send,
         Func<TBody, Result<T>> map,
-        Func<HttpStatusCode, Error?>? expected,
+        Func<ExternalSystemRejection, Error?>? expected,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(system);
@@ -73,7 +74,7 @@ internal static partial class ExternalSystemCall
         string system,
         ILogger logger,
         Func<CancellationToken, Task<IApiResponse>> send,
-        Func<HttpStatusCode, Error?>? expected,
+        Func<ExternalSystemRejection, Error?>? expected,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(system);
@@ -85,7 +86,7 @@ internal static partial class ExternalSystemCall
     }
 
     private static Result<T>? Failure<T>(
-        string system, ILogger logger, IApiResponse response, Func<HttpStatusCode, Error?>? expected)
+        string system, ILogger logger, IApiResponse response, Func<ExternalSystemRejection, Error?>? expected)
     {
         if (!response.IsReceived)
         {
@@ -122,7 +123,7 @@ internal static partial class ExternalSystemCall
             return Unavailable<T>(system, retryAfter: null);
         }
 
-        if (!IsNeverTheAdapters(status) && expected?.Invoke(status) is { } error)
+        if (!IsNeverTheAdapters(status) && expected?.Invoke(new ExternalSystemRejection(status, ContentOf(response))) is { } error)
         {
             return Result.Failure<T>(error);
         }
@@ -130,6 +131,10 @@ internal static partial class ExternalSystemCall
         LogFailedStatus(logger, system, (int)status);
         return Unavailable<T>(system, RetryAfter(response));
     }
+
+    /// <summary>The non-success body Refit kept, if any. Handed to the adapter only; never logged.</summary>
+    private static string? ContentOf(IApiResponse response) =>
+        response.HasResponseError(out var error) ? error.Content : null;
 
     private static bool IsNeverTheAdapters(HttpStatusCode status) =>
         status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden

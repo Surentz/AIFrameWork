@@ -20,7 +20,8 @@ the configuration keys and the tests, in that order. The four rules it rests on:
 2. In `src/Infrastructure/ExternalSystems/<Name>/`: an `internal` Refit interface whose methods return
    `IApiResponse<T>` (never `Task<T>`, which throws `ApiException`), the partner's DTOs, and an adapter
    implementing the Application port. **Every adapter call goes through `ExternalSystemCall.SendAsync`**, which
-   turns the FINAL outcome into `Result<T>`: the statuses the adapter names become its errors, everything
+   turns the FINAL outcome into `Result<T>`: the rejections the adapter names (status, and body when the partner
+   keeps its meaning there) become its errors, everything
    else — a refused connection, a timeout, a 5xx after retries, a 401/403, a body not in the partner's shape —
    is `Unavailable` (`external_system.unavailable`), and the caller's cancellation propagates. Refit 16
    reports a failed send inside the response (`IsReceived` false), except the caller's cancellation, which it

@@ -136,7 +136,7 @@ how-to and ADR 0031 the why. Rules that are easy to break:
 - **Partners are registered in `ExternalSystemPartners.Add`**, which `AddExternalSystems` calls: both hosts
   get every partner, and neither `Program.cs` names a partner type. `/external-system` adds the line.
 - **Every adapter call goes through `ExternalSystemCall.SendAsync`.** It is the one mapping from Refit's
-  answer to `Result<T>` (statuses the adapter names, otherwise `Unavailable`; the caller's cancellation
+  answer to `Result<T>` (rejections the adapter names, by status or body, otherwise `Unavailable`; the caller's cancellation
   propagates). An adapter that catches or inspects `IApiResponse` itself is re-deriving it, and wrong in a
   way only a timeout or a 401 shows. This is about partners: ADR 0014's `ExchangeRateClient` in
   `Resilience/` is a plain `HttpClient` against an open API, keeps its own catches, and is not a pattern
