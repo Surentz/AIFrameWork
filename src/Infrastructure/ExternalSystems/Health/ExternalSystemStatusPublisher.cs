@@ -2,6 +2,7 @@ using AiFramework.Application.Monitoring;
 using AiFramework.Infrastructure.Monitoring;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure.ExternalSystems.Health;
 
@@ -11,7 +12,10 @@ namespace AiFramework.Infrastructure.ExternalSystems.Health;
 /// the certificate gauge from it. Not a Quartz job, so the Jobs page is not buried in minutely runs.
 /// </summary>
 internal sealed class ExternalSystemStatusPublisher(
-    IServiceScopeFactory scopes, ExternalSystemMetrics metrics, TimeProvider time) : IHealthCheckPublisher
+    IServiceScopeFactory scopes,
+    ExternalSystemMetrics metrics,
+    TimeProvider time,
+    IOptions<ExternalSystemsOptions> options) : IHealthCheckPublisher
 {
     public async Task PublishAsync(HealthReport report, CancellationToken cancellationToken)
     {
@@ -25,7 +29,9 @@ internal sealed class ExternalSystemStatusPublisher(
 
         await using var scope = scopes.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<IExternalSystemStatusStore>()
-            .ReplaceAsync(rows, cancellationToken)
+            // The delete set is the CONFIGURATION, not this report: a publisher group whose predicate
+            // matches nothing (a future non-external check with its own period) reports empty.
+            .ReplaceAsync(rows, options.Value.Systems.Keys.ToList(), cancellationToken)
             .ConfigureAwait(false);
     }
 

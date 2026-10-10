@@ -91,6 +91,10 @@ public static class ExternalSystemsRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // ValidateOnStart: a period past the page's stale line would show every row as stale.
+        services.AddSingleton<IValidateOptions<MonitoringOptions>, MonitoringOptionsValidator>();
+        services.AddOptions<MonitoringOptions>().ValidateOnStart();
+
         services.AddSingleton<IHealthCheckPublisher, ExternalSystemStatusPublisher>();
         services.AddOptions<HealthCheckPublisherOptions>()
             .Configure<IOptions<MonitoringOptions>>((publisher, monitoring) =>

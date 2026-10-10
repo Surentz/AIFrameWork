@@ -51,7 +51,7 @@ export function IntegrationsPage(): React.JSX.Element {
                 <td className={statusClass(row)} title={row.description ?? undefined}>
                   {statusText(row)}
                 </td>
-                <td>{row.checkedAt ? new Date(row.checkedAt).toLocaleTimeString() : '—'}</td>
+                <td>{row.checkedAt ? new Date(row.checkedAt).toLocaleString() : '—'}</td>
                 <CertificateCell notAfter={row.certificateNotAfter} now={systems.dataUpdatedAt} />
                 <td>{row.tokenOk === null || row.tokenOk === undefined ? '—' : row.tokenOk ? 'OK' : 'Failing'}</td>
                 <td>{Number(row.calls)}</td>

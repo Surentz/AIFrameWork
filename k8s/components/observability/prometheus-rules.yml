@@ -130,7 +130,7 @@ groups:
             5 minutes. The monitoring page's External systems view shows its last health check.
 
       - alert: ExternalSystemCertificateExpiring
-        # Spec §3: under 14 days. min across pods: the API and the worker read the same file.
+        # Spec §3: under 14 days. min across worker pods (each worker publishes it).
         expr: min by (system) (aiframework_external_system_certificate_time_remaining_seconds) < 14 * 86400
         for: 1h
         labels:

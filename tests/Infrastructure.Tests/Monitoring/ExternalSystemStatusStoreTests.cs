@@ -25,7 +25,7 @@ public sealed class ExternalSystemStatusStoreTests(PostgresFixture fixture)
         await using var context = _fixture.CreateContext();
         var store = new ExternalSystemStatusStore(context);
 
-        await store.ReplaceAsync([Row(name, ExternalSystemState.Degraded, At)], CancellationToken.None);
+        await store.ReplaceAsync([Row(name, ExternalSystemState.Degraded, At)], [name], CancellationToken.None);
 
         var rows = await store.ListAsync(CancellationToken.None);
         rows.Should().ContainSingle(r => string.Equals(r.Name, name, StringComparison.Ordinal))
@@ -43,7 +43,7 @@ public sealed class ExternalSystemStatusStoreTests(PostgresFixture fixture)
 
         await store.ReplaceAsync(
             [Row(name, ExternalSystemState.Healthy, checkedAt) with { CertificateNotAfter = notAfter }],
-            CancellationToken.None);
+            [name], CancellationToken.None);
 
         var row = (await store.ListAsync(CancellationToken.None))
             .Single(r => string.Equals(r.Name, name, StringComparison.Ordinal));
@@ -58,8 +58,8 @@ public sealed class ExternalSystemStatusStoreTests(PostgresFixture fixture)
         await using var context = _fixture.CreateContext();
         var store = new ExternalSystemStatusStore(context);
 
-        await store.ReplaceAsync([Row(name, ExternalSystemState.Healthy, At)], CancellationToken.None);
-        await store.ReplaceAsync([Row(name, ExternalSystemState.Unhealthy, At.AddMinutes(1))], CancellationToken.None);
+        await store.ReplaceAsync([Row(name, ExternalSystemState.Healthy, At)], [name], CancellationToken.None);
+        await store.ReplaceAsync([Row(name, ExternalSystemState.Unhealthy, At.AddMinutes(1))], [name], CancellationToken.None);
 
         var rows = await store.ListAsync(CancellationToken.None);
         rows.Where(r => string.Equals(r.Name, name, StringComparison.Ordinal)).Should().ContainSingle()
@@ -75,12 +75,58 @@ public sealed class ExternalSystemStatusStoreTests(PostgresFixture fixture)
         var store = new ExternalSystemStatusStore(context);
         await store.ReplaceAsync(
             [Row(kept, ExternalSystemState.Healthy, At), Row(removed, ExternalSystemState.Healthy, At)],
+            [kept, removed],
             CancellationToken.None);
 
-        await store.ReplaceAsync([Row(kept, ExternalSystemState.Healthy, At)], CancellationToken.None);
+        await store.ReplaceAsync([Row(kept, ExternalSystemState.Healthy, At)], [kept], CancellationToken.None);
 
         var names = (await store.ListAsync(CancellationToken.None)).Select(r => r.Name).ToList();
         names.Should().Contain(kept).And.NotContain(removed);
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_WithAnEmptyReportAndAConfiguredSystem_LeavesItsRowInPlace()
+    {
+        var name = Unique("partner");
+        await using var context = _fixture.CreateContext();
+        var store = new ExternalSystemStatusStore(context);
+        await store.ReplaceAsync([Row(name, ExternalSystemState.Healthy, At)], [name], CancellationToken.None);
+
+        await store.ReplaceAsync([], [name], CancellationToken.None);
+
+        var rows = await store.ListAsync(CancellationToken.None);
+        rows.Select(r => r.Name).Should().Contain(name);
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_WithAnEmptyReportAndNothingConfigured_DeletesEveryRow()
+    {
+        var name = Unique("partner");
+        await using var context = _fixture.CreateContext();
+        var store = new ExternalSystemStatusStore(context);
+        await store.ReplaceAsync([Row(name, ExternalSystemState.Healthy, At)], [name], CancellationToken.None);
+
+        await store.ReplaceAsync([], [], CancellationToken.None);
+
+        (await store.ListAsync(CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_WithAnEmptyReport_DeletesOnlyRowsNoConfiguredNameMatchesIgnoringCase()
+    {
+        var name = Unique("Partner");
+        var stale = Unique("stale");
+        await using var context = _fixture.CreateContext();
+        var store = new ExternalSystemStatusStore(context);
+        await store.ReplaceAsync(
+            [Row(name, ExternalSystemState.Healthy, At), Row(stale, ExternalSystemState.Healthy, At)],
+            [name, stale],
+            CancellationToken.None);
+
+        await store.ReplaceAsync([], [name.ToUpperInvariant()], CancellationToken.None);
+
+        var names = (await store.ListAsync(CancellationToken.None)).Select(r => r.Name).ToList();
+        names.Should().Contain(name).And.NotContain(stale);
     }
 
     [Fact]
@@ -92,7 +138,7 @@ public sealed class ExternalSystemStatusStoreTests(PostgresFixture fixture)
 
         await store.ReplaceAsync(
             [Row(name, ExternalSystemState.Unhealthy, At) with { Description = new string('x', 2000) }],
-            CancellationToken.None);
+            [name], CancellationToken.None);
 
         var row = (await store.ListAsync(CancellationToken.None)).Single(r => string.Equals(r.Name, name, StringComparison.Ordinal));
         row.Description.Should().HaveLength(ExternalSystemStatusStore.MaxDescriptionLength);

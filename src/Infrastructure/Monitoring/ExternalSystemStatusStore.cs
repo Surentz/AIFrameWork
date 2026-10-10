@@ -7,14 +7,18 @@ namespace AiFramework.Infrastructure.Monitoring;
 /// <summary>The status publisher's writer: one call replaces the table with the current picture.</summary>
 internal interface IExternalSystemStatusStore
 {
-    public Task ReplaceAsync(IReadOnlyCollection<ExternalSystemStatusView> current, CancellationToken cancellationToken);
+    public Task ReplaceAsync(
+        IReadOnlyCollection<ExternalSystemStatusView> current,
+        IReadOnlyCollection<string> configured,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
 /// <c>external_system_status</c>'s writer and reader. The write is an upsert per system plus a
-/// delete of every other row: two worker replicas publish the same picture, so last write wins
-/// and nothing can collide, and a system removed from configuration disappears rather than
-/// lingering as its last status.
+/// delete of every row whose system is not CONFIGURED (not merely absent from this report: a
+/// report can be empty or partial without the system being gone). Two worker replicas publish the
+/// same picture, so last write wins and nothing can collide, and a system removed from
+/// configuration disappears rather than lingering as its last status.
 /// </summary>
 internal sealed class ExternalSystemStatusStore(AiFrameworkDbContext context)
     : IExternalSystemStatusStore, IExternalSystemStatusReader
@@ -22,9 +26,12 @@ internal sealed class ExternalSystemStatusStore(AiFrameworkDbContext context)
     public const int MaxDescriptionLength = 512;
 
     public async Task ReplaceAsync(
-        IReadOnlyCollection<ExternalSystemStatusView> current, CancellationToken cancellationToken)
+        IReadOnlyCollection<ExternalSystemStatusView> current,
+        IReadOnlyCollection<string> configured,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(configured);
 
         foreach (var row in current)
         {
@@ -53,9 +60,16 @@ internal sealed class ExternalSystemStatusStore(AiFrameworkDbContext context)
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var names = current.Select(row => row.Name).ToList();
+        // Compared in memory: the names are a handful, and EF cannot translate an invariant ToLower.
+        var known = new HashSet<string>(configured, StringComparer.OrdinalIgnoreCase);
+        var stored = await context.ExternalSystemStatuses
+            .AsNoTracking()
+            .Select(row => row.Name)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var unconfigured = stored.Where(name => !known.Contains(name)).ToList();
         await context.ExternalSystemStatuses
-            .Where(row => !names.Contains(row.Name))
+            .Where(row => unconfigured.Contains(row.Name))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
     }

@@ -2491,7 +2491,7 @@ export interface components {
             /** Format: date */
             readonly asOf: string;
         };
-        /** @description One external system. ExternalSystemState? ExternalSystemRowResponse.State is null until the worker has checked it once. */
+        /** @description One external system. `State` is null until the worker has checked it once. */
         readonly ExternalSystemRowResponse: {
             readonly name: string;
             readonly state?: null | components["schemas"]["ExternalSystemState"];

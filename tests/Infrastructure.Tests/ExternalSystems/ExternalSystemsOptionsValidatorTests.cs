@@ -59,6 +59,20 @@ public sealed class ExternalSystemsOptionsValidatorTests
         failures.Should().Contain("name");
     }
 
+    [Theory]
+    [InlineData("external")]
+    [InlineData("External")]
+    [InlineData("EXTERNAL")]
+    public void Validate_ASystemNamedLikeTheExternalTag_Fails(string name)
+    {
+        var options = new ExternalSystemsOptions();
+        options.Systems[name] = new ExternalSystemOptions { BaseAddress = "https://partner.example/" };
+
+        var failures = Failures(options);
+
+        failures.Should().Contain("must not be \"external\"");
+    }
+
     [Fact]
     public void Validate_AnAttemptTimeoutLongerThanTheTotal_Fails()
     {

@@ -72,7 +72,7 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       # Built as its own step so a compile error fails here, named, rather than inside the
-      # suite's setup. e2e/setup/prepare-database.ts builds the two hosts again before Playwright
+      # suite's setup. e2e/setup/prepare-database.ts builds the API, the worker and the PartnerSimulator again before Playwright
       # starts them with --no-build; after this step that is a no-op.
       - name: Build backend
         run: dotnet build -c Debug

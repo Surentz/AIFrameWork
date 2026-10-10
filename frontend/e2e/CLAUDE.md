@@ -197,7 +197,7 @@ The simulator is a fourth `webServer` (`tests/PartnerSimulator -- serve`). Its c
 `frontend/e2e/.certs/` (git-ignored) and are **reused across local runs**, regenerated only when a
 file is missing or `client.pfx` is over 365 days old: each fresh PKI leaks one same-subject
 intermediate into Windows `CurrentUser\CA`. CI generates them every run. `integrations.spec.ts` is
-`@local-only` and `test.slow()` (it waits on the worker's one-minute publisher).
+`@local-only` and `test.slow()` (the worker checks every 5 s in e2e, so it waits on the page's 30 s refetch).
 
 ## What is covered
 

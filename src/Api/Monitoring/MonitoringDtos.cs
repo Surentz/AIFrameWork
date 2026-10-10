@@ -335,7 +335,7 @@ public sealed record ExternalSystemsResponse
     public required IReadOnlyList<ExternalSystemRowResponse> Systems { get; init; }
 }
 
-/// <summary>One external system. <see cref="State"/> is null until the worker has checked it once.</summary>
+/// <summary>One external system. <c>State</c> is null until the worker has checked it once.</summary>
 public sealed record ExternalSystemRowResponse
 {
     public required string Name { get; init; }

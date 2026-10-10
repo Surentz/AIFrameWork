@@ -71,6 +71,35 @@ public sealed class GetExternalSystemStatusHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_ForTrafficNamesDifferingOnlyByCase_MergesThemIntoOneRow()
+    {
+        var view = await HandleAsync(
+            [],
+            [
+                new OutboundTrafficView("PartnerSim", Calls: 10, Failed: 1, Faulted: 2, Attempts: 12, P95Ms: 100),
+                new OutboundTrafficView("PARTNERSIM", Calls: 5, Failed: 0, Faulted: 1, Attempts: 6, P95Ms: 300),
+            ]);
+
+        var row = view.Systems.Should().ContainSingle().Subject;
+        row.Calls.Should().Be(15);
+        row.Failed.Should().Be(1);
+        row.Faulted.Should().Be(3);
+        row.Attempts.Should().Be(18);
+        row.P95Ms.Should().Be(300);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ForStatusNamesDifferingOnlyByCase_KeepsTheLatestCheck()
+    {
+        var view = await HandleAsync(
+            [Status("PartnerSim", Now.AddSeconds(-90)), Status("PARTNERSIM", Now.AddSeconds(-10))],
+            []);
+
+        var row = view.Systems.Should().ContainSingle().Subject;
+        row.CheckedAt.Should().Be(Now.AddSeconds(-10));
+    }
+
+    [Fact]
     public async Task HandleAsync_ReadsTrafficForTheLastHour()
     {
         await HandleAsync([], []);

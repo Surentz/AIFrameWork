@@ -3588,7 +3588,7 @@
             "format": "double"
           }
         },
-        "description": "One external system. ExternalSystemState? ExternalSystemRowResponse.State is null until the worker has checked it once."
+        "description": "One external system. `State` is null until the worker has checked it once."
       },
       "ExternalSystemsResponse": {
         "required": [

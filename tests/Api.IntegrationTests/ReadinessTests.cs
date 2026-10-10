@@ -47,6 +47,16 @@ public sealed class ReadinessTests(ApiFactory factory)
     }
 
     [Fact]
+    public void Host_RegistersNoHealthCheckPublisher()
+    {
+        // ADR 0032: only the worker publishes external system status. An API publisher would run
+        // every check from every pod and write a table the worker owns.
+        var publishers = factory.Services.GetServices<IHealthCheckPublisher>();
+
+        publishers.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ExternalSystemCheck_ForTheUnreachableSystem_IsRegisteredAndUnhealthy()
     {
         var health = factory.Services.GetRequiredService<HealthCheckService>();

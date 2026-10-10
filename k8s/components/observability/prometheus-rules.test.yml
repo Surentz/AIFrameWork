@@ -188,7 +188,7 @@ tests:
             exp_annotations:
               summary: No telemetry from the API for over 5 minutes.
 
-  # 3 of every 10 calls fault: 30%, over 20% with more than 10 calls per 5 minutes.
+  # 3 of every 10 calls fault: 30%, over 20% with at least 10 calls per 5 minutes.
   - interval: 1m
     input_series:
       - series: 'aiframework_external_system_calls_total{job="aiframework-worker", system="Partner", outcome="succeeded"}'

@@ -44,8 +44,14 @@ public sealed class GetExternalSystemStatusHandler(
         var rows = await statuses.ListAsync(cancellationToken).ConfigureAwait(false);
         var calls = await traffic.OutboundAsync(since, cancellationToken).ConfigureAwait(false);
 
-        var statusByName = rows.ToDictionary(row => row.Name, StringComparer.OrdinalIgnoreCase);
-        var trafficByName = calls.ToDictionary(row => row.System, StringComparer.OrdinalIgnoreCase);
+        // Names differ only by case when the API and the worker are configured separately, and
+        // traffic is grouped case-sensitively: merge rather than let a duplicate key 500 the page.
+        var statusByName = rows
+            .GroupBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.MaxBy(row => row.CheckedAt)!, StringComparer.OrdinalIgnoreCase); // groups are never empty.
+        var trafficByName = calls
+            .GroupBy(row => row.System, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, Merge, StringComparer.OrdinalIgnoreCase);
 
         var systems = statusByName.Keys
             .Union(trafficByName.Keys, StringComparer.OrdinalIgnoreCase)
@@ -71,5 +77,23 @@ public sealed class GetExternalSystemStatusHandler(
             .ToList();
 
         return Result.Success(new ExternalSystemsView(since, systems));
+    }
+
+    /// <summary>
+    /// Sums the counts of rows that differ only by case. A percentile cannot be merged from
+    /// percentiles, so P95Ms is the largest of them: an upper bound, never an under-report.
+    /// </summary>
+    private static OutboundTrafficView Merge(IGrouping<string, OutboundTrafficView> group)
+    {
+        var members = group.ToList();
+        return members.Count == 1
+            ? members[0]
+            : new OutboundTrafficView(
+                members[0].System,
+                members.Sum(row => row.Calls),
+                members.Sum(row => row.Failed),
+                members.Sum(row => row.Faulted),
+                members.Sum(row => row.Attempts),
+                members.Max(row => row.P95Ms));
     }
 }
