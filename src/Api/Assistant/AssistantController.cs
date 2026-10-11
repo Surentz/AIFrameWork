@@ -56,7 +56,8 @@ public sealed class AssistantController(
         try
         {
             result = await commands
-                .SendAsync(new AskAssistant(request.ConversationId, request.Question), cancellationToken)
+                // Every caller here holds Monitoring.Read (the class policy), so every one is an operator.
+                .SendAsync(new AskAssistant(request.ConversationId, request.Question, ToolScope.Operator), cancellationToken)
                 .ConfigureAwait(false);
         }
         finally

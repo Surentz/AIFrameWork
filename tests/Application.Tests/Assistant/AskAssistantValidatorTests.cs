@@ -6,7 +6,7 @@ namespace AiFramework.Application.Tests.Assistant;
 public sealed class AskAssistantValidatorTests
 {
     private static bool IsValid(string question) =>
-        new AskAssistantValidator().Validate(new AskAssistant(null, question)).IsValid;
+        new AskAssistantValidator().Validate(new AskAssistant(null, question, ToolScope.Member)).IsValid;
 
     [Theory]
     [InlineData("")]

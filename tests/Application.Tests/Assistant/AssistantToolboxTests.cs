@@ -268,4 +268,11 @@ public sealed class AssistantToolboxTests
         AssistantToolbox.Definitions.Should().Equal([.. AssistantToolbox.MemberDefinitions, .. AssistantToolbox.MonitoringDefinitions]);
         AssistantToolbox.MonitoringDefinitions.Should().HaveCount(8);
     }
+
+    [Fact]
+    public void For_Member_IsTheMemberToolsAndOperator_IsEveryTool()
+    {
+        AssistantToolbox.For(ToolScope.Member).Should().Equal(AssistantToolbox.MemberDefinitions);
+        AssistantToolbox.For(ToolScope.Operator).Should().Equal(AssistantToolbox.Definitions);
+    }
 }

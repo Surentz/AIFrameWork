@@ -46,8 +46,9 @@ public sealed class AskAssistantHandlerTests
         _model.NextTurnAsync(Arg.Do<AssistantRequest>(_requests.Add), _output, Arg.Any<CancellationToken>())
             .Returns(turns[0], turns[1..]);
 
-    private Task<Result<AssistantAnswer>> AskAsync(Guid? conversationId = null, string question = "Why did jobs fail?") =>
-        Handler.HandleAsync(new AskAssistant(conversationId, question), CancellationToken.None);
+    private Task<Result<AssistantAnswer>> AskAsync(
+        Guid? conversationId = null, string question = "Why did jobs fail?", ToolScope scope = ToolScope.Operator) =>
+        Handler.HandleAsync(new AskAssistant(conversationId, question, scope), CancellationToken.None);
 
     [Fact]
     public async Task HandleAsync_NewConversation_StartsItAndAppendsTheQuestionAndAnswer()
@@ -207,5 +208,41 @@ public sealed class AskAssistantHandlerTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         _conversations.DidNotReceiveWithAnyArgs().Append(Guid.Empty, default!, default);
+    }
+
+    [Fact]
+    public async Task HandleAsync_MemberScope_OffersOnlyTheMemberToolsAndPrompt()
+    {
+        ModelReturns(Answer());
+
+        await AskAsync(scope: ToolScope.Member);
+
+        _requests[0].Tools.Should().Equal(AssistantToolbox.MemberDefinitions);
+        _requests[0].SystemPrompt.Should().Be(AssistantPrompt.Member);
+    }
+
+    [Fact]
+    public async Task HandleAsync_OperatorScope_OffersEveryToolAndTheOperatorPrompt()
+    {
+        ModelReturns(Answer());
+
+        await AskAsync(scope: ToolScope.Operator);
+
+        _requests[0].Tools.Should().Equal(AssistantToolbox.Definitions);
+        _requests[0].SystemPrompt.Should().Be(AssistantPrompt.Operator);
+    }
+
+    [Fact]
+    public async Task HandleAsync_MemberModelCallsAMonitoringTool_GetsAnErrorWithoutDispatchingOrReporting()
+    {
+        ModelReturns(ToolUse(), Answer());
+
+        var result = await AskAsync(scope: ToolScope.Member);
+
+        result.IsSuccess.Should().BeTrue();
+        await _queries.DidNotReceiveWithAnyArgs().SendAsync<JobHealthView>(default!, default);
+        await _output.DidNotReceiveWithAnyArgs().ToolAsync(default!, default);
+        var toolResults = (ToolResultsTurn)_requests[1].Transcript[^1];
+        toolResults.Results.Should().ContainSingle().Which.IsError.Should().BeTrue();
     }
 }

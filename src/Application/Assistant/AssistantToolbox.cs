@@ -83,6 +83,13 @@ public sealed class AssistantToolbox(IQueryDispatcher queries)
     /// <summary>Every tool, member tools first. Declared after the two lists it joins (static initialization runs in order).</summary>
     public static IReadOnlyList<AssistantToolDefinition> Definitions { get; } = [.. MemberDefinitions, .. MonitoringDefinitions];
 
+    public static IReadOnlyList<AssistantToolDefinition> For(ToolScope scope) =>
+        scope == ToolScope.Operator ? Definitions : MemberDefinitions;
+
+    /// <summary>Whether a question in this scope was offered the tool, so the model may call it.</summary>
+    public static bool Offers(ToolScope scope, string toolName) =>
+        For(scope).Any(d => string.Equals(d.Name, toolName, StringComparison.Ordinal));
+
     public async Task<AssistantToolResult> RunAsync(AssistantToolCall call, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(call);
