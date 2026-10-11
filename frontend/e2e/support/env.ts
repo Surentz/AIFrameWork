@@ -26,3 +26,9 @@ export const SIMULATOR_HEALTH_PORT = process.env.SIMULATOR_HEALTH_PORT ?? '55693
 // Relative to frontend/, where every e2e npm script runs. Generated each run; git-ignored by the
 // repository-wide `.certs/` pattern. Never committed.
 export const E2E_CERT_DIR = path.resolve('e2e', '.certs');
+
+// The fake Messages API (tests/PartnerSimulator `messages`): the ops assistant's stand-in for
+// Anthropic, so the e2e run needs no key. Plain HTTP; /health for readiness.
+export const FAKE_MESSAGES_PORT = process.env.FAKE_MESSAGES_PORT ?? '55694';
+// A throwaway file: the API refuses to start with the assistant on and no key file. Never a real key.
+export const E2E_ASSISTANT_KEY_FILE = path.join(E2E_CERT_DIR, 'assistant.key');

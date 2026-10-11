@@ -35,7 +35,18 @@ if (args is ["serve", var certDirectory, var httpsPort, var healthPort])
     return 0;
 }
 
+// The e2e run's stand-in for Anthropic's Messages API (the ops assistant, ADR 0033). Plain HTTP.
+if (args is ["messages", var messagesPort])
+{
+    await using var fake = await FakeMessagesApi.StartAsync(int.Parse(messagesPort, CultureInfo.InvariantCulture));
+    fake.DefaultReply = FakeMessagesScript.ToolThenAnswer;
+    Console.WriteLine($"Fake Messages API: {fake.BaseAddress} (health {fake.BaseAddress}health)");
+    await fake.WaitForShutdownAsync();
+    return 0;
+}
+
 await Console.Error.WriteLineAsync(
     "Usage: dotnet run --project tests/PartnerSimulator -- generate-certs <directory>" + Environment.NewLine +
-    "       dotnet run --project tests/PartnerSimulator -- serve <certDirectory> <httpsPort> <healthPort>");
+    "       dotnet run --project tests/PartnerSimulator -- serve <certDirectory> <httpsPort> <healthPort>" + Environment.NewLine +
+    "       dotnet run --project tests/PartnerSimulator -- messages <port>");
 return 2;

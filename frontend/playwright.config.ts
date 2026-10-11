@@ -2,9 +2,11 @@ import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import {
   API_PORT,
+  E2E_ASSISTANT_KEY_FILE,
   E2E_CERT_DIR,
   E2E_CONNECTION_STRING,
   E2E_RABBITMQ_URL,
+  FAKE_MESSAGES_PORT,
   PREVIEW_PORT,
   SIMULATOR_HEALTH_PORT,
   SIMULATOR_PORT,
@@ -138,6 +140,14 @@ export default defineConfig({
               // underscores and the __0 index, like every other key here - a single underscore
               // binds nothing and warns nothing, and the list is bound as a collection.
               Admin__Usernames__0: ADMIN_USERNAME,
+              // The ops assistant, against the fake Messages API rather than Anthropic (ADR 0033).
+              Assistant__Enabled: 'true',
+              Assistant__ApiKeyFile: E2E_ASSISTANT_KEY_FILE,
+              Assistant__BaseUrl: `http://127.0.0.1:${FAKE_MESSAGES_PORT}`,
+              Assistant__MaxRetries: '0',
+              // 20 questions per administrator per hour otherwise, and every assistant spec asks as
+              // the one operator: a repeat_each run above 20 would fail on a 429 that reads as a flake.
+              RateLimiting__Assistant__PermitLimit: '1000000',
             },
           },
           {
@@ -187,6 +197,17 @@ export default defineConfig({
             stdout: 'pipe',
             stderr: 'pipe',
             // At Information it logs five lines per probe, every 5 s, for the whole run.
+            env: serverLogging,
+          },
+          {
+            // The ops assistant's stand-in for Anthropic. Built by prepare-database.ts with the
+            // rest of tests/PartnerSimulator.
+            command: `dotnet run --project ../tests/PartnerSimulator --no-build -- messages ${FAKE_MESSAGES_PORT}`,
+            url: `http://127.0.0.1:${FAKE_MESSAGES_PORT}/health`,
+            timeout: 60_000,
+            reuseExistingServer: false,
+            stdout: 'pipe',
+            stderr: 'pipe',
             env: serverLogging,
           },
           {

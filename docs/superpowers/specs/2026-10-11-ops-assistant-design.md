@@ -2,7 +2,8 @@
 
 **Date:** 2026-10-11
 **Status:** Approved 2026-10-11; amended while planning and building PR 1 (see "Amended while
-planning" below — where it and a later section disagree, the amendment wins). Backend built (PR 1).
+planning" below — where it and a later section disagree, the amendment wins). Backend built (PR 1);
+panel built (PR 2).
 **Type:** this document is `docs(assistant)`; the build is two `feat` pull requests (§7).
 **Builds on:** ADR 0014 (retry and resilience), ADR 0015 (logging), ADR 0016 (jobs in the worker),
 ADR 0021/0027 (operational telemetry and metrics), ADR 0024 (capability policies), ADR 0031
@@ -73,6 +74,8 @@ Recorded in `docs/superpowers/plans/2026-10-11-ops-assistant-backend.md` and ADR
 9. **Probe 4 answered:** the OpenAPI document carries the `text/event-stream` schema.
    **Probe 5 answered** (live docs, 2026-10-11): `inference_geo` is `"us"` or `"global"` only, and
    workspace data at rest is US-only — no EU option on the first-party API.
+10. **The SSE shape stays as built** (`tool`, nested `problem`). Tool chips read "Checked …"
+    (past tense: they stay after the answer).
 
 ## 1. Backend structure
 

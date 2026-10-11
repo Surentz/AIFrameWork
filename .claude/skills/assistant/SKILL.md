@@ -1,6 +1,6 @@
 ---
 name: assistant
-description: Use when touching the ops assistant - AskAssistant's tool-use loop, the assistant tools and their personal-data boundary, the Claude adapter, transcripts and preserved thinking, Assistant__* configuration, the SSE endpoint, or FakeMessagesApi.
+description: Use when touching the ops assistant - AskAssistant's tool-use loop, the assistant tools and their personal-data boundary, the Claude adapter, transcripts and preserved thinking, Assistant__* configuration, the SSE endpoint, FakeMessagesApi, or the Monitoring panel (frontend/src/features/assistant).
 ---
 
 # The ops assistant
@@ -68,6 +68,25 @@ No test calls Anthropic. `FakeMessagesApi.StartAsync()` listens on plain HTTP on
 `Requests`. Set `Assistant__MaxRetries=0` so error tests don't wait out the SDK's backoff.
 `Api.IntegrationTests` references the simulator with `Aliases="simulator"` — its top-level
 `Program` would clash with the API's — so a test there starts with `extern alias simulator;`.
+
+## The panel
+
+**Monitoring → Ask the assistant** (`/monitoring/assistant`), in `frontend/src/features/assistant`.
+
+- **The conversation is a reducer** (`conversation.ts`, driven by `useAssistantConversation`), not
+  TanStack Query: a stream is not a cacheable query. The conversation id lives in memory only, so
+  a reload starts a new conversation.
+- **`SseParser` must keep partial chunks.** A network chunk can end mid-line, mid-JSON or between
+  a CR and its LF; only a blank line ends an event. `: keep-alive` comments are dropped.
+- **Stop, New conversation and leaving the page abort the request**, and the server then saves
+  nothing for that question — so after Stop the next question still sends the conversation id and
+  continues from the last saved answer.
+- `askAssistant` goes through `client.ts`'s `requestStream`, so a failure before the stream
+  starts (400, 404, 409, 429, 503) is an ordinary `ApiError`; after that it is an `error` event.
+- Answers render as plain text (`white-space: pre-wrap`): model output is untrusted.
+- **e2e** runs `tests/PartnerSimulator -- messages <port>` as a webServer: `FakeMessagesApi` with
+  `DefaultReply = FakeMessagesScript.ToolThenAnswer` (a `job_health` call, then a fixed answer),
+  because a Playwright run cannot script it per test. `assistant.spec.ts` is `@local-only`.
 
 ## Spend
 

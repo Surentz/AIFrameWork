@@ -14,9 +14,9 @@
 // Teardown is teardown-database.ts, which run.ts runs after Playwright exits - not Playwright's
 // globalTeardown, which runs before the webServers stop.
 import { execFileSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { E2E_CERT_DIR, E2E_CONNECTION_STRING } from '../support/env.ts';
+import { E2E_ASSISTANT_KEY_FILE, E2E_CERT_DIR, E2E_CONNECTION_STRING } from '../support/env.ts';
 
 // dotnet-ef is a local tool (.config/dotnet-tools.json); without a restore this only works
 // by accident, on a machine that also happens to have it installed globally.
@@ -91,3 +91,7 @@ if (certsMissing || certsAgeing) {
 } else {
   console.log(`Reusing the e2e partner PKI in ${E2E_CERT_DIR}.`);
 }
+
+// The assistant's key file. The fake Messages API ignores the key; the API only needs the file.
+mkdirSync(path.dirname(E2E_ASSISTANT_KEY_FILE), { recursive: true });
+writeFileSync(E2E_ASSISTANT_KEY_FILE, 'e2e-not-a-real-key\n');
