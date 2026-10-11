@@ -15,6 +15,22 @@ function renderPage(): void {
 }
 
 describe('MonitoringPage', () => {
+  it('links to the assistant when it is switched on', async () => {
+    server.use(http.get('/api/assistant', () => HttpResponse.json({ enabled: true })));
+    renderPage();
+
+    expect(
+      await screen.findByRole('link', { name: 'Ask the assistant about jobs, traffic and integrations' }),
+    ).toHaveAttribute('href', '/monitoring/assistant');
+  });
+
+  it('does not mention the assistant when it is switched off', async () => {
+    renderPage();
+
+    await screen.findByRole('list', { name: 'Job health' });
+    expect(screen.queryByRole('heading', { name: 'Assistant' })).not.toBeInTheDocument();
+  });
+
   it('shows the job health tiles', async () => {
     renderPage();
 
