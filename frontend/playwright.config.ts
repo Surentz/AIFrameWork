@@ -145,6 +145,9 @@ export default defineConfig({
               Assistant__ApiKeyFile: E2E_ASSISTANT_KEY_FILE,
               Assistant__BaseUrl: `http://127.0.0.1:${FAKE_MESSAGES_PORT}`,
               Assistant__MaxRetries: '0',
+              // 20 questions per administrator per hour otherwise, and every assistant spec asks as
+              // the one operator: a repeat_each run above 20 would fail on a 429 that reads as a flake.
+              RateLimiting__Assistant__PermitLimit: '1000000',
             },
           },
           {
