@@ -171,6 +171,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAssistantConversations, AssistantConversations>();
+        services.AddScoped<IAssistantConversationRetention, AssistantConversationRetention>();
         services.AddScoped<ISessionValidator, SessionValidator>();
     }
 
