@@ -2,6 +2,10 @@ using System.Text.Json;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
 using AiFramework.Application.Monitoring;
+using AiFramework.Application.Orders;
+using AiFramework.Application.Products;
+using AiFramework.Application.Statistics;
+using AiFramework.Domain.Orders;
 using FluentAssertions;
 using NSubstitute;
 
@@ -124,6 +128,8 @@ public sealed class AssistantToolboxTests
         // external_systems takes no input, so "{}" is valid for it and it dispatches.
         _queries.SendAsync(Arg.Any<GetExternalSystemStatus>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new ExternalSystemsView(Now, [])));
+        _queries.SendAsync(Arg.Any<GetOrderExports>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<OrderExportView>>([]));
 
         foreach (var definition in AssistantToolbox.Definitions)
         {
@@ -144,5 +150,122 @@ public sealed class AssistantToolboxTests
             var required = schema.GetProperty("required").EnumerateArray().Select(e => e.GetString()!).Order(StringComparer.Ordinal);
             required.Should().Equal(properties, because: definition.Name);
         }
+    }
+
+    [Fact]
+    public async Task RunAsync_MyOrders_DispatchesTheFirstPageAndReturnsTheOrders()
+    {
+        var id = Guid.NewGuid();
+        _queries.SendAsync(Arg.Is<GetOrders>(q => q.Limit == AssistantToolbox.PageSize && q.Cursor == null), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new OrderPage([new OrderListItem(id, "SKU-1", 2, Now, null, "Mug", 9.5m, OrderStatus.Placed)], "next")));
+
+        var result = await Toolbox.RunAsync(Call("my_orders", """{"cursor":null}"""), CancellationToken.None);
+
+        result.IsError.Should().BeFalse();
+        result.Content.Should().Contain("\"sku\":\"SKU-1\"").And.Contain("\"status\":\"Placed\"").And.Contain("\"nextCursor\":\"next\"");
+    }
+
+    [Fact]
+    public async Task RunAsync_MyOrdersWithACursor_PassesItOn()
+    {
+        _queries.SendAsync(Arg.Is<GetOrders>(q => q.Cursor == "C42"), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new OrderPage([], null)));
+
+        var result = await Toolbox.RunAsync(Call("my_orders", """{"cursor":"C42"}"""), CancellationToken.None);
+
+        result.IsError.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_GetOrder_ReturnsTheOrderWithItsDates()
+    {
+        var id = Guid.NewGuid();
+        _queries.SendAsync(Arg.Is<GetOrder>(q => q.Id == id), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new OrderView(id, "SKU-1", 1, Now, null, "Mug", 9.5m, OrderStatus.Shipped, Now.AddDays(1), null)));
+
+        var result = await Toolbox.RunAsync(Call("get_order", $$"""{"order_id":"{{id}}"}"""), CancellationToken.None);
+
+        result.IsError.Should().BeFalse();
+        result.Content.Should().Contain("\"status\":\"Shipped\"").And.Contain("\"shippedAt\"");
+    }
+
+    [Fact]
+    public async Task RunAsync_GetOrderNotFound_IsAnErrorCarryingTheQueryMessage()
+    {
+        _queries.SendAsync(Arg.Any<GetOrder>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<OrderView>(new Error(ErrorKind.NotFound, "order.not_found", "No order with id 'x'.")));
+
+        var result = await Toolbox.RunAsync(Call("get_order", $$"""{"order_id":"{{Guid.NewGuid()}}"}"""), CancellationToken.None);
+
+        result.IsError.Should().BeTrue();
+        result.Content.Should().Be("No order with id 'x'.");
+    }
+
+    [Theory]
+    [InlineData("""{"order_id":"not-a-guid"}""")]
+    [InlineData("""{"order_id":null}""")]
+    [InlineData("""{}""")]
+    public async Task RunAsync_GetOrderWithoutAGuid_IsAnErrorWithoutDispatching(string input)
+    {
+        var result = await Toolbox.RunAsync(Call("get_order", input), CancellationToken.None);
+
+        result.IsError.Should().BeTrue();
+        result.Content.Should().Contain("order_id");
+        await _queries.DidNotReceiveWithAnyArgs().SendAsync<OrderView>(default!, default);
+    }
+
+    [Fact]
+    public async Task RunAsync_MyExports_ReturnsTheExports()
+    {
+        _queries.SendAsync(Arg.Any<GetOrderExports>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<OrderExportView>>([new OrderExportView(Guid.NewGuid(), OrderExportState.Ready, Now, Now.AddMinutes(1), 12)]));
+
+        var result = await Toolbox.RunAsync(Call("my_exports", "{}"), CancellationToken.None);
+
+        result.IsError.Should().BeFalse();
+        result.Content.Should().Contain("\"status\":\"Ready\"").And.Contain("\"rowCount\":12");
+    }
+
+    [Fact]
+    public async Task RunAsync_ListProducts_ReturnsTheCataloguePage()
+    {
+        _queries.SendAsync(Arg.Is<GetProducts>(q => q.Limit == AssistantToolbox.PageSize && q.Cursor == null), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new ProductPage([new ProductListItem(Guid.NewGuid(), "SKU-9", "Teapot", 19.95m, Now)], null)));
+
+        var result = await Toolbox.RunAsync(Call("list_products", """{"cursor":null}"""), CancellationToken.None);
+
+        result.IsError.Should().BeFalse();
+        result.Content.Should().Contain("\"name\":\"Teapot\"").And.Contain("\"price\":19.95");
+    }
+
+    [Fact]
+    public async Task RunAsync_Population_DispatchesTheAreaCode()
+    {
+        _queries.SendAsync(Arg.Is<GetPopulation>(q => q.Area == "101"), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new PopulationView("101", "København", "2026K3", 667_099, "Statistics Denmark (CC BY 4.0)")));
+
+        var result = await Toolbox.RunAsync(Call("population", """{"area_code":"101"}"""), CancellationToken.None);
+
+        result.IsError.Should().BeFalse();
+        result.Content.Should().Contain("\"population\":667099").And.Contain("Statistics Denmark");
+    }
+
+    [Fact]
+    public async Task RunAsync_PopulationWithoutAnAreaCode_IsAnErrorWithoutDispatching()
+    {
+        var result = await Toolbox.RunAsync(Call("population", """{"area_code":null}"""), CancellationToken.None);
+
+        result.IsError.Should().BeTrue();
+        result.Content.Should().Contain("area_code");
+        await _queries.DidNotReceiveWithAnyArgs().SendAsync<PopulationView>(default!, default);
+    }
+
+    [Fact]
+    public void Definitions_AreTheMemberToolsThenTheMonitoringTools()
+    {
+        AssistantToolbox.MemberDefinitions.Select(d => d.Name).Should()
+            .Equal("my_orders", "get_order", "my_exports", "list_products", "population");
+        AssistantToolbox.Definitions.Should().Equal([.. AssistantToolbox.MemberDefinitions, .. AssistantToolbox.MonitoringDefinitions]);
+        AssistantToolbox.MonitoringDefinitions.Should().HaveCount(8);
     }
 }
