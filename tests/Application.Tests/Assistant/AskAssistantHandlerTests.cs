@@ -58,7 +58,7 @@ public sealed class AskAssistantHandlerTests
         var result = await AskAsync(question: "  Why?  ");
 
         result.Value.Outcome.Should().Be(AssistantOutcome.Answered);
-        _conversations.Received(1).Start(result.Value.ConversationId, Caller, Now);
+        _conversations.Received(1).Start(result.Value.ConversationId, Caller, "Why?", Now);
         _conversations.Received(1).Append(
             result.Value.ConversationId,
             Arg.Is<IReadOnlyList<AssistantTurn>>(t => t.Count == 2
@@ -108,7 +108,7 @@ public sealed class AskAssistantHandlerTests
 
         _requests[0].Transcript.Should().HaveCount(3);
         _requests[0].Transcript.Take(2).Should().Equal(history);
-        _conversations.DidNotReceiveWithAnyArgs().Start(Guid.Empty, Guid.Empty, default);
+        _conversations.DidNotReceiveWithAnyArgs().Start(Guid.Empty, Guid.Empty, default!, default);
     }
 
     [Fact]

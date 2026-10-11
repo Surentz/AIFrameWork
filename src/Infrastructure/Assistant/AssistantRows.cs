@@ -2,14 +2,17 @@ namespace AiFramework.Infrastructure.Assistant;
 
 /// <summary>
 /// One assistant conversation. Its xmin row version (a shadow property, see the configuration) is
-/// what turns two concurrent questions into one success and one 409. Deleted with its turns after
-/// a day of inactivity. ADR 0033.
+/// what turns two concurrent questions into one success and one 409. Deleted with its turns 30
+/// days after its last question. ADR 0033.
 /// </summary>
 public sealed class AssistantConversationRow
 {
     public required Guid Id { get; init; }
 
     public required Guid OwnerId { get; init; }
+
+    /// <summary>The sidebar's name for it: the first question, or what the owner renamed it to.</summary>
+    public required string Title { get; set; }
 
     public required DateTimeOffset CreatedAt { get; init; }
 

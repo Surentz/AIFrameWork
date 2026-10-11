@@ -36,7 +36,7 @@ public interface IAssistantConversations
     /// <summary>Loads and tracks the conversation, so the commit checks its row version.</summary>
     public Task<AssistantConversation?> FindAsync(Guid id, CancellationToken cancellationToken);
 
-    public void Start(Guid id, Guid ownerId, DateTimeOffset at);
+    public void Start(Guid id, Guid ownerId, string title, DateTimeOffset at);
 
     /// <summary>Adds one question's turns after the existing ones and counts the question.</summary>
     public void Append(Guid id, IReadOnlyList<AssistantTurn> turns, DateTimeOffset at);

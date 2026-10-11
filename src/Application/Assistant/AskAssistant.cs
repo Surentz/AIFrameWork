@@ -75,7 +75,7 @@ public sealed class AskAssistantHandler(
         }
 
         var now = clock.UtcNow;
-        var opened = await OpenAsync(command.ConversationId, ownerId, now, cancellationToken).ConfigureAwait(false);
+        var opened = await OpenAsync(command.ConversationId, ownerId, command.Question, now, cancellationToken).ConfigureAwait(false);
         if (!opened.IsSuccess)
         {
             return Result.Failure<AssistantAnswer>(opened.Error);
@@ -121,12 +121,12 @@ public sealed class AskAssistantHandler(
             ErrorKind.Unavailable, "assistant.incomplete", "The assistant stopped part-way through. Try again."));
 
     private async Task<Result<AssistantConversation>> OpenAsync(
-        Guid? conversationId, Guid ownerId, DateTimeOffset now, CancellationToken cancellationToken)
+        Guid? conversationId, Guid ownerId, string question, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (conversationId is not { } id)
         {
             var started = new AssistantConversation(Guid.NewGuid(), ownerId, 0, []);
-            conversations.Start(started.Id, ownerId, now);
+            conversations.Start(started.Id, ownerId, AssistantTitle.From(question), now);
             return Result.Success(started);
         }
 

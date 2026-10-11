@@ -32,11 +32,12 @@ internal sealed class AssistantConversations(AiFrameworkDbContext context) : IAs
         return new AssistantConversation(row.Id, row.OwnerId, row.QuestionCount, [.. turns.Select(AssistantTurnCodec.Decode)]);
     }
 
-    public void Start(Guid id, Guid ownerId, DateTimeOffset at) =>
+    public void Start(Guid id, Guid ownerId, string title, DateTimeOffset at) =>
         context.AssistantConversations.Add(new AssistantConversationRow
         {
             Id = id,
             OwnerId = ownerId,
+            Title = title,
             CreatedAt = at,
             LastActiveAt = at,
         });
