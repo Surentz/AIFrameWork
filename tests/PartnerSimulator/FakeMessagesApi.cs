@@ -20,6 +20,9 @@ public sealed record FakeMessagesRequest(string? ApiKey, string? Beta, JsonEleme
 /// </summary>
 public sealed record FakeReply(int StatusCode, IReadOnlyList<string> Events, string StopReason)
 {
+    /// <summary>How long the fake waits before its first event, as a model that thinks for a while does.</summary>
+    public TimeSpan Delay { get; init; }
+
     public static FakeReply Text(params string[] chunks)
     {
         ArgumentNullException.ThrowIfNull(chunks);
@@ -157,6 +160,7 @@ public sealed class FakeMessagesApi : IAsyncDisposable
         }
 
         var response = request.HttpContext.Response;
+        await Task.Delay(reply.Delay).ConfigureAwait(false);
         response.ContentType = "text/event-stream";
         await response.WriteAsync(MessageStart()).ConfigureAwait(false);
         foreach (var e in reply.Events)

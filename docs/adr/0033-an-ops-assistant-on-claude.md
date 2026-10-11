@@ -74,7 +74,9 @@ its attempt timeout. This is the one exception to "every partner client goes thr
 **Server-sent events from the API.** `POST /api/assistant/messages` streams `text`, `tool`,
 `done` and `error` events. The response starts lazily, so a failure before the first event is an
 ordinary ProblemDetails response; `X-Accel-Buffering: no` stops ingress-nginx buffering the
-stream; `done` is written only after the command returned, so `done` means saved. The OpenAPI
+stream; `done` is written only after the command returned, so `done` means saved. An SSE comment
+(`: keep-alive`) every 15 s (`Assistant__HeartbeatSeconds`) keeps the stream alive while the model
+thinks, under ingress-nginx's 60 s read timeout; the first one starts the stream. The OpenAPI
 document carries the `text/event-stream` schema (`AssistantEventResponse`). Not a worker job: the
 turn is interactive, and jobs cannot stream back (ADR 0016).
 

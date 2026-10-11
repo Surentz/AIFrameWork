@@ -50,9 +50,21 @@ public sealed class AssistantController(
             return Problem(statusCode: StatusCodes.Status404NotFound, title: "assistant.disabled", detail: "The assistant is switched off.");
         }
 
-        var result = await commands
-            .SendAsync(new AskAssistant(request.ConversationId, request.Question), cancellationToken)
-            .ConfigureAwait(false);
+        Result<AssistantAnswer> result;
+        using var stopKeepAlive = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var keepAlive = output.KeepAliveAsync(availability.HeartbeatInterval, stopKeepAlive.Token);
+        try
+        {
+            result = await commands
+                .SendAsync(new AskAssistant(request.ConversationId, request.Question), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            // Stopped before the final event, success or not, so a comment never follows it.
+            await stopKeepAlive.CancelAsync().ConfigureAwait(false);
+            await keepAlive.ConfigureAwait(false);
+        }
 
         if (!result.IsSuccess && !output.Started)
         {

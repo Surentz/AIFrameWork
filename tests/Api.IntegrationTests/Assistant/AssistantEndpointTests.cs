@@ -176,6 +176,27 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
         events[^1].GetProperty("problem").GetProperty("title").GetString().Should().Be("assistant.unavailable");
     }
 
+    // A proxy closes a connection that stays silent past its read timeout (ingress-nginx: 60 s), and
+    // a model can think that long before its first visible word. A comment line keeps the stream
+    // alive while nothing else is written (final review, Important 1). Comments are ignored by SSE
+    // clients, so the event sequence is unchanged.
+    [Fact]
+    public async Task Ask_ModelSilentLongerThanTheHeartbeat_KeepsTheStreamAliveWithComments()
+    {
+        await using var heartbeat = _enabled.WithWebHostBuilder(b => b.UseSetting("Assistant:HeartbeatSeconds", "1"));
+        _fake.Enqueue(FakeReply.Text("Late answer.") with { Delay = TimeSpan.FromSeconds(2.5) });
+        var client = await AdminAsync(heartbeat);
+
+        var response = await client.PostAsJsonAsync("/api/assistant/messages", new { question = "Why?" });
+        var body = await response.Content.ReadAsStringAsync();
+
+        body.Should().StartWith(": keep-alive\n\n");
+        body.Split("\n\n", StringSplitOptions.RemoveEmptyEntries)
+            .Where(block => !block.StartsWith(':'))
+            .Select(block => block.Split('\n')[0])
+            .Should().Equal("event: text", "event: done");
+    }
+
     // Once the stream has started, an unanticipated exception (a tool query's database fault, say)
     // can no longer become a status code. It must end the stream with an error event rather than
     // reset the connection, and leak nothing of the exception (final review, Important 3).

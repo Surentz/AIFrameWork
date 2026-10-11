@@ -55,6 +55,11 @@ Create a key in the `aiframework-dev` workspace, save it to a file **outside the
 `Assistant__Enabled=true` and `Assistant__ApiKeyFile=<path>` (user-secrets or the environment).
 With it off, `GET /api/assistant` says so and `POST /api/assistant/messages` is a 404.
 
+The stream sends a `: keep-alive` comment every `Assistant__HeartbeatSeconds` (default 15) while
+nothing else is written, so a proxy's read timeout never closes it mid-thought. Something that
+throws after the stream started is turned into a final `error` event by
+`AssistantStreamExceptionFilter`: UseExceptionHandler does not run once a response has started.
+
 ## Testing
 
 No test calls Anthropic. `FakeMessagesApi.StartAsync()` listens on plain HTTP on loopback; point
