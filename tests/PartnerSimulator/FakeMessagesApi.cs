@@ -33,6 +33,22 @@ public sealed record FakeReply(int StatusCode, IReadOnlyList<string> Events, str
 
     public static FakeReply Status(int status) => new(status, [], "end_turn");
 
+    /// <summary>max_tokens hit inside a thinking block: its signature never arrives.</summary>
+    public static FakeReply TruncatedInThinking() =>
+        new(200, [Start(0, new { type = "thinking", thinking = string.Empty, signature = string.Empty })], "max_tokens");
+
+    /// <summary>max_tokens hit right after a text block started: the block is empty.</summary>
+    public static FakeReply TruncatedAfterTextStart() =>
+        new(200, [Start(0, new { type = "text", text = string.Empty })], "max_tokens");
+
+    /// <summary>A delta for a block that never started — a protocol violation.</summary>
+    public static FakeReply DeltaWithoutStart() =>
+        new(200, [Delta(3, new { type = "text_delta", text = "orphan" })], "end_turn");
+
+    /// <summary>An event whose data is not JSON.</summary>
+    public static FakeReply MalformedEvent() =>
+        new(200, ["event: content_block_delta\ndata: {not json\n\n"], "end_turn");
+
     public static FakeReply UnknownBlockThenText(string rawBlockJson, string text)
     {
         using var raw = JsonDocument.Parse(rawBlockJson);

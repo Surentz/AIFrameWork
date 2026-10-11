@@ -15,6 +15,11 @@ namespace AiFramework.Infrastructure.Assistant;
 /// that builder is Refit-only, and its resilience handler would retry a streaming POST and cut
 /// long streams at its attempt timeout. ADR 0033.
 /// </summary>
+/// <remarks>
+/// Every SDK failure becomes a Result, never an exception: after the first SSE byte an exception
+/// can only reset the admin's connection. A turn that could not be replayed (see
+/// <see cref="AssistantStreamAccumulator.IsReplayable"/>) is reported incomplete, never stored.
+/// </remarks>
 internal sealed partial class ClaudeAssistantModel(
     IHttpClientFactory httpClients,
     IOptions<AssistantOptions> options,
@@ -62,6 +67,14 @@ internal sealed partial class ClaudeAssistantModel(
         {
             return Unavailable();
         }
+        catch (AnthropicInvalidDataException)
+        {
+            return Unavailable();
+        }
+        catch (AnthropicUnexpectedStatusCodeException)
+        {
+            return Unavailable();
+        }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return Unavailable();
@@ -105,6 +118,6 @@ internal sealed partial class ClaudeAssistantModel(
 
         var turn = accumulator.Complete();
         metrics.Record(turn);
-        return Result.Success(turn);
+        return accumulator.IsReplayable ? Result.Success(turn) : Incomplete();
     }
 }

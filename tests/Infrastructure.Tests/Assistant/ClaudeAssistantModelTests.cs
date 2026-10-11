@@ -187,6 +187,52 @@ public sealed class ClaudeAssistantModelTests : IAsyncLifetime
         result.Error.Message.Should().Contain("new conversation");
     }
 
+    // A stored turn the provider will reject on replay — an unsigned thinking block, an empty text
+    // block — would break every later question in the conversation, so it must never be returned
+    // as a success (final review, Important 2).
+    [Fact]
+    public async Task NextTurnAsync_TruncatedInsideThinking_IsIncompleteRatherThanAnAnswer()
+    {
+        _fake.Enqueue(FakeReply.TruncatedInThinking());
+
+        var result = await NextAsync(Request());
+
+        result.Error.Code.Should().Be("assistant.incomplete");
+    }
+
+    [Fact]
+    public async Task NextTurnAsync_TruncatedRightAfterATextStart_IsIncompleteRatherThanAnAnswer()
+    {
+        _fake.Enqueue(FakeReply.TruncatedAfterTextStart());
+
+        var result = await NextAsync(Request());
+
+        result.Error.Code.Should().Be("assistant.incomplete");
+    }
+
+    // A malformed stream must become a Result, never an exception: once the SSE response has
+    // started, an exception can only reset the connection (final review, Important 3).
+    [Fact]
+    public async Task NextTurnAsync_DeltaWithoutItsStart_IsIncomplete()
+    {
+        _fake.Enqueue(FakeReply.DeltaWithoutStart());
+
+        var result = await NextAsync(Request());
+
+        result.Error.Code.Should().Be("assistant.incomplete");
+    }
+
+    [Fact]
+    public async Task NextTurnAsync_MalformedEvent_IsAFailedResultNotAnException()
+    {
+        _fake.Enqueue(FakeReply.MalformedEvent());
+
+        var result = await NextAsync(Request());
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Kind.Should().Be(ErrorKind.Unavailable);
+    }
+
     [Fact]
     public async Task NextTurnAsync_Refusal_ReturnsARefusalStop()
     {

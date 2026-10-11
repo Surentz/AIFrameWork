@@ -18,6 +18,15 @@ internal sealed class AssistantStreamAccumulator
     private long _output;
     private long _cacheRead;
     private long _cacheWrite;
+    private bool _malformed;
+
+    /// <summary>
+    /// False when the turn cannot be replayed to the provider: a delta arrived for a block that never
+    /// started, a thinking block never got its signature (max_tokens landed inside it), or a text
+    /// block is empty. Stored, such a turn would make every later question in the conversation fail,
+    /// so the adapter reports it as incomplete instead. Read after <see cref="Complete"/>.
+    /// </summary>
+    public bool IsReplayable { get; private set; }
 
     /// <summary>The visible text this event adds, or null.</summary>
     public string? Apply(BetaRawMessageStreamEvent streamEvent)
@@ -37,7 +46,13 @@ internal sealed class AssistantStreamAccumulator
 
         if (streamEvent.TryPickContentBlockDelta(out var delta))
         {
-            return _blocks[delta.Index].Apply(delta.Delta);
+            if (!_blocks.TryGetValue(delta.Index, out var block))
+            {
+                _malformed = true;
+                return null;
+            }
+
+            return block.Apply(delta.Delta);
         }
 
         if (streamEvent.TryPickDelta(out var messageDelta))
@@ -58,9 +73,18 @@ internal sealed class AssistantStreamAccumulator
             .Select(b => new AssistantToolCall(b.Id!, b.Name!, b.Input!.Value))
             .ToList();
 
+        IsReplayable = !_malformed && blocks.TrueForAll(IsReplayableBlock);
+
         return new AssistantModelTurn(
             new ModelTurn(StoredBlocks.Serialize(blocks)), calls, _stop, new AssistantUsage(_input, _output, _cacheRead, _cacheWrite));
     }
+
+    private static bool IsReplayableBlock(StoredBlock block) => block.Type switch
+    {
+        "thinking" => !string.IsNullOrEmpty(block.Signature),
+        "text" => !string.IsNullOrEmpty(block.Text),
+        _ => true,
+    };
 
     private static AssistantStopReason MapStop(string? reason) => reason switch
     {
