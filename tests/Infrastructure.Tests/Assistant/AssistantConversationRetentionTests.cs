@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AiFramework.Infrastructure.Tests.Assistant;
 
 /// <summary>
-/// The 24-hour sweep. Questions are free text an administrator typed, so this bounds how long the
+/// The 30-day sweep. Questions are free text an administrator typed, so this bounds how long the
 /// application keeps them — a requirement, not housekeeping. Dated far from other tests' rows
 /// because the sweep has no owner filter (see OrderExportRetentionTests).
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class AssistantConversationRetentionTests(PostgresFixture fixture)
         var id = Guid.NewGuid();
         await using var context = fixture.CreateContext();
         var store = new AssistantConversations(context);
-        store.Start(id, Guid.NewGuid(), lastActive);
+        store.Start(id, Guid.NewGuid(), "q", lastActive);
         store.Append(id, [new UserQuestionTurn("q", lastActive), new ModelTurn("[]")], lastActive);
         await context.SaveChangesAsync();
         return id;
@@ -49,6 +49,17 @@ public sealed class AssistantConversationRetentionTests(PostgresFixture fixture)
     public async Task PruneAsync_ActiveInsideTheRetention_KeepsIt()
     {
         var recent = await SeedAsync(Now - AssistantConversationRetention.Retention + TimeSpan.FromMinutes(1));
+
+        await PruneAsync();
+
+        await using var context = fixture.CreateContext();
+        (await context.AssistantConversations.AnyAsync(c => c.Id == recent)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task PruneAsync_IdleForTwoDays_KeepsIt()
+    {
+        var recent = await SeedAsync(Now - TimeSpan.FromDays(2));
 
         await PruneAsync();
 

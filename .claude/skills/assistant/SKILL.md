@@ -1,6 +1,6 @@
 ---
 name: assistant
-description: Use when touching the ops assistant - AskAssistant's tool-use loop, the assistant tools and their personal-data boundary, the Claude adapter, transcripts and preserved thinking, Assistant__* configuration, the SSE endpoint, FakeMessagesApi, or the Monitoring panel (frontend/src/features/assistant).
+description: Use when touching the ops assistant, its conversation history and member tools - AskAssistant's tool-use loop, the assistant tools and their personal-data boundary, the Claude adapter, transcripts and preserved thinking, Assistant__* configuration, the SSE endpoint, FakeMessagesApi, or the Monitoring panel (frontend/src/features/assistant).
 ---
 
 # The ops assistant
@@ -16,13 +16,17 @@ tools, streamed back as server-sent events. ADR 0033 has the reasons; this is th
 | `src/Application/Assistant/AssistantToolbox.cs` | The tool definitions and their execution |
 | `src/Application/Assistant/ToolResults/` | What each tool returns — and therefore what leaves for Anthropic |
 | `src/Application/Assistant/AssistantPorts.cs` | `IAssistantModel`, `IAssistantOutput`, `IAssistantConversations`, `IAssistantConversationRetention` |
-| `src/Application/Assistant/AssistantPrompt.cs` | The system prompt, a constant |
+| `src/Application/Assistant/AssistantPrompt.cs` | The system prompts, one constant per scope |
+| `src/Application/Assistant/AssistantHistory.cs` | The history port, display DTOs, and the list/read/rename/delete queries and commands |
 | `src/Infrastructure/Assistant/` | The Claude adapter (`ClaudeAssistantModel`, the request mapper, the stream accumulator, `StoredBlocks`), the transcript store, retention, options, metrics |
-| `src/Api/Assistant/` | `AssistantController`, `SseAssistantOutput`, DTOs, the rate-limit policy name |
+| `src/Infrastructure/Assistant/AssistantHistoryStore.cs`, `AssistantDisplay.cs` | The sidebar reads, rename and delete; the display projection of stored turns |
+| `src/Api/Assistant/` | `AssistantController`, `AssistantConversationsController`, `SseAssistantOutput`, DTOs, the rate-limit policy name |
 | `tests/PartnerSimulator/FakeMessagesApi.cs` | A scripted stand-in for the Messages API |
 
 ## Adding a tool
 
+0. Decide its scope: a member tool goes in `MemberDefinitions` and may read only the caller's own
+   rows through a query scoped to `ICurrentUser`; anything else goes in `MonitoringDefinitions`.
 1. A projection record in `ToolResults/` — never return a monitoring view.
    `AssistantToolResultsBoundaryTests` reads every type in that namespace and fails on any property
    named like `UserId`, `OwnerId`, `Username`, `IpAddress` or `UserAgent`.
@@ -88,9 +92,19 @@ No test calls Anthropic. `FakeMessagesApi.StartAsync()` listens on plain HTTP on
   `DefaultReply = FakeMessagesScript.ToolThenAnswer` (a `job_health` call, then a fixed answer),
   because a Playwright run cannot script it per test. `assistant.spec.ts` is `@local-only`.
 
+## Scope and history
+
+`ToolScope` is decided by the API for every question from `Monitoring.Read` (the role is read from
+the database, so a demoted administrator is a member on their next question). The handler offers
+`AssistantToolbox.For(scope)` and `AssistantPrompt.For(scope)`; a tool outside the scope is an
+`is_error` result, never run. A conversation is titled by its first question (60 characters), kept
+30 days after its last question, and its owner can list, reopen, rename and delete it; another
+user's id is a 404. Rename touches only the conversation row, and the display projection reads
+stored turns without ever rewriting them.
+
 ## Spend
 
-The Console workspace's spend limit is the hard cap. In the app: 20 questions per administrator
+The Console workspace's spend limit is the hard cap. In the app: 20 questions per **user**
 per hour (`RateLimiting__Assistant__PermitLimit`), 8 tool rounds per question, 20 questions per
 conversation. Tokens and tool calls are metered as `aiframework.assistant.tokens{kind}` and
 `aiframework.assistant.tool_calls{tool}`.

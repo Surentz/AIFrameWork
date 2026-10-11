@@ -28,7 +28,7 @@ public sealed class AssistantConversationsTests(PostgresFixture fixture)
         var id = Guid.NewGuid();
         await using var context = fixture.CreateContext();
         var store = new AssistantConversations(context);
-        store.Start(id, Guid.NewGuid(), Now);
+        store.Start(id, Guid.NewGuid(), "Why?", Now);
         store.Append(id, turns, Now);
         await context.SaveChangesAsync();
         return id;
@@ -104,5 +104,14 @@ public sealed class AssistantConversationsTests(PostgresFixture fixture)
         var act = () => new AssistantConversations(context).Append(Guid.NewGuid(), [], Now);
 
         act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task Start_StoresTheTitle()
+    {
+        var id = await StartWithAsync(FirstQuestion);
+
+        await using var context = fixture.CreateContext();
+        (await context.AssistantConversations.SingleAsync(c => c.Id == id)).Title.Should().Be("Why?");
     }
 }

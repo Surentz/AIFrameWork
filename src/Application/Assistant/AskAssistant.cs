@@ -3,8 +3,22 @@ using FluentValidation;
 
 namespace AiFramework.Application.Assistant;
 
-/// <summary>One question to the ops assistant. A null conversation id starts a new conversation.</summary>
-public sealed record AskAssistant(Guid? ConversationId, string Question) : ICommand<AssistantAnswer>;
+/// <summary>
+/// Which tools a question may use. Application cannot see roles, so the API sets it from the
+/// caller's capabilities on every question (ADR 0034): a demoted administrator is a Member on
+/// their next question.
+/// </summary>
+public enum ToolScope
+{
+    /// <summary>The caller's own orders and exports, the catalogue, population figures.</summary>
+    Member,
+
+    /// <summary>Everything a member gets, plus the monitoring tools.</summary>
+    Operator,
+}
+
+/// <summary>One question to the assistant. A null conversation id starts a new conversation.</summary>
+public sealed record AskAssistant(Guid? ConversationId, string Question, ToolScope Scope) : ICommand<AssistantAnswer>;
 
 public enum AssistantOutcome
 {
@@ -61,14 +75,14 @@ public sealed class AskAssistantHandler(
         }
 
         var now = clock.UtcNow;
-        var opened = await OpenAsync(command.ConversationId, ownerId, now, cancellationToken).ConfigureAwait(false);
+        var opened = await OpenAsync(command.ConversationId, ownerId, command.Question, now, cancellationToken).ConfigureAwait(false);
         if (!opened.IsSuccess)
         {
             return Result.Failure<AssistantAnswer>(opened.Error);
         }
 
         var added = new List<AssistantTurn> { new UserQuestionTurn(command.Question.Trim(), now) };
-        var outcome = await RunAsync(opened.Value.Turns, added, cancellationToken).ConfigureAwait(false);
+        var outcome = await RunAsync(opened.Value.Turns, added, command.Scope, cancellationToken).ConfigureAwait(false);
         if (!outcome.IsSuccess)
         {
             return Result.Failure<AssistantAnswer>(outcome.Error);
@@ -107,12 +121,12 @@ public sealed class AskAssistantHandler(
             ErrorKind.Unavailable, "assistant.incomplete", "The assistant stopped part-way through. Try again."));
 
     private async Task<Result<AssistantConversation>> OpenAsync(
-        Guid? conversationId, Guid ownerId, DateTimeOffset now, CancellationToken cancellationToken)
+        Guid? conversationId, Guid ownerId, string question, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (conversationId is not { } id)
         {
             var started = new AssistantConversation(Guid.NewGuid(), ownerId, 0, []);
-            conversations.Start(started.Id, ownerId, now);
+            conversations.Start(started.Id, ownerId, AssistantTitle.From(question), now);
             return Result.Success(started);
         }
 
@@ -130,12 +144,12 @@ public sealed class AskAssistantHandler(
     }
 
     private async Task<Result<AssistantOutcome>> RunAsync(
-        IReadOnlyList<AssistantTurn> history, List<AssistantTurn> added, CancellationToken cancellationToken)
+        IReadOnlyList<AssistantTurn> history, List<AssistantTurn> added, ToolScope scope, CancellationToken cancellationToken)
     {
         for (var round = 0; round <= MaxToolRounds; round++)
         {
             var allowTools = round < MaxToolRounds;
-            var request = new AssistantRequest(AssistantPrompt.System, AssistantToolbox.Definitions, [.. history, .. added], allowTools);
+            var request = new AssistantRequest(AssistantPrompt.For(scope), AssistantToolbox.For(scope), [.. history, .. added], allowTools);
 
             var next = await model.NextTurnAsync(request, output, cancellationToken).ConfigureAwait(false);
             if (!next.IsSuccess)
@@ -152,18 +166,28 @@ public sealed class AskAssistantHandler(
                 return settled;
             }
 
-            added.Add(await RunToolsAsync(turn.ToolCalls, cancellationToken).ConfigureAwait(false));
+            added.Add(await RunToolsAsync(turn.ToolCalls, scope, cancellationToken).ConfigureAwait(false));
         }
 
         // Unreachable: the last round sends tool_choice none, and Settle ends every tool-free turn.
         return Incomplete();
     }
 
-    private async Task<ToolResultsTurn> RunToolsAsync(IReadOnlyList<AssistantToolCall> calls, CancellationToken cancellationToken)
+    private async Task<ToolResultsTurn> RunToolsAsync(
+        IReadOnlyList<AssistantToolCall> calls, ToolScope scope, CancellationToken cancellationToken)
     {
         var results = new List<AssistantToolResult>(calls.Count);
         foreach (var call in calls)
         {
+            // A tool the question was not offered — a guess, or text in a tool result steering the
+            // model — is answered, never run and never shown. Every call still gets its result, so
+            // the stored history stays well-formed.
+            if (!AssistantToolbox.Offers(scope, call.Name))
+            {
+                results.Add(new AssistantToolResult(call.Id, $"The tool '{call.Name}' is not available here.", IsError: true));
+                continue;
+            }
+
             await output.ToolAsync(call.Name, cancellationToken).ConfigureAwait(false);
             results.Add(await toolbox.RunAsync(call, cancellationToken).ConfigureAwait(false));
         }

@@ -54,3 +54,29 @@ public sealed record ExternalSystemsResult(DateTimeOffset TrafficSince, IReadOnl
 
 public sealed record SignInHealthResult(
     int Succeeded, int BadCredentials, int LockedOut, int UnknownUser, DateTimeOffset Since, int ActiveUsers, int LockedOutAccounts);
+
+public sealed record OrderResult(
+    Guid Id, string Sku, string? ProductName, int Quantity, decimal? UnitPrice, string Status, DateTimeOffset PlacedAt);
+
+public sealed record OrdersResult(IReadOnlyList<OrderResult> Items, string? NextCursor);
+
+public sealed record OrderDetailResult(
+    Guid Id,
+    string Sku,
+    string? ProductName,
+    int Quantity,
+    decimal? UnitPrice,
+    string Status,
+    DateTimeOffset PlacedAt,
+    DateTimeOffset? ShippedAt,
+    DateTimeOffset? CancelledAt);
+
+public sealed record ExportResult(Guid Id, string Status, DateTimeOffset RequestedAt, DateTimeOffset? CompletedAt, int? RowCount);
+
+public sealed record ExportsResult(IReadOnlyList<ExportResult> Items);
+
+public sealed record ProductResult(Guid Id, string Sku, string Name, decimal Price);
+
+public sealed record ProductsResult(IReadOnlyList<ProductResult> Items, string? NextCursor);
+
+public sealed record PopulationResult(string AreaCode, string AreaName, string Period, long Population, string Source);

@@ -215,11 +215,13 @@ notifications nobody is pushed. The worker writes outbox rows; it never calls `A
 sits under the port, never around it. With `EnableRetryOnFailure` on, an explicit transaction
 must go through `CreateExecutionStrategy().ExecuteAsync(...)`.
 
-**Assistant** (`assistant`, ADR 0033) — A stored transcript is **append-only**: Claude rejects a
+**Assistant** (`assistant`, ADRs 0033/0034) — A stored transcript is **append-only**: Claude rejects a
 history whose earlier turns changed, so updating, trimming or re-serializing a stored turn makes
 every later question in that conversation fail. A tool returns its own projection from
 `Assistant/ToolResults/`, never a monitoring view, and no tool dispatches a command. Tool results
-leave for Anthropic: free text goes through `OperationalText.Scrub`.
+leave for Anthropic: free text goes through `OperationalText.Scrub`. A member tool reads only the
+caller's own rows, through a query scoped to `ICurrentUser`; the scope comes from the API per
+question, never from Application.
 
 **External systems** (`external-systems`, ADR 0031) — Every partner client goes through
 `ExternalSystemsBuilder.AddClient<TApi>`; a hand-wired `AddHttpClient` silently skips traffic,

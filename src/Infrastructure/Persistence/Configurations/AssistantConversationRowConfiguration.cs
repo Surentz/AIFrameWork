@@ -1,3 +1,4 @@
+using AiFramework.Application.Assistant;
 using AiFramework.Infrastructure.Assistant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -16,6 +17,7 @@ internal sealed class AssistantConversationRowConfiguration : IEntityTypeConfigu
         builder.ToTable("assistant_conversations");
         builder.HasKey(c => c.Id);
         builder.Property(c => c.OwnerId).IsRequired();
+        builder.Property(c => c.Title).HasMaxLength(AssistantTitle.MaxLength).IsRequired();
         builder.Property(c => c.CreatedAt).IsRequired();
         builder.Property(c => c.LastActiveAt).IsRequired();
         builder.Property(c => c.QuestionCount).IsRequired();
@@ -27,5 +29,9 @@ internal sealed class AssistantConversationRowConfiguration : IEntityTypeConfigu
 
         // The hourly prune's predicate.
         builder.HasIndex(c => c.LastActiveAt).HasDatabaseName("IX_AssistantConversations_LastActiveAt");
+
+        // The sidebar's query: one owner's conversations, newest first.
+        builder.HasIndex(c => new { c.OwnerId, c.LastActiveAt })
+            .HasDatabaseName("IX_AssistantConversations_OwnerId_LastActiveAt");
     }
 }

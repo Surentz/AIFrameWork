@@ -2526,17 +2526,6 @@ export interface paths {
                         readonly "text/json": components["schemas"]["AssistantStatusResponse"];
                     };
                 };
-                /** @description Forbidden */
-                readonly 403: {
-                    headers: {
-                        readonly [name: string]: unknown;
-                    };
-                    content: {
-                        readonly "text/plain": components["schemas"]["ProblemDetails"];
-                        readonly "application/json": components["schemas"]["ProblemDetails"];
-                        readonly "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
             };
         };
         readonly put?: never;
@@ -2597,17 +2586,6 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Forbidden */
-                readonly 403: {
-                    headers: {
-                        readonly [name: string]: unknown;
-                    };
-                    content: {
-                        readonly "text/plain": components["schemas"]["ProblemDetails"];
-                        readonly "application/json": components["schemas"]["ProblemDetails"];
-                        readonly "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
                 /** @description Not Found */
                 readonly 404: {
                     headers: {
@@ -2658,6 +2636,203 @@ export interface paths {
         readonly options?: never;
         readonly head?: never;
         readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/assistant/conversations": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": readonly components["schemas"]["AssistantConversationSummaryResponse"][];
+                        readonly "application/json": readonly components["schemas"]["AssistantConversationSummaryResponse"][];
+                        readonly "text/json": readonly components["schemas"]["AssistantConversationSummaryResponse"][];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/assistant/conversations/{id}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["AssistantConversationResponse"];
+                        readonly "application/json": components["schemas"]["AssistantConversationResponse"];
+                        readonly "text/json": components["schemas"]["AssistantConversationResponse"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["RenameAssistantConversationRequest"];
+                    readonly "text/json": components["schemas"]["RenameAssistantConversationRequest"];
+                    readonly "application/*+json": components["schemas"]["RenameAssistantConversationRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         readonly trace?: never;
     };
 }
@@ -2729,6 +2904,19 @@ export interface components {
             readonly conversationId?: null | string;
             readonly question: string;
         };
+        readonly AssistantConversationResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            readonly title: string;
+            readonly messages: readonly components["schemas"]["AssistantMessageResponse"][];
+        };
+        readonly AssistantConversationSummaryResponse: {
+            /** Format: uuid */
+            readonly id: string;
+            readonly title: string;
+            /** Format: date-time */
+            readonly lastActiveAt: string;
+        };
         /**
          * @description One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of
          *     the answer), tool (a tool started), done (saved; carries the conversation id), error (carries a
@@ -2742,6 +2930,12 @@ export interface components {
             readonly conversationId?: null | string;
             readonly outcome?: null | components["schemas"]["AssistantOutcome"];
             readonly problem?: null | components["schemas"]["ProblemDetails"];
+        };
+        /** @description One message as the page shows it. Role is user or assistant; Tools are the tool names the answer used. */
+        readonly AssistantMessageResponse: {
+            readonly role: string;
+            readonly text: string;
+            readonly tools: readonly string[];
         };
         /** @enum {unknown} */
         readonly AssistantOutcome: "Answered" | "Capped" | "Truncated" | null;
@@ -3177,6 +3371,13 @@ export interface components {
             readonly username: string;
             readonly password: string;
             readonly displayName: string;
+        };
+        /**
+         * @description A new title. No length annotation, for the reason given on AskAssistantRequest: the rule belongs
+         *     to RenameAssistantConversationValidator.
+         */
+        readonly RenameAssistantConversationRequest: {
+            readonly title: string;
         };
         /** @description Who the caller is. Carries no password material, by construction. */
         readonly SessionResponse: {

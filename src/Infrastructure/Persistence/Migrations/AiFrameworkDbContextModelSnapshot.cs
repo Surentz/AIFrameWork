@@ -302,6 +302,11 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
                     b.Property<int>("TurnCount")
                         .HasColumnType("integer");
 
@@ -309,6 +314,9 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("LastActiveAt")
                         .HasDatabaseName("IX_AssistantConversations_LastActiveAt");
+
+                    b.HasIndex("OwnerId", "LastActiveAt")
+                        .HasDatabaseName("IX_AssistantConversations_OwnerId_LastActiveAt");
 
                     b.ToTable("assistant_conversations", (string)null);
                 });

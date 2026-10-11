@@ -50,3 +50,40 @@ public sealed record AssistantEventResponse
 
     public static AssistantEventResponse Error(ProblemDetails problem) => new() { Type = "error", Problem = problem };
 }
+
+public sealed record AssistantConversationSummaryResponse
+{
+    public required Guid Id { get; init; }
+
+    public required string Title { get; init; }
+
+    public required DateTimeOffset LastActiveAt { get; init; }
+}
+
+/// <summary>One message as the page shows it. Role is user or assistant; Tools are the tool names the answer used.</summary>
+public sealed record AssistantMessageResponse
+{
+    public required string Role { get; init; }
+
+    public required string Text { get; init; }
+
+    public required IReadOnlyList<string> Tools { get; init; }
+}
+
+public sealed record AssistantConversationResponse
+{
+    public required Guid Id { get; init; }
+
+    public required string Title { get; init; }
+
+    public required IReadOnlyList<AssistantMessageResponse> Messages { get; init; }
+}
+
+/// <summary>
+/// A new title. No length annotation, for the reason given on AskAssistantRequest: the rule belongs
+/// to RenameAssistantConversationValidator.
+/// </summary>
+public sealed record RenameAssistantConversationRequest
+{
+    public required string Title { get; init; }
+}

@@ -55,6 +55,18 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
         return client;
     }
 
+    private async Task<HttpClient> MemberAsync()
+    {
+        var client = _enabled.CreateClient();
+        (await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new { Username = $"m{Guid.NewGuid():N}"[..32], Password = ApiFactory.RegisteredPassword, DisplayName = "Member" })).EnsureSuccessStatusCode();
+        return client;
+    }
+
+    private string[] OfferedTools(int request) =>
+        [.. _fake.Requests[request].Body.GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString()!)];
+
     private static async Task<List<JsonElement>> EventsAsync(HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();
@@ -92,16 +104,82 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Ask_NonAdmin_IsForbidden()
+    public async Task Ask_Member_IsAnsweredWithOnlyTheMemberTools()
     {
+        _fake.Enqueue(FakeReply.Text("Hello."));
+        var client = await MemberAsync();
+
+        var response = await client.PostAsJsonAsync("/api/assistant/messages", new { question = "Hi?" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await EventsAsync(response))[^1].GetProperty("type").GetString().Should().Be("done");
+        OfferedTools(_fake.Requests.Count - 1).Should().Equal(AssistantToolbox.MemberDefinitions.Select(d => d.Name));
+    }
+
+    [Fact]
+    public async Task Ask_Admin_IsOfferedEveryTool()
+    {
+        _fake.Enqueue(FakeReply.Text("Hello."));
+        var client = await AdminAsync();
+
+        await EventsAsync(await client.PostAsJsonAsync("/api/assistant/messages", new { question = "Hi?" }));
+
+        OfferedTools(_fake.Requests.Count - 1).Should().Equal(AssistantToolbox.Definitions.Select(d => d.Name));
+    }
+
+    [Fact]
+    public async Task Status_Member_IsAnswered()
+    {
+        var client = await MemberAsync();
+
+        var status = await client.GetFromJsonAsync<JsonElement>("/api/assistant");
+
+        status.GetProperty("enabled").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Ask_MemberToolForAnotherUsersOrder_IsAnErrorResultNotTheOrder()
+    {
+        var admin = await AdminAsync();
+        var sku = $"S{Guid.NewGuid():N}"[..12];
+        (await admin.PostAsJsonAsync("/api/products", new { sku, name = "Mug", price = 9.5m })).EnsureSuccessStatusCode();
+        var owner = await MemberAsync();
+        var placed = await owner.PostAsJsonAsync("/api/orders", new { sku, quantity = 1 });
+        placed.EnsureSuccessStatusCode();
+        var orderId = await placed.Content.ReadFromJsonAsync<Guid>();
+        _fake.Enqueue(FakeReply.ToolUse("toolu_1", "get_order", $$"""{"order_id":"{{orderId}}"}"""));
+        _fake.Enqueue(FakeReply.Text("I can't find that order."));
+        var stranger = await MemberAsync();
+
+        await EventsAsync(await stranger.PostAsJsonAsync("/api/assistant/messages", new { question = $"Show order {orderId}" }));
+
+        var lastMessage = _fake.Requests[^1].Body.GetProperty("messages").EnumerateArray().Last();
+        var toolResult = lastMessage.GetProperty("content")[0];
+        toolResult.GetProperty("type").GetString().Should().Be("tool_result");
+        toolResult.GetProperty("is_error").GetBoolean().Should().BeTrue();
+        toolResult.GetRawText().Should().NotContain(sku);
+    }
+
+    [Fact]
+    public async Task Ask_AdminDemotedMidConversation_GetsOnlyMemberToolsNextTime()
+    {
+        _fake.Enqueue(FakeReply.ToolUse("toolu_1", "job_health", """{"window_hours":24}"""));
+        _fake.Enqueue(FakeReply.Text("Fine."));
+        _fake.Enqueue(FakeReply.Text("Still fine."));
         var client = _enabled.CreateClient();
+        var username = $"a{Guid.NewGuid():N}"[..32];
         (await client.PostAsJsonAsync(
             "/api/auth/register",
-            new { Username = $"u{Guid.NewGuid():N}"[..32], Password = ApiFactory.RegisteredPassword, DisplayName = "U" })).EnsureSuccessStatusCode();
+            new { Username = username, Password = ApiFactory.RegisteredPassword, DisplayName = "Admin" })).EnsureSuccessStatusCode();
+        await factory.SetRoleAsync(username, UserRole.Admin);
+        var first = await EventsAsync(await client.PostAsJsonAsync("/api/assistant/messages", new { question = "Jobs?" }));
+        var conversationId = first[^1].GetProperty("conversationId").GetGuid();
 
-        var response = await client.PostAsJsonAsync("/api/assistant/messages", new { question = "Why?" });
+        await factory.SetRoleAsync(username, UserRole.Member);
+        var second = await EventsAsync(await client.PostAsJsonAsync("/api/assistant/messages", new { conversationId, question = "And now?" }));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        second[^1].GetProperty("type").GetString().Should().Be("done");
+        OfferedTools(_fake.Requests.Count - 1).Should().Equal(AssistantToolbox.MemberDefinitions.Select(d => d.Name));
     }
 
     [Fact]
