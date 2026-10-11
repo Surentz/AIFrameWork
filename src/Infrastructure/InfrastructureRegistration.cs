@@ -11,6 +11,7 @@ using AiFramework.Application.Statistics;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
+using AiFramework.Infrastructure.Assistant;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Exports;
@@ -169,6 +170,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAssistantConversations, AssistantConversations>();
         services.AddScoped<ISessionValidator, SessionValidator>();
     }
 

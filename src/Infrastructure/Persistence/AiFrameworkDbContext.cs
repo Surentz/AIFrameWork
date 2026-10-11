@@ -2,6 +2,7 @@ using AiFramework.Domain.Notifications;
 using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
 using AiFramework.Domain.Users;
+using AiFramework.Infrastructure.Assistant;
 using AiFramework.Infrastructure.Jobs;
 using AiFramework.Infrastructure.Monitoring;
 using AiFramework.Infrastructure.Outbox;
@@ -37,6 +38,10 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     public DbSet<TrafficBucket> TrafficBuckets => Set<TrafficBucket>();
 
     public DbSet<ExternalSystemStatusRow> ExternalSystemStatuses => Set<ExternalSystemStatusRow>();
+
+    public DbSet<AssistantConversationRow> AssistantConversations => Set<AssistantConversationRow>();
+
+    public DbSet<AssistantTurnRow> AssistantTurns => Set<AssistantTurnRow>();
 
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
