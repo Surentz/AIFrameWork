@@ -1,7 +1,7 @@
 # The assistant for everyone — design
 
 **Date:** 2026-10-11
-**Status:** Draft for review.
+**Status:** Approved 2026-10-11. Backend built (PR 1).
 **Type:** this document is `docs(assistant)`; the build is two `feat` pull requests (§6).
 **Builds on:** `docs/superpowers/specs/2026-10-11-ops-assistant-design.md` and ADR 0033 (the ops
 assistant, built in #116 and #117), ADR 0020 (the Admin role), ADR 0024 (capability policies).

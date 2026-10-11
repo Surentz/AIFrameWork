@@ -1,7 +1,7 @@
 # 0033. An ops assistant on Claude
 
 **Date:** 2026-10-11
-**Status:** Accepted
+**Status:** Accepted; amended by 0034
 
 ## Context
 
