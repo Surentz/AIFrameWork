@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Api\AiFramework.Api.csproj" />
+    <!-- Aliased: the simulator is an executable whose top-level Program would clash with the API's. -->
+    <ProjectReference Include="..\PartnerSimulator\AiFramework.PartnerSimulator.csproj" Aliases="simulator" />
   </ItemGroup>
 
 </Project>

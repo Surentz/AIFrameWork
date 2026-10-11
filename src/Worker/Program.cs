@@ -1,5 +1,7 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Assistant;
 using AiFramework.Infrastructure;
+using AiFramework.Infrastructure.Assistant;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.ExternalSystems;
@@ -49,6 +51,10 @@ builder.Services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<JobCurrentU
 // implementation fails `codegen write` at container-build time rather than on a sign-in path this
 // host does not have. See NoClientContext.
 builder.Services.AddScoped<IClientContext, NoClientContext>();
+
+// The worker never asks the assistant anything, but AskAssistantHandler is registered in every
+// host and the generic host validates every descriptor at build time. See NoAssistantOutput.
+builder.Services.AddScoped<IAssistantOutput, NoAssistantOutput>();
 
 builder.Services.Configure<JobOptions>(builder.Configuration.GetSection("Jobs"));
 

@@ -278,6 +278,73 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantConversationRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastActiveAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("QuestionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<int>("TurnCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastActiveAt")
+                        .HasDatabaseName("IX_AssistantConversations_LastActiveAt");
+
+                    b.ToTable("assistant_conversations", (string)null);
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantTurnRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Seq")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId", "Seq")
+                        .HasDatabaseName("IX_AssistantTurns_ConversationId_Seq");
+
+                    b.ToTable("assistant_turns", (string)null);
+                });
+
             modelBuilder.Entity("AiFramework.Infrastructure.Jobs.JobRun", b =>
                 {
                     b.Property<Guid>("EnvelopeId")
@@ -653,6 +720,15 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantTurnRow", b =>
+                {
+                    b.HasOne("AiFramework.Infrastructure.Assistant.AssistantConversationRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

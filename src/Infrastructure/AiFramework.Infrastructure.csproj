@@ -12,6 +12,11 @@
 
   <ItemGroup>
     <!--
+      The official Anthropic SDK, used only by Assistant/ClaudeAssistantModel.cs: the ops
+      assistant's model calls (ADR 0033). Its own retry is kept; see that class.
+    -->
+    <PackageReference Include="Anthropic" Version="12.55.0" />
+    <!--
       Client-credentials token acquisition, caching and refresh for external systems (ADR 0031).
       The client-side library only — Apache 2.0 — not Duende IdentityServer. Keycloak issues the
       tokens; this fetches them.

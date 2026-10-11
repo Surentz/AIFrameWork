@@ -1,0 +1,173 @@
+using AiFramework.Application.Abstractions;
+using FluentValidation;
+
+namespace AiFramework.Application.Assistant;
+
+/// <summary>One question to the ops assistant. A null conversation id starts a new conversation.</summary>
+public sealed record AskAssistant(Guid? ConversationId, string Question) : ICommand<AssistantAnswer>;
+
+public enum AssistantOutcome
+{
+    /// <summary>The model finished its answer.</summary>
+    Answered,
+
+    /// <summary>The tool-round cap was reached; the model answered with what it had.</summary>
+    Capped,
+
+    /// <summary>The answer hit the output token limit and is incomplete.</summary>
+    Truncated,
+}
+
+public sealed record AssistantAnswer(Guid ConversationId, AssistantOutcome Outcome);
+
+public sealed class AskAssistantValidator : AbstractValidator<AskAssistant>
+{
+    public const int MaxQuestionLength = 2000;
+
+    public AskAssistantValidator()
+    {
+        RuleFor(c => c.Question)
+            .NotEmpty()
+            .Must(q => q.Trim().Length <= MaxQuestionLength)
+            .WithMessage($"A question cannot be longer than {MaxQuestionLength} characters.");
+    }
+}
+
+/// <summary>
+/// The tool-use loop. Collects the whole question — the question, every model turn, every tool
+/// result — and appends it once, at the end: the unit of work commits it with the command, so a
+/// failed, refused or cancelled question stores nothing and the conversation stays valid.
+/// ADR 0033.
+/// </summary>
+public sealed class AskAssistantHandler(
+    IAssistantModel model,
+    IAssistantConversations conversations,
+    IAssistantOutput output,
+    AssistantToolbox toolbox,
+    ICurrentUser currentUser,
+    IClock clock) : ICommandHandler<AskAssistant, AssistantAnswer>
+{
+    public const int MaxToolRounds = 8;
+
+    public const int MaxQuestionsPerConversation = 20;
+
+    public async Task<Result<AssistantAnswer>> HandleAsync(AskAssistant command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        if (currentUser.Id is not { } ownerId)
+        {
+            return Result.Failure<AssistantAnswer>(new Error(ErrorKind.Unauthorized, "assistant.no_caller", "Sign in to use the assistant."));
+        }
+
+        var now = clock.UtcNow;
+        var opened = await OpenAsync(command.ConversationId, ownerId, now, cancellationToken).ConfigureAwait(false);
+        if (!opened.IsSuccess)
+        {
+            return Result.Failure<AssistantAnswer>(opened.Error);
+        }
+
+        var added = new List<AssistantTurn> { new UserQuestionTurn(command.Question.Trim(), now) };
+        var outcome = await RunAsync(opened.Value.Turns, added, cancellationToken).ConfigureAwait(false);
+        if (!outcome.IsSuccess)
+        {
+            return Result.Failure<AssistantAnswer>(outcome.Error);
+        }
+
+        conversations.Append(opened.Value.Id, added, now);
+        return Result.Success(new AssistantAnswer(opened.Value.Id, outcome.Value));
+    }
+
+    /// <summary>Null means "run the tools and go round again"; anything else ends the question.</summary>
+    private static Result<AssistantOutcome>? Settle(AssistantModelTurn turn, bool allowTools)
+    {
+        if (turn.StopReason == AssistantStopReason.Refusal)
+        {
+            return Result.Failure<AssistantOutcome>(new Error(ErrorKind.Validation, "assistant.refused", "The assistant can't answer that."));
+        }
+
+        if (turn.ToolCalls.Count > 0)
+        {
+            // A tool call is only safe to store with its result. Without a tool_use stop (a
+            // truncated call) or with tools off, there is no result to pair it with, and a stored
+            // unpaired call makes every later question in the conversation fail.
+            return turn.StopReason == AssistantStopReason.ToolUse && allowTools ? null : Incomplete();
+        }
+
+        return Result.Success(turn.StopReason switch
+        {
+            AssistantStopReason.MaxTokens => AssistantOutcome.Truncated,
+            _ when !allowTools => AssistantOutcome.Capped,
+            _ => AssistantOutcome.Answered,
+        });
+    }
+
+    private static Result<AssistantOutcome> Incomplete() =>
+        Result.Failure<AssistantOutcome>(new Error(
+            ErrorKind.Unavailable, "assistant.incomplete", "The assistant stopped part-way through. Try again."));
+
+    private async Task<Result<AssistantConversation>> OpenAsync(
+        Guid? conversationId, Guid ownerId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (conversationId is not { } id)
+        {
+            var started = new AssistantConversation(Guid.NewGuid(), ownerId, 0, []);
+            conversations.Start(started.Id, ownerId, now);
+            return Result.Success(started);
+        }
+
+        var existing = await conversations.FindAsync(id, cancellationToken).ConfigureAwait(false);
+        if (existing is null || existing.OwnerId != ownerId)
+        {
+            return Result.Failure<AssistantConversation>(new Error(
+                ErrorKind.NotFound, "assistant.conversation_not_found", "That conversation does not exist or has expired. Start a new one."));
+        }
+
+        return existing.QuestionCount >= MaxQuestionsPerConversation
+            ? Result.Failure<AssistantConversation>(new Error(
+                ErrorKind.Validation, "assistant.conversation_full", $"This conversation has reached {MaxQuestionsPerConversation} questions. Start a new one."))
+            : Result.Success(existing);
+    }
+
+    private async Task<Result<AssistantOutcome>> RunAsync(
+        IReadOnlyList<AssistantTurn> history, List<AssistantTurn> added, CancellationToken cancellationToken)
+    {
+        for (var round = 0; round <= MaxToolRounds; round++)
+        {
+            var allowTools = round < MaxToolRounds;
+            var request = new AssistantRequest(AssistantPrompt.System, AssistantToolbox.Definitions, [.. history, .. added], allowTools);
+
+            var next = await model.NextTurnAsync(request, output, cancellationToken).ConfigureAwait(false);
+            if (!next.IsSuccess)
+            {
+                return Result.Failure<AssistantOutcome>(next.Error);
+            }
+
+            var turn = next.Value;
+            added.Add(turn.Turn);
+
+            var settled = Settle(turn, allowTools);
+            if (settled is not null)
+            {
+                return settled;
+            }
+
+            added.Add(await RunToolsAsync(turn.ToolCalls, cancellationToken).ConfigureAwait(false));
+        }
+
+        // Unreachable: the last round sends tool_choice none, and Settle ends every tool-free turn.
+        return Incomplete();
+    }
+
+    private async Task<ToolResultsTurn> RunToolsAsync(IReadOnlyList<AssistantToolCall> calls, CancellationToken cancellationToken)
+    {
+        var results = new List<AssistantToolResult>(calls.Count);
+        foreach (var call in calls)
+        {
+            await output.ToolAsync(call.Name, cancellationToken).ConfigureAwait(false);
+            results.Add(await toolbox.RunAsync(call, cancellationToken).ConfigureAwait(false));
+        }
+
+        return new ToolResultsTurn(results);
+    }
+}

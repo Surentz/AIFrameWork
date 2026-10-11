@@ -1,4 +1,5 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Assistant;
 using AiFramework.Application.Maintenance;
 using AiFramework.Application.Monitoring;
 using AiFramework.Application.Orders;
@@ -107,6 +108,10 @@ public static class JobRegistration
         // Daily at 03:40. Each export is a copy of someone's order history, so like the sign-in
         // sweep this bounds how long personal data is kept rather than tidying a table. ADR 0029.
         JobDescriptor.Scheduled<PruneOrderExports>("0 40 3 * * ?"),
+
+        // Hourly at :50. Conversations live 24 hours (ADR 0033); hourly keeps the overshoot under
+        // an hour. Like the sign-in sweep this bounds how long typed free text is kept.
+        JobDescriptor.Scheduled<PruneAssistantConversations>("0 50 * * * ?"),
     ];
 
     /// <summary>
@@ -179,7 +184,8 @@ public static class JobRegistration
             .IncludeType<PruneSignInEventsHandler>()
             .IncludeType<PruneTrafficBucketsHandler>()
             .IncludeType<PruneAdminActionsHandler>()
-            .IncludeType<PruneOrderExportsHandler>();
+            .IncludeType<PruneOrderExportsHandler>()
+            .IncludeType<PruneAssistantConversationsHandler>();
 
         // Set on the WORKER only — the API keeps Wolverine 6's NotAllowed default, so this
         // relaxation reaches exactly the host that needs it.

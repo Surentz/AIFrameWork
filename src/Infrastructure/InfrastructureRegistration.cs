@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Assistant;
 using AiFramework.Application.IntegrationEvents;
 using AiFramework.Application.Monitoring;
 using AiFramework.Application.Notifications;
@@ -10,6 +11,7 @@ using AiFramework.Application.Statistics;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Orders;
 using AiFramework.Domain.Products;
+using AiFramework.Infrastructure.Assistant;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.Exports;
@@ -104,6 +106,18 @@ public static class InfrastructureRegistration
     }
 
     /// <summary>
+    /// The ops assistant (ADR 0033). The toolbox is the assistant's only way to read data; it
+    /// dispatches monitoring queries as the caller, so it is scoped like the dispatcher. Its ports
+    /// are registered by AddInfrastructure (transcripts, model) and per host (IAssistantOutput).
+    /// </summary>
+    private static void RegisterAssistant(IServiceCollection services)
+    {
+        services.AddCommand<AskAssistant, AssistantAnswer, AskAssistantHandler>();
+        services.AddScoped<IValidator<AskAssistant>, AskAssistantValidator>();
+        services.AddScoped<AssistantToolbox>();
+    }
+
+    /// <summary>
     /// Official statistics, read from Statistics Denmark through <c>IPopulationStatistics</c>,
     /// which <c>ExternalSystemPartners</c> registers (the external systems pilot, ADR 0031). Split
     /// out of <see cref="AddMessaging"/> for MA0051, like the groups below.
@@ -156,6 +170,8 @@ public static class InfrastructureRegistration
         services.AddScoped<IOrderAuditWriter, OrderAuditWriter>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAssistantConversations, AssistantConversations>();
+        services.AddScoped<IAssistantConversationRetention, AssistantConversationRetention>();
         services.AddScoped<ISessionValidator, SessionValidator>();
     }
 
@@ -166,6 +182,9 @@ public static class InfrastructureRegistration
     /// </summary>
     private static void RegisterMonitoring(IServiceCollection services)
     {
+        // The assistant reads only monitoring queries, so it registers with them.
+        RegisterAssistant(services);
+
         services.AddQuery<GetJobRuns, JobRunPage, GetJobRunsHandler>();
         services.AddQuery<GetJobRun, JobRunView, GetJobRunHandler>();
         services.AddQuery<GetDeadLetters, DeadLetterPage, GetDeadLettersHandler>();
@@ -291,6 +310,7 @@ public static class InfrastructureRegistration
         // The monitoring page's read side, its retention sweeps, and traffic recording. After
         // AddJobs because TriggerableJobs enqueues through the IJobScheduler it registers.
         services.AddMonitoring();
+        services.AddAssistant();
 
         // ADR 0005 spike: registers only what the Wolverine handler needs. The Wolverine host
         // itself is wired in Program.cs, because UseWolverine hooks IHostBuilder, not IServiceCollection.
