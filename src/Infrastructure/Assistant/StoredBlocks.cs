@@ -33,6 +33,10 @@ internal static class StoredBlocks
     public static List<BetaContentBlockParam> ToParams(string blocks) =>
         [.. (JsonSerializer.Deserialize<List<StoredBlock>>(blocks, Json) ?? []).Select(ToParam)];
 
+    /// <summary>The stored blocks, for display only: nothing read here is replayed or re-serialized.</summary>
+    public static IReadOnlyList<StoredBlock> Read(string blocks) =>
+        JsonSerializer.Deserialize<List<StoredBlock>>(blocks, Json) ?? [];
+
     private static BetaContentBlockParam ToParam(StoredBlock block) => block.Type switch
     {
         "text" => new BetaTextBlockParam { Text = block.Text ?? string.Empty },

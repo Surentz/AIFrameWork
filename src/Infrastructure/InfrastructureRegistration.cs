@@ -115,6 +115,11 @@ public static class InfrastructureRegistration
         services.AddCommand<AskAssistant, AssistantAnswer, AskAssistantHandler>();
         services.AddScoped<IValidator<AskAssistant>, AskAssistantValidator>();
         services.AddScoped<AssistantToolbox>();
+        services.AddQuery<GetAssistantConversations, IReadOnlyList<AssistantConversationSummary>, GetAssistantConversationsHandler>();
+        services.AddQuery<GetAssistantConversation, AssistantConversationView, GetAssistantConversationHandler>();
+        services.AddCommand<RenameAssistantConversation, bool, RenameAssistantConversationHandler>();
+        services.AddScoped<IValidator<RenameAssistantConversation>, RenameAssistantConversationValidator>();
+        services.AddCommand<DeleteAssistantConversation, bool, DeleteAssistantConversationHandler>();
     }
 
     /// <summary>
@@ -171,6 +176,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAssistantConversations, AssistantConversations>();
+        services.AddScoped<IAssistantHistory, AssistantHistoryStore>();
         services.AddScoped<IAssistantConversationRetention, AssistantConversationRetention>();
         services.AddScoped<ISessionValidator, SessionValidator>();
     }
