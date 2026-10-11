@@ -18,7 +18,7 @@ describe('useAssistantConversation', () => {
     const { result, unmount } = renderHook(() => useAssistantConversation());
 
     act(() => {
-      result.current.ask('Why?');
+      void result.current.ask('Why?');
     });
     await waitFor(() => {
       expect(result.current.messages.at(-1)?.text).toBe('Still writing');

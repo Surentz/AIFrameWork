@@ -3,8 +3,11 @@ import { askAssistant } from '../../api/assistant';
 import { conversationReducer, initialConversation } from './conversation';
 import type { ConversationState } from './conversation';
 
+/** How one question ended. Only `answered` was saved on the server. */
+export type AskOutcome = 'answered' | 'failed' | 'stopped';
+
 export interface AssistantConversation extends ConversationState {
-  readonly ask: (question: string) => void;
+  readonly ask: (question: string) => Promise<AskOutcome>;
   readonly stop: () => void;
   readonly startOver: () => void;
 }
@@ -19,30 +22,38 @@ export function useAssistantConversation(): AssistantConversation {
   const inFlight = useRef<AbortController | null>(null);
 
   const ask = useCallback(
-    (question: string) => {
+    (question: string): Promise<AskOutcome> => {
       const controller = new AbortController();
       inFlight.current = controller;
       dispatch({ type: 'asked', question });
 
-      void askAssistant(
+      let outcome: AskOutcome = 'answered';
+      return askAssistant(
         { conversationId: state.conversationId ?? null, question },
         {
           signal: controller.signal,
           onEvent: (event) => {
+            if (event.type === 'error') {
+              outcome = 'failed';
+            }
             dispatch({ type: 'event', event });
           },
         },
-      ).catch((error: unknown) => {
-        if (controller.signal.aborted) {
-          dispatch({ type: 'stopped' });
-          return;
-        }
+      ).then(
+        () => outcome,
+        (error: unknown): AskOutcome => {
+          if (controller.signal.aborted) {
+            dispatch({ type: 'stopped' });
+            return 'stopped';
+          }
 
-        dispatch({
-          type: 'failed',
-          error: error instanceof Error ? error : new Error(String(error)),
-        });
-      });
+          dispatch({
+            type: 'failed',
+            error: error instanceof Error ? error : new Error(String(error)),
+          });
+          return 'failed';
+        },
+      );
     },
     [state.conversationId],
   );

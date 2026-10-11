@@ -63,8 +63,13 @@ function AssistantChat(): React.JSX.Element {
       return;
     }
 
-    conversation.ask(trimmed);
     setQuestion('');
+    void conversation.ask(trimmed).then((outcome) => {
+      // Nothing was saved for a failed question, so put it back: asking again needs no retyping.
+      if (outcome === 'failed') {
+        setQuestion(trimmed);
+      }
+    });
   }
 
   return (
@@ -80,8 +85,16 @@ function AssistantChat(): React.JSX.Element {
         role="log"
         aria-busy={conversation.streaming}
       >
-        {conversation.messages.map((message) => (
-          <Message key={message.id} message={message} />
+        {conversation.messages.map((message, index) => (
+          <Message
+            key={message.id}
+            message={message}
+            thinking={
+              conversation.streaming &&
+              index === conversation.messages.length - 1 &&
+              message.text === ''
+            }
+          />
         ))}
       </ol>
 
@@ -103,13 +116,15 @@ function AssistantChat(): React.JSX.Element {
           {question.length} / {MaxQuestionLength}
         </p>
         <div className="assistant-form__actions">
-          {conversation.streaming ? (
+          {/* Ask stays put, disabled while streaming, and Stop is a button of its own. Swapping one
+              for the other in place reuses the DOM node, so a double-click on Ask stopped the
+              question it had just asked. */}
+          <button type="submit" disabled={trimmed === '' || conversation.streaming}>
+            Ask
+          </button>
+          {conversation.streaming && (
             <button type="button" onClick={conversation.stop}>
               Stop
-            </button>
-          ) : (
-            <button type="submit" disabled={trimmed === ''}>
-              Ask
             </button>
           )}
           <button
@@ -127,9 +142,11 @@ function AssistantChat(): React.JSX.Element {
 
 interface MessageProps {
   readonly message: AssistantMessage;
+  /** Still streaming with no words yet: the model can think for a minute before its first one. */
+  readonly thinking: boolean;
 }
 
-function Message({ message }: MessageProps): React.JSX.Element {
+function Message({ message, thinking }: MessageProps): React.JSX.Element {
   return (
     <li className={`assistant-message assistant-message--${message.role}`}>
       <span className="assistant-message__who">
@@ -143,6 +160,11 @@ function Message({ message }: MessageProps): React.JSX.Element {
             <li key={`${tool}-${String(index)}`}>Checked {toolLabels[tool] ?? tool}</li>
           ))}
         </ul>
+      )}
+      {thinking && (
+        <p className="muted" role="status">
+          Thinking…
+        </p>
       )}
       <p className="assistant-message__text">{message.text}</p>
       {message.stopped && <p className="muted">Stopped.</p>}

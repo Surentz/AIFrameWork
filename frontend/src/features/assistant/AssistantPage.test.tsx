@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
@@ -90,7 +90,9 @@ describe('AssistantPage', () => {
     await screen.findByText('ok');
     await ask('Two?');
 
-    await screen.findAllByText('ok');
+    await waitFor(() => {
+      expect(screen.getAllByText('ok')).toHaveLength(2);
+    });
     expect(bodies).toEqual([
       { conversationId: null, question: 'One?' },
       { conversationId: 'c-9', question: 'Two?' },
@@ -203,10 +205,55 @@ describe('AssistantPage', () => {
     await ask('Two?');
     expect(await screen.findByText(/has expired/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'New conversation' }));
-    await ask('Three?');
+    // The question that failed is back in the box, so asking again is one click.
+    await user.click(screen.getByRole('button', { name: 'Ask' }));
 
     await screen.findByText('fresh');
-    expect(bodies[2]).toEqual({ conversationId: null, question: 'Three?' });
+    expect(bodies[2]).toEqual({ conversationId: null, question: 'Two?' });
+  });
+
+  it('puts the question back in the box when it could not be asked', async () => {
+    server.use(
+      http.post('/api/assistant/messages', () =>
+        HttpResponse.json({ status: 429, title: 'Too Many Requests' }, { status: 429 }),
+      ),
+    );
+    renderPage();
+
+    await ask('Why did the export fail?');
+
+    await screen.findByText("You've asked a lot in the last hour — try again later.");
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue(
+      'Why did the export fail?',
+    );
+  });
+
+  it('says the assistant is thinking until the first words arrive', async () => {
+    server.use(http.post('/api/assistant/messages', () => openSseResponse(': keep-alive\n\n')));
+    renderPage();
+
+    await ask('Why?');
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Thinking…');
+  });
+
+  it('keeps streaming when Ask is double-clicked', async () => {
+    let calls = 0;
+    server.use(
+      http.post('/api/assistant/messages', () => {
+        calls += 1;
+        return openSseResponse(sseEvent({ type: 'text', delta: 'Still writing' }));
+      }),
+    );
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByRole('textbox', { name: 'Your question' }), 'Why?');
+    await user.dblClick(screen.getByRole('button', { name: 'Ask' }));
+
+    await screen.findByText('Still writing');
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+    expect(calls).toBe(1);
   });
 
   it('keeps Ask disabled for a blank question', async () => {
