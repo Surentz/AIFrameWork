@@ -2498,6 +2498,168 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/assistant": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Whether the assistant is switched on, so the UI can hide itself. */
+        readonly get: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["AssistantStatusResponse"];
+                        readonly "application/json": components["schemas"]["AssistantStatusResponse"];
+                        readonly "text/json": components["schemas"]["AssistantStatusResponse"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/assistant/messages": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Asks one question. The response is text/event-stream: text and tool events while the answer
+         *     is written, then done or error. A failure before the first event is an ordinary problem.
+         * @description done is written only after the command returned, which is after the unit of work committed:
+         *     done means saved.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["AskAssistantRequest"];
+                    readonly "text/json": components["schemas"]["AskAssistantRequest"];
+                    readonly "application/*+json": components["schemas"]["AskAssistantRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/event-stream": components["schemas"]["AssistantEventResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                readonly 429: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                readonly 503: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2557,6 +2719,34 @@ export interface components {
              * @description Null for an account that has never made an authenticated request.
              */
             readonly lastSeenAt?: null | string;
+        };
+        /**
+         * @description A question. No length annotation: the 2,000-character rule belongs to AskAssistantValidator,
+         *     and duplicating it here would pre-empt that validator with a differently shaped 400.
+         */
+        readonly AskAssistantRequest: {
+            /** Format: uuid */
+            readonly conversationId?: null | string;
+            readonly question: string;
+        };
+        /**
+         * @description One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of
+         *     the answer), tool (a tool started), done (saved; carries the conversation id), error (carries a
+         *     ProblemDetails; nothing from this question was saved).
+         */
+        readonly AssistantEventResponse: {
+            readonly type: string;
+            readonly delta?: null | string;
+            readonly tool?: null | string;
+            /** Format: uuid */
+            readonly conversationId?: null | string;
+            readonly outcome?: null | components["schemas"]["AssistantOutcome"];
+            readonly problem?: null | components["schemas"]["ProblemDetails"];
+        };
+        /** @enum {unknown} */
+        readonly AssistantOutcome: "Answered" | "Capped" | "Truncated" | null;
+        readonly AssistantStatusResponse: {
+            readonly enabled: boolean;
         };
         /**
          * @description The reason is owned by `CancelOrderValidator`, not duplicated here as a DataAnnotation —

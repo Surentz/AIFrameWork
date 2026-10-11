@@ -21,17 +21,9 @@ public static class ResultExtensions
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(httpContext);
 
-        var status = result.Error.Kind switch
-        {
-            ErrorKind.Validation => StatusCodes.Status400BadRequest,
-            ErrorKind.NotFound => StatusCodes.Status404NotFound,
-            ErrorKind.Conflict => StatusCodes.Status409Conflict,
-            ErrorKind.Unauthorized => StatusCodes.Status401Unauthorized,
-            ErrorKind.Unavailable => StatusCodes.Status503ServiceUnavailable,
-            _ => StatusCodes.Status500InternalServerError,
-        };
+        var problemDetails = result.Error.ToProblemDetails(httpContext);
 
-        if (status == StatusCodes.Status503ServiceUnavailable)
+        if (problemDetails.Status == StatusCodes.Status503ServiceUnavailable)
         {
             // A non-positive value from the producer is treated the same as absent: Math.Ceiling
             // of zero or less would emit "Retry-After: 0" or a negative header, and the rate
@@ -47,24 +39,45 @@ public static class ResultExtensions
                 ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
         }
 
+        return new ObjectResult(problemDetails)
+        {
+            StatusCode = problemDetails.Status,
+        };
+    }
+
+    /// <summary>
+    /// The ProblemDetails for an error, with no side effect on the response. The assistant's
+    /// stream needs it after the headers are sent, when <see cref="Problem{T}"/>'s Retry-After
+    /// header can no longer be set.
+    /// </summary>
+    public static ProblemDetails ToProblemDetails(this Error error, HttpContext httpContext)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        ArgumentNullException.ThrowIfNull(httpContext);
+
         var problemDetails = new ProblemDetails
         {
-            Status = status,
-            Title = result.Error.Code,
-            Detail = result.Error.Message,
+            Status = error.Kind switch
+            {
+                ErrorKind.Validation => StatusCodes.Status400BadRequest,
+                ErrorKind.NotFound => StatusCodes.Status404NotFound,
+                ErrorKind.Conflict => StatusCodes.Status409Conflict,
+                ErrorKind.Unauthorized => StatusCodes.Status401Unauthorized,
+                ErrorKind.Unavailable => StatusCodes.Status503ServiceUnavailable,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            Title = error.Code,
+            Detail = error.Message,
         };
 
         // Lets an operator holding a problem report find the matching log line.
         problemDetails.Extensions["traceId"] = Activity.Current?.Id ?? httpContext.TraceIdentifier;
 
-        if (result.Error.Details is { Count: > 0 } details)
+        if (error.Details is { Count: > 0 } details)
         {
             problemDetails.Extensions["errors"] = details;
         }
 
-        return new ObjectResult(problemDetails)
-        {
-            StatusCode = status,
-        };
+        return problemDetails;
     }
 }

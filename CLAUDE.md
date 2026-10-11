@@ -132,6 +132,7 @@ generated-code tree, and keeping them apart is what makes each host's `codegen w
 | `observability` | Logging, tracing, OTLP, OpenTelemetry metrics, sampling, trace links from the UI, traffic metrics and their charts |
 | `resilience` | Outbound HTTP clients, retry/timeouts, explicit DB transactions |
 | `external-systems` | Calling an external system: Refit clients, OCES3/mTLS, OAuth 2.0 client credentials (Keycloak), per-system retry and health checks, `ExternalSystems__*` config, the dev PKI |
+| `assistant` | The ops assistant: its tool-use loop, the tools and their personal-data boundary, the Claude adapter, transcripts, `Assistant__*` config |
 | `local-dev` | The dev loop scripts, Seq, ports, `dotnet ef` vs user-secrets, the control panel |
 | `kubernetes` | The kind cluster, `deploy.ps1`, HPAs, ingress affinity, `-WithObservability` (OpenSearch, Prometheus, Grafana, alert rules) |
 
@@ -213,6 +214,12 @@ notifications nobody is pushed. The worker writes outbox rows; it never calls `A
 **Resilience** (`resilience`, ADR 0014) — Polly cannot see a failed `Result<T>`: the pipeline
 sits under the port, never around it. With `EnableRetryOnFailure` on, an explicit transaction
 must go through `CreateExecutionStrategy().ExecuteAsync(...)`.
+
+**Assistant** (`assistant`, ADR 0033) — A stored transcript is **append-only**: Claude rejects a
+history whose earlier turns changed, so updating, trimming or re-serializing a stored turn makes
+every later question in that conversation fail. A tool returns its own projection from
+`Assistant/ToolResults/`, never a monitoring view, and no tool dispatches a command. Tool results
+leave for Anthropic: free text goes through `OperationalText.Scrub`.
 
 **External systems** (`external-systems`, ADR 0031) — Every partner client goes through
 `ExternalSystemsBuilder.AddClient<TApi>`; a hand-wired `AddHttpClient` silently skips traffic,

@@ -1,7 +1,8 @@
 # Ops assistant — the first LLM feature — design
 
 **Date:** 2026-10-11
-**Status:** Proposed; awaiting review.
+**Status:** Approved 2026-10-11; amended while planning and building PR 1 (see "Amended while
+planning" below — where it and a later section disagree, the amendment wins). Backend built (PR 1).
 **Type:** this document is `docs(assistant)`; the build is two `feat` pull requests (§7).
 **Builds on:** ADR 0014 (retry and resilience), ADR 0015 (logging), ADR 0016 (jobs in the worker),
 ADR 0021/0027 (operational telemetry and metrics), ADR 0024 (capability policies), ADR 0031
@@ -44,15 +45,44 @@ shape the external-systems work used with Statistics Denmark.
 | Vector database | **None.** The data is structured and queryable; the documentation corpus (~120K tokens) fits in context if ever wanted. Revisit for semantic catalogue search. |
 | Documentation tool (`read_doc` over ADRs) | **Out of scope** for the pilot. |
 
+### Amended while planning
+
+Recorded in `docs/superpowers/plans/2026-10-11-ops-assistant-backend.md` and ADR 0033.
+
+1. **One question commits once.** Command handlers never save (`src/Application/CLAUDE.md`), so
+   the handler appends the whole question — question, model turns, tool results — once, and the
+   unit of work commits it. A failed, refused or abandoned question stores nothing. This replaces
+   "persist each tool round-trip as it happens" in §1.
+2. **Two tables.** `assistant_conversations` (owner, counts, last activity, an `xmin` row version
+   that turns a concurrent question into a 409) and `assistant_turns` (surrogate key, a
+   non-unique `(ConversationId, Seq)` index, a **`text`** payload). Probe 3 answered: `text`, not
+   `jsonb`, which reorders keys.
+3. **Probe 1 answered: the SDK takes an injected `HttpClient`.** It carries
+   `OutboundTrafficHandler`; retry stays the SDK's own (`Assistant__MaxRetries`, default 2). Not an
+   `ExternalSystemsBuilder` client: Refit-only, and its resilience handler would retry a streaming
+   POST and cut long streams at its attempt timeout.
+4. **Probe 6 answered:** `Fallbacks` is a typed property on the beta request, so the adapter uses
+   the beta Messages API.
+5. **Limits are constants**, not configuration (Application cannot read options):
+   8 tool rounds, 20 questions per conversation, 2,000 characters, 24-hour retention.
+   `Assistant__MaxTurns` is dropped.
+6. **No `assistant.questions` metric:** every `AskAssistant` dispatch is already command traffic.
+7. **Each SSE `data:` payload carries its `type`**, as well as the `event:` line.
+8. **The port is `IAssistantOutput`** (CA1711 forbids a non-`Stream` type ending in "Stream"); the
+   worker registers `NoAssistantOutput` because both hosts register the handler.
+9. **Probe 4 answered:** the OpenAPI document carries the `text/event-stream` schema.
+   **Probe 5 answered** (live docs, 2026-10-11): `inference_geo` is `"us"` or `"global"` only, and
+   workspace data at rest is US-only — no EU option on the first-party API.
+
 ## 1. Backend structure
 
 ### Where things live
 
 | Layer | Contents |
 |---|---|
-| `src/Application/Assistant` | `AskAssistant` command and handler (the loop); ports `IAssistantModel`, `IAssistantTranscripts`, `IAssistantStream`; the tool catalogue (`AssistantTools`) and one projection record per tool; `OperationalText.Scrub`; `PruneAssistantConversations` job. |
-| `src/Infrastructure/Assistant` | `ClaudeAssistantModel : IAssistantModel` (the SDK); `AssistantTranscripts : IAssistantTranscripts` (EF); `AssistantOptions`; the `assistant_turns` mapping and its migration; retention. |
-| `src/Api/Assistant` | `AssistantController`; `SseAssistantStream : IAssistantStream` (registered per request); the rate-limit policy. |
+| `src/Application/Assistant` | `AskAssistant` command and handler (the loop); ports `IAssistantModel`, `IAssistantConversations`, `IAssistantOutput`; the tool catalogue (`AssistantToolbox`) and one projection record per tool; `OperationalText.Scrub`; `PruneAssistantConversations` job. |
+| `src/Infrastructure/Assistant` | `ClaudeAssistantModel : IAssistantModel` (the SDK); `AssistantTranscripts : IAssistantConversations` (EF); `AssistantOptions`; the `assistant_turns` mapping and its migration; retention. |
+| `src/Api/Assistant` | `AssistantController`; `SseAssistantOutput : IAssistantOutput` (registered per request); the rate-limit policy. |
 | `src/Worker` | Registers and schedules `PruneAssistantConversations`. Nothing else. |
 
 No Domain type: a transcript is operational data, not business state — the same reasoning that
@@ -68,7 +98,7 @@ public interface IAssistantModel
     Task<Result<AssistantModelTurn>> NextTurnAsync(
         IReadOnlyList<AssistantTurn> transcript,
         AssistantToolSet tools,          // AssistantToolSet.None for the final, tools-off call
-        IAssistantStream stream,
+        IAssistantOutput stream,
         CancellationToken cancellationToken);
 }
 
@@ -78,7 +108,7 @@ public sealed record AssistantModelTurn(
     AssistantStopReason StopReason,
     AssistantUsage Usage);
 
-public interface IAssistantTranscripts
+public interface IAssistantConversations
 {
     Task<Result<IReadOnlyList<AssistantTurn>>> LoadAsync(Guid conversationId, Guid ownerId, CancellationToken ct);
     // Appends atomically. A tool-requesting model turn is only ever appended together with its
@@ -86,7 +116,7 @@ public interface IAssistantTranscripts
     Task<Result> AppendAsync(Guid conversationId, Guid ownerId, IReadOnlyList<AssistantTurn> turns, CancellationToken ct);
 }
 
-public interface IAssistantStream
+public interface IAssistantOutput
 {
     Task TextAsync(string delta, CancellationToken ct);
     Task ToolAsync(string toolName, CancellationToken ct);
@@ -140,7 +170,7 @@ Table `assistant_turns`: `conversation_id uuid`, `seq int`, `owner_id uuid`, `ro
 
 ### The adapter (`ClaudeAssistantModel`)
 
-- Official `Anthropic` SDK, Messages API, **streaming**. Text deltas go to `IAssistantStream` as
+- Official `Anthropic` SDK, Messages API, **streaming**. Text deltas go to `IAssistantOutput` as
   they arrive.
 - Model `Assistant:Model` (default `claude-opus-5-5`); `output_config.effort` set explicitly from
   `Assistant:Effort` (default `medium` — also Opus 5.5's own default, set anyway so a model change
@@ -254,7 +284,7 @@ reach `openapi/AiFramework.Api.json` and `frontend/src/api/schema.d.ts` (probe 4
 | `Assistant__BaseUrl` | SDK default | Points the SDK at the simulator in tests. |
 | `Assistant__Model` | `claude-opus-5-5` | |
 | `Assistant__Effort` | `medium` | |
-| `Assistant__MaxTurns` | `8` | Tool-using turns per question. |
+| `Assistant__MaxRetries` | `2` | The SDK's own retry (429, 5xx, connection). Tool rounds (8) are a constant — amendment 5. |
 
 Only the API reads these (the worker needs only the prune job, which uses the database). Dev:
 the key file lives outside the repo, path in user-secrets or the environment. Kind/prod: a
@@ -266,8 +296,8 @@ mounted Secret, like the external systems' files.
   questions per administrator per hour (partitioned by user id); the turn cap per question; 20
   questions per conversation.
 - **Metrics (OpenTelemetry, ADR 0027):** `assistant.tokens` (counter, tag `kind` = `input` /
-  `output` / `cache_read` / `cache_write`), `assistant.tool_calls` (counter, tag `tool`),
-  `assistant.questions` (counter, tag `outcome` = `answered` / `capped` / `refused` / `failed`).
+  `output` / `cache_read` / `cache_write`), `assistant.tool_calls` (counter, tag `tool`). Question outcomes are command traffic
+  already (amendment 6).
 - **Logging:** `Behaviors.LoggedAsync` logs the command as it logs every command; the question
   text, tool results and answers are never logged.
 - **Health:** no Anthropic check in `/health/ready` — a provider outage must not pull pods.

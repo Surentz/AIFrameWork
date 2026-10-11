@@ -1,3 +1,4 @@
+using AiFramework.Infrastructure.Assistant;
 using AiFramework.Infrastructure.ExternalSystems;
 using AiFramework.Infrastructure.Observability;
 using OpenTelemetry.Exporter;
@@ -156,6 +157,7 @@ public static class ObservabilityRegistration
             // entry assembly's name — a wildcard keeps this true if either ever changes.
             .AddMeter("Wolverine:*")
             .AddMeter(ExternalSystemMetrics.MeterName)
+            .AddMeter(AssistantMetrics.MeterName)
             .AddInfrastructureMetrics();
 
         if (options.Otlp.Enabled && options.Otlp.Metrics)
