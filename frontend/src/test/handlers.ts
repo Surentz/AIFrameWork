@@ -110,6 +110,8 @@ export function aPopulation(areaCode: string): Population {
 
 export const handlers = [
   http.post('/api/auth/login', () => HttpResponse.json(aSession)),
+  // Off by default: a test that wants the assistant on says so with server.use.
+  http.get('/api/assistant', () => HttpResponse.json({ enabled: false })),
   http.get('/api/monitoring/jobs/health', () =>
     HttpResponse.json({
       running: 1,
@@ -204,16 +206,32 @@ export const handlers = [
       trafficSince: '2026-10-09T11:00:00+00:00',
       systems: [
         {
-          name: 'PartnerSimulator', state: 'Healthy', description: 'PartnerSimulator reachable (200)',
-          checkedAt: '2026-10-09T11:59:30+00:00', stale: false,
-          certificateNotAfter: '2027-10-09T00:00:00+00:00', tokenOk: null,
-          calls: 120, failed: 2, faulted: 1, attempts: 124, p95Ms: 85,
+          name: 'PartnerSimulator',
+          state: 'Healthy',
+          description: 'PartnerSimulator reachable (200)',
+          checkedAt: '2026-10-09T11:59:30+00:00',
+          stale: false,
+          certificateNotAfter: '2027-10-09T00:00:00+00:00',
+          tokenOk: null,
+          calls: 120,
+          failed: 2,
+          faulted: 1,
+          attempts: 124,
+          p95Ms: 85,
         },
         {
-          name: 'Unreachable', state: 'Unhealthy', description: 'Unreachable unreachable: ConnectionError',
-          checkedAt: '2026-10-09T11:59:30+00:00', stale: false,
-          certificateNotAfter: null, tokenOk: null,
-          calls: 0, failed: 0, faulted: 0, attempts: 0, p95Ms: null,
+          name: 'Unreachable',
+          state: 'Unhealthy',
+          description: 'Unreachable unreachable: ConnectionError',
+          checkedAt: '2026-10-09T11:59:30+00:00',
+          stale: false,
+          certificateNotAfter: null,
+          tokenOk: null,
+          calls: 0,
+          failed: 0,
+          faulted: 0,
+          attempts: 0,
+          p95Ms: null,
         },
       ],
     }),

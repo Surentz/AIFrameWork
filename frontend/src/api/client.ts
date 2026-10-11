@@ -66,3 +66,19 @@ export async function requestVoid(path: string, init?: RequestInit): Promise<voi
 export async function requestBytes(path: string, init?: RequestInit): Promise<ArrayBuffer> {
   return (await send(path, init)).arrayBuffer();
 }
+
+/**
+ * For the endpoints that answer a stream — the assistant's text/event-stream. Same error handling
+ * as `request` for a failure before the stream starts; after that, failures arrive in the stream.
+ */
+export async function requestStream(
+  path: string,
+  init?: RequestInit,
+): Promise<ReadableStream<Uint8Array>> {
+  const response = await send(path, init);
+  if (response.body === null) {
+    throw new Error('The response has no body to stream.');
+  }
+
+  return response.body;
+}
