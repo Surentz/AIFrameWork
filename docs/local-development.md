@@ -213,7 +213,7 @@ Off by default, and nothing else needs it. To use it against the real Claude API
    ```
 
 Every signed-in user can use it once it is on; administrators also get the monitoring tools.
-The panel is at **Monitoring → Ask the assistant** (`/monitoring/assistant`).
+Open it from the chat icon beside the notification bell (`/assistant`).
 
 The API refuses to start if the assistant is on and the file does not exist. Each question costs
 real tokens; the workspace's spend limit is the backstop. The tests never need a key: they use

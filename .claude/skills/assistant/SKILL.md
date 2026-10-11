@@ -73,24 +73,35 @@ No test calls Anthropic. `FakeMessagesApi.StartAsync()` listens on plain HTTP on
 `Api.IntegrationTests` references the simulator with `Aliases="simulator"` — its top-level
 `Program` would clash with the API's — so a test there starts with `extern alias simulator;`.
 
-## The panel
+## The page
 
-**Monitoring → Ask the assistant** (`/monitoring/assistant`), in `frontend/src/features/assistant`.
+`/assistant` (a new chat) and `/assistant/:id` (a saved one), opened for every user from the header
+icon (`AssistantLink`), in `frontend/src/features/assistant`: `ConversationSidebar` beside a `Chat`.
 
 - **The conversation is a reducer** (`conversation.ts`, driven by `useAssistantConversation`), not
-  TanStack Query: a stream is not a cacheable query. The conversation id lives in memory only, so
-  a reload starts a new conversation.
+  TanStack Query: a stream is not a cacheable query. `fromSaved` seeds it from a saved conversation.
+- **`useChatSession` is why a new chat survives getting its id** (the URL becomes `/assistant/<id>`
+  without remounting the chat or cutting the stream) and why every other navigation — the sidebar,
+  New chat, the header icon — is a fresh chat. It waits for the address to arrive at the adopted id
+  before it treats leaving it as leaving the chat.
+- **`useSavedConversation` reads once** (`gcTime: 0`, no background refetch): after that the chat owns
+  the messages, and a refetch must never replace a chat that is streaming.
+- **The composer's draft lives in the page**, so it survives New chat; a failed question is put
+  back in it. Send stays in place, disabled while streaming, with Stop beside it (a button that
+  changed into Stop under the pointer let a double-click stop what it just sent).
 - **`SseParser` must keep partial chunks.** A network chunk can end mid-line, mid-JSON or between
   a CR and its LF; only a blank line ends an event. `: keep-alive` comments are dropped.
-- **Stop, New conversation and leaving the page abort the request**, and the server then saves
-  nothing for that question — so after Stop the next question still sends the conversation id and
-  continues from the last saved answer.
+- **Stop, New chat and leaving the page abort the request**, and the server then saves nothing for
+  that question — so after Stop the next question still sends the conversation id and continues
+  from the last saved answer.
 - `askAssistant` goes through `client.ts`'s `requestStream`, so a failure before the stream
   starts (400, 404, 409, 429, 503) is an ordinary `ApiError`; after that it is an `error` event.
-- Answers render as plain text (`white-space: pre-wrap`): model output is untrusted.
+- **Answers go through `AssistantMarkdown` only** (`react-markdown` + `remark-gfm`): model output is
+  untrusted, so there is no `rehype-raw`, ever, and links open with `rel="noopener noreferrer"`.
 - **e2e** runs `tests/PartnerSimulator -- messages <port>` as a webServer: `FakeMessagesApi` with
-  `DefaultReply = FakeMessagesScript.ToolThenAnswer` (a `job_health` call, then a fixed answer),
-  because a Playwright run cannot script it per test. `assistant.spec.ts` is `@local-only`.
+  `DefaultReply = FakeMessagesScript.ToolThenAnswer`, which picks `job_health` or `my_orders` from the
+  tools the request offers, then a fixed answer — a Playwright run cannot script it per test.
+  `assistant.spec.ts` is `@local-only`.
 
 ## Scope and history
 
