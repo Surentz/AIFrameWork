@@ -197,6 +197,24 @@ worker's publisher checks it every minute (ADR 0032), so allow up to a minute fo
 The tests do not use `.certs/` — they generate their own certificates in memory and start
 Keycloak in a container, so `dotnet test` needs Docker but no setup step.
 
+## The ops assistant
+
+Off by default, and nothing else needs it. To use it against the real Claude API (ADR 0033):
+
+1. Create an API key in the company's Claude Console organization, in the `aiframework-dev`
+   workspace — never the production one.
+2. Save the key to a file **outside the repository**, for example `~/.aiframework/anthropic.key`.
+3. Point the API at it, with user-secrets or the environment (double underscores):
+
+   ```powershell
+   dotnet user-secrets set "Assistant:Enabled" "true" --project src/Api
+   dotnet user-secrets set "Assistant:ApiKeyFile" "$HOME/.aiframework/anthropic.key" --project src/Api
+   ```
+
+The API refuses to start if the assistant is on and the file does not exist. Each question costs
+real tokens; the workspace's spend limit is the backstop. The tests never need a key: they use
+`FakeMessagesApi` in `tests/PartnerSimulator`.
+
 ## Two things that look like bugs and are not
 
 **A failed API call immediately after launch.** A Rider Compound starts both stacks in parallel,
