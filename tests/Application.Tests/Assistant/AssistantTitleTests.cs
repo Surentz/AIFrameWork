@@ -34,4 +34,14 @@ public sealed class AssistantTitleTests
 
         title.Should().Be(new string('x', AssistantTitle.MaxLength - 1) + "…");
     }
+
+    [Fact]
+    public void From_CutInsideASurrogatePair_NeverEndsOnAHalfCharacter()
+    {
+        var title = AssistantTitle.From(string.Concat(Enumerable.Repeat("😀", 40)));
+
+        title.Length.Should().BeLessThanOrEqualTo(AssistantTitle.MaxLength);
+        char.IsHighSurrogate(title[^2]).Should().BeFalse();
+        title.Should().EndWith("…");
+    }
 }

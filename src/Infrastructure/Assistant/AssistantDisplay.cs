@@ -16,7 +16,7 @@ internal static class AssistantDisplay
     {
         var messages = new List<AssistantDisplayMessage>();
         StringBuilder? text = null;
-        List<string>? tools = null;
+        List<(string? Id, string Name)>? tools = null;
 
         foreach (var turn in turns)
         {
@@ -39,14 +39,19 @@ internal static class AssistantDisplay
                         }
                         else if (block is { Type: "tool_use", Name: { } name })
                         {
-                            tools.Add(name);
+                            tools.Add((block.Id, name));
                         }
                     }
 
                     break;
 
+                case AssistantTurnCodec.ToolResults:
+                    // The data the model read is not shown, but a refused call (a tool the question
+                    // was not offered) is not a tool the assistant used, so its chip is dropped.
+                    DropRefused(tools, turn);
+                    break;
+
                 default:
-                    // tool_results: the data the model read, not something the user is shown.
                     break;
             }
         }
@@ -55,16 +60,27 @@ internal static class AssistantDisplay
         return messages;
     }
 
-    private static void Flush(List<AssistantDisplayMessage> messages, ref StringBuilder? text, ref List<string>? tools)
+    private static void Flush(List<AssistantDisplayMessage> messages, ref StringBuilder? text, ref List<(string? Id, string Name)>? tools)
     {
         if (text is null || tools is null)
         {
             return;
         }
 
-        messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, text.ToString(), tools));
+        messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, text.ToString(), [.. tools.Select(static t => t.Name)]));
         text = null;
         tools = null;
+    }
+
+    private static void DropRefused(List<(string? Id, string Name)>? tools, AssistantTurnRow turn)
+    {
+        if (tools is null || AssistantTurnCodec.Decode(turn) is not ToolResultsTurn results)
+        {
+            return;
+        }
+
+        var refused = results.Results.Where(static r => r.IsError).Select(static r => r.ToolCallId).ToHashSet(StringComparer.Ordinal);
+        tools.RemoveAll(t => t.Id is not null && refused.Contains(t.Id));
     }
 
     /// <summary>A turn whose blocks cannot be read is shown as nothing, never rewritten.</summary>

@@ -144,4 +144,24 @@ public sealed class AssistantHistoryStoreTests(PostgresFixture fixture)
         await using var check = fixture.CreateContext();
         (await check.AssistantConversations.AnyAsync(c => c.Id == id)).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task ReadAsync_ToolTheQuestionWasNotOffered_ShowsNoToolChip()
+    {
+        var owner = Guid.NewGuid();
+        AssistantTurn[] refused =
+        [
+            new UserQuestionTurn("Did jobs fail?", Now),
+            new ModelTurn("""[{"type":"tool_use","id":"toolu_9","name":"job_health","input":{"window_hours":24}}]"""),
+            new ToolResultsTurn([new AssistantToolResult("toolu_9", "The tool 'job_health' is not available here.", true)]),
+            new ModelTurn("""[{"type":"text","text":"I can't check that."}]"""),
+        ];
+        var id = await SeedAsync(owner, "Did jobs fail?", Now, refused);
+
+        await using var context = fixture.CreateContext();
+        var view = await new AssistantHistoryStore(context).ReadAsync(id, owner, CancellationToken.None);
+
+        view!.Messages[1].Tools.Should().BeEmpty();
+        view.Messages[1].Text.Should().Be("I can't check that.");
+    }
 }
