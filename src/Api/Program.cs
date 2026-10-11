@@ -5,15 +5,18 @@ using System.Security.Claims;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using AiFramework.Api;
+using AiFramework.Api.Assistant;
 using AiFramework.Api.Auth;
 using AiFramework.Api.Monitoring;
 using AiFramework.Api.Notifications;
 using AiFramework.Api.Observability;
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Assistant;
 using AiFramework.Application.Notifications;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Users;
 using AiFramework.Infrastructure;
+using AiFramework.Infrastructure.Assistant;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.ExternalSystems;
@@ -208,6 +211,23 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 // authenticates anyone. See ADR 0021.
 builder.Services.AddScoped<IClientContext, ClientContext>();
 
+// The assistant's answer stream, per request. HERE and not in AddInfrastructure for the same
+// host-level reason as ICurrentUser: the worker registers its own (NoAssistantOutput). One
+// instance serves both the port and the controller, which needs to know whether it started.
+builder.Services.AddScoped<SseAssistantOutput>();
+builder.Services.AddScoped<IAssistantOutput>(sp => sp.GetRequiredService<SseAssistantOutput>());
+
+// The provider settings (ADR 0033). Validated at startup only when switched on, so CI, contract
+// generation and a fresh checkout need no key. Bound here, not in AddAssistant, like CacheOptions.
+var assistantSection = builder.Configuration.GetSection(AssistantOptions.SectionName);
+builder.Services.AddOptions<AssistantOptions>()
+    .Bind(assistantSection)
+    .Validate(
+        options => !options.Enabled || (!string.IsNullOrWhiteSpace(options.ApiKeyFile) && File.Exists(options.ApiKeyFile)),
+        "Assistant:ApiKeyFile must name an existing file when Assistant:Enabled is true.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(new AssistantAvailability(assistantSection.GetValue<bool>("Enabled")));
+
 // Volume defence on the credential endpoints, alongside the per-account lockout in
 // SignInHandler. Partitioned by remote address, not by username: the limiter runs before model
 // binding, so a username in the JSON body is not reachable without buffering and rewinding the
@@ -230,6 +250,19 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = permitLimit,
                 Window = TimeSpan.FromSeconds(windowSeconds),
+            }));
+
+    // Per administrator, not per address: the limiter runs after authentication here, and two
+    // admins behind one proxy must not share a budget. Each question can cost several model calls,
+    // so this is a spend cap as much as a volume one (ADR 0033).
+    var assistantPermitLimit = builder.Configuration.GetValue("RateLimiting:Assistant:PermitLimit", defaultValue: 20);
+    options.AddPolicy(AssistantRateLimiting.PolicyName, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.RequestServices.GetRequiredService<ICurrentUser>().Id?.ToString() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = assistantPermitLimit,
+                Window = TimeSpan.FromHours(1),
             }));
 
     options.OnRejected = async (context, cancellationToken) =>
