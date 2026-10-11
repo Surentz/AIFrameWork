@@ -6,19 +6,26 @@ import type { ConversationState } from './conversation';
 /** How one question ended. Only `answered` was saved on the server. */
 export type AskOutcome = 'answered' | 'failed' | 'stopped';
 
+export interface ConversationOptions {
+  /** Where the chat starts: a saved conversation (fromSaved), or empty. Read once. */
+  readonly initial?: ConversationState | undefined;
+  /** After each saved answer, with the conversation's id: a new chat learns its id here. */
+  readonly onSaved?: ((conversationId: string) => void) | undefined;
+}
+
 export interface AssistantConversation extends ConversationState {
   readonly ask: (question: string) => Promise<AskOutcome>;
   readonly stop: () => void;
-  readonly startOver: () => void;
 }
 
 /**
  * One conversation with the assistant. A stream is not a cacheable query, so this is client state
  * in a reducer rather than TanStack Query. An answer in flight is aborted on Stop, on New
- * conversation, and when the page unmounts — the server then saves nothing for that question.
+ * chat, and when the page unmounts — the server then saves nothing for that question.
  */
-export function useAssistantConversation(): AssistantConversation {
-  const [state, dispatch] = useReducer(conversationReducer, initialConversation);
+export function useAssistantConversation(options: ConversationOptions = {}): AssistantConversation {
+  const [state, dispatch] = useReducer(conversationReducer, options.initial ?? initialConversation);
+  const { onSaved } = options;
   const inFlight = useRef<AbortController | null>(null);
 
   const ask = useCallback(
@@ -37,6 +44,9 @@ export function useAssistantConversation(): AssistantConversation {
               outcome = 'failed';
             }
             dispatch({ type: 'event', event });
+            if (event.type === 'done' && typeof event.conversationId === 'string') {
+              onSaved?.(event.conversationId);
+            }
           },
         },
       ).then(
@@ -55,16 +65,11 @@ export function useAssistantConversation(): AssistantConversation {
         },
       );
     },
-    [state.conversationId],
+    [state.conversationId, onSaved],
   );
 
   const stop = useCallback(() => {
     inFlight.current?.abort();
-  }, []);
-
-  const startOver = useCallback(() => {
-    inFlight.current?.abort();
-    dispatch({ type: 'reset' });
   }, []);
 
   // Not a fetch: the cleanup that aborts an answer still streaming when the page goes away.
@@ -75,5 +80,5 @@ export function useAssistantConversation(): AssistantConversation {
     [],
   );
 
-  return { ...state, ask, stop, startOver };
+  return { ...state, ask, stop };
 }

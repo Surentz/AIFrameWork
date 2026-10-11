@@ -1,5 +1,5 @@
 import { ApiError } from '../../api/client';
-import type { AssistantEvent, AssistantOutcome } from './types';
+import type { AssistantEvent, AssistantOutcome, SavedConversation } from './types';
 
 export interface AssistantMessage {
   readonly id: number;
@@ -114,4 +114,19 @@ function toApiError(problem: AssistantEvent['problem']): ApiError {
     ...(problem?.detail ? { detail: problem.detail } : {}),
     ...(traceId ? { traceId } : {}),
   });
+}
+
+/** A saved conversation as the reducer starts from it: its messages, its id, nothing streaming. */
+export function fromSaved(saved: SavedConversation): ConversationState {
+  return {
+    conversationId: saved.id,
+    streaming: false,
+    error: undefined,
+    messages: saved.messages.map((message, index) => ({
+      id: index,
+      role: message.role === 'user' ? 'user' : 'assistant',
+      text: message.text,
+      tools: message.tools,
+    })),
+  };
 }

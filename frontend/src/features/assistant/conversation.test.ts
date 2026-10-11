@@ -1,5 +1,5 @@
 import { ApiError } from '../../api/client';
-import { conversationReducer, initialConversation } from './conversation';
+import { conversationReducer, initialConversation, fromSaved } from './conversation';
 import type { ConversationAction, ConversationState } from './conversation';
 
 function run(...actions: ConversationAction[]): ConversationState {
@@ -94,5 +94,25 @@ describe('conversationReducer', () => {
 
   it('ignores a stop that arrives after a reset', () => {
     expect(run({ type: 'reset' }, { type: 'stopped' })).toEqual(initialConversation);
+  });
+});
+
+describe('fromSaved', () => {
+  it('starts from the saved messages and id, not streaming', () => {
+    const state = fromSaved({
+      id: 'c-1',
+      title: 'Why?',
+      messages: [
+        { role: 'user', text: 'Why?', tools: [] },
+        { role: 'assistant', text: 'Because.', tools: ['my_orders'] },
+      ],
+    });
+
+    expect(state.conversationId).toBe('c-1');
+    expect(state.streaming).toBe(false);
+    expect(state.messages.map((m) => [m.id, m.role, m.text, m.tools])).toEqual([
+      [0, 'user', 'Why?', []],
+      [1, 'assistant', 'Because.', ['my_orders']],
+    ]);
   });
 });
