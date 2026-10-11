@@ -3,10 +3,14 @@ extern alias simulator;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AiFramework.Application.Abstractions;
+using AiFramework.Application.Assistant;
 using AiFramework.Domain.Users;
 using simulator::AiFramework.PartnerSimulator;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AiFramework.Api.IntegrationTests.Assistant;
 
@@ -38,9 +42,11 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
         File.Delete(_keyFile);
     }
 
-    private async Task<HttpClient> AdminAsync()
+    private Task<HttpClient> AdminAsync() => AdminAsync(_enabled);
+
+    private async Task<HttpClient> AdminAsync(WebApplicationFactory<Program> host)
     {
-        var client = _enabled.CreateClient();
+        var client = host.CreateClient();
         var username = $"a{Guid.NewGuid():N}"[..32];
         (await client.PostAsJsonAsync(
             "/api/auth/register",
@@ -170,6 +176,25 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
         events[^1].GetProperty("problem").GetProperty("title").GetString().Should().Be("assistant.unavailable");
     }
 
+    // Once the stream has started, an unanticipated exception (a tool query's database fault, say)
+    // can no longer become a status code. It must end the stream with an error event rather than
+    // reset the connection, and leak nothing of the exception (final review, Important 3).
+    [Fact]
+    public async Task Ask_UnexpectedExceptionAfterTheStreamStarted_EndsWithAnErrorEventAndLeaksNothing()
+    {
+        await using var throwing = _enabled.WithWebHostBuilder(b =>
+            b.ConfigureTestServices(s => s.AddScoped<IAssistantModel, TextThenThrowModel>()));
+        var client = await AdminAsync(throwing);
+
+        var response = await client.PostAsJsonAsync("/api/assistant/messages", new { question = "Why?" });
+        var body = await response.Content.ReadAsStringAsync();
+
+        body.Should().NotContain("SECRET-CONNECTION-STRING");
+        var events = await EventsAsync(response);
+        events.Select(e => e.GetProperty("type").GetString()).Should().Equal("text", "error");
+        events[^1].GetProperty("problem").GetProperty("title").GetString().Should().Be("internal_error");
+    }
+
     [Fact]
     public async Task Ask_ProviderFailsBeforeAnyEvent_IsAServiceUnavailableProblem()
     {
@@ -180,5 +205,15 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
         response.Headers.RetryAfter.Should().NotBeNull();
+    }
+
+    private sealed class TextThenThrowModel : IAssistantModel
+    {
+        public async Task<Result<AssistantModelTurn>> NextTurnAsync(
+            AssistantRequest request, IAssistantOutput output, CancellationToken cancellationToken)
+        {
+            await output.TextAsync("partial answer", cancellationToken);
+            throw new InvalidOperationException("SECRET-CONNECTION-STRING");
+        }
     }
 }

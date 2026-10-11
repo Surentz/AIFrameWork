@@ -14,6 +14,7 @@ namespace AiFramework.Api.Assistant;
 [ApiController]
 [Route("api/assistant")]
 [Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
+[TypeFilter<AssistantStreamExceptionFilter>]
 public sealed class AssistantController(
     ICommandDispatcher commands, AssistantAvailability availability, SseAssistantOutput output) : ControllerBase
 {
