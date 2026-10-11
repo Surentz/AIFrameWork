@@ -9,3 +9,9 @@ export type AssistantEvent = components['schemas']['AssistantEventResponse'];
 
 // The generator puts null inside the enum because the property is nullable; the outcome itself is three values.
 export type AssistantOutcome = NonNullable<components['schemas']['AssistantOutcome']>;
+
+export type ConversationSummary = components['schemas']['AssistantConversationSummaryResponse'];
+
+export type SavedConversation = components['schemas']['AssistantConversationResponse'];
+
+export type SavedMessage = components['schemas']['AssistantMessageResponse'];

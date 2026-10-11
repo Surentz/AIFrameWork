@@ -2,7 +2,13 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../test/handlers';
 import { sseEvent, sseResponse } from '../test/sse';
 import type { AssistantEvent } from '../features/assistant/types';
-import { askAssistant } from './assistant';
+import {
+  askAssistant,
+  deleteConversation,
+  getConversation,
+  listConversations,
+  renameConversation,
+} from './assistant';
 import { ApiError } from './client';
 
 async function ask(): Promise<AssistantEvent[]> {
@@ -69,5 +75,57 @@ describe('askAssistant', () => {
     );
 
     await expect(ask()).rejects.toThrow('stopped before it finished');
+  });
+});
+
+describe('the conversation history', () => {
+  it('lists the conversations', async () => {
+    server.use(
+      http.get('/api/assistant/conversations', () =>
+        HttpResponse.json([{ id: 'c-1', title: 'Why?', lastActiveAt: '2026-10-11T09:00:00Z' }]),
+      ),
+    );
+
+    expect(await listConversations()).toEqual([
+      { id: 'c-1', title: 'Why?', lastActiveAt: '2026-10-11T09:00:00Z' },
+    ]);
+  });
+
+  it('reads one conversation', async () => {
+    server.use(
+      http.get('/api/assistant/conversations/c-1', () =>
+        HttpResponse.json({ id: 'c-1', title: 'Why?', messages: [] }),
+      ),
+    );
+
+    expect((await getConversation('c-1')).title).toBe('Why?');
+  });
+
+  it('renames with a PATCH carrying the title', async () => {
+    let body: unknown;
+    server.use(
+      http.patch('/api/assistant/conversations/c-1', async ({ request }) => {
+        body = await request.json();
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    await renameConversation('c-1', 'Orders');
+
+    expect(body).toEqual({ title: 'Orders' });
+  });
+
+  it('deletes with a DELETE', async () => {
+    let deleted = false;
+    server.use(
+      http.delete('/api/assistant/conversations/c-1', () => {
+        deleted = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    await deleteConversation('c-1');
+
+    expect(deleted).toBe(true);
   });
 });
