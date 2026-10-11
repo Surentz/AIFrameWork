@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
+import { AssistantPage } from './features/assistant/AssistantPage';
 import { ChangePasswordPage } from './features/auth/ChangePasswordPage';
 import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
@@ -66,6 +67,7 @@ export function AppRoutes(): React.JSX.Element {
             <Route path="/monitoring/logins" element={<LoginsPage />} />
             <Route path="/monitoring/traffic" element={<TrafficPage />} />
             <Route path="/monitoring/users" element={<UsersPage />} />
+            <Route path="/monitoring/assistant" element={<AssistantPage />} />
             <Route path="/fulfilment" element={<FulfilmentPage />} />
           </Route>
         </Route>
