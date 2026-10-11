@@ -155,6 +155,7 @@ direction.
 | 55682/55683 | e2e RabbitMQ: AMQP / management UI | `E2E_RABBITMQ_PORT` / `E2E_RABBITMQ_UI_PORT` |
 | 55690/55691 | Dev partner simulator: mTLS / health (`-WithPartners` only) | none, fixed |
 | 55692/55693 | e2e partner simulator: mTLS / health | `SIMULATOR_PORT` / `SIMULATOR_HEALTH_PORT` |
+| 55694 | e2e fake Messages API (the ops assistant's stand-in for Anthropic) | `FAKE_MESSAGES_PORT` |
 
 The two *databases* and the two *brokers* are designed to run at the same time. The API and
 worker processes are not: `npm run e2e` starts its own API on 5234 and worker on 5235 with
@@ -210,6 +211,8 @@ Off by default, and nothing else needs it. To use it against the real Claude API
    dotnet user-secrets set "Assistant:Enabled" "true" --project src/Api
    dotnet user-secrets set "Assistant:ApiKeyFile" "$HOME/.aiframework/anthropic.key" --project src/Api
    ```
+
+Once it is on, the panel is at **Monitoring → Ask the assistant** (`/monitoring/assistant`).
 
 The API refuses to start if the assistant is on and the file does not exist. Each question costs
 real tokens; the workspace's spend limit is the backstop. The tests never need a key: they use
