@@ -123,6 +123,14 @@ public sealed class FakeMessagesApi : IAsyncDisposable
 
     public void Enqueue(FakeReply reply) => _script.Enqueue(reply);
 
+    /// <summary>
+    /// The answer when nothing is scripted. Null keeps the short text the tests rely on; the e2e
+    /// run sets <see cref="FakeMessagesScript.ToolThenAnswer"/>, because it cannot script per test.
+    /// </summary>
+    public Func<JsonElement, FakeReply>? DefaultReply { get; set; }
+
+    public Task WaitForShutdownAsync() => _app.WaitForShutdownAsync();
+
     public static async Task<FakeMessagesApi> StartAsync(int port = 0)
     {
         var builder = WebApplication.CreateSlimBuilder();
@@ -133,6 +141,7 @@ public sealed class FakeMessagesApi : IAsyncDisposable
         // Takes HttpRequest, not HttpContext: a lambda taking only HttpContext is a RequestDelegate
         // and its IResult would be discarded (tests/CLAUDE.md).
         app.MapPost("/v1/messages", (HttpRequest request) => fake.AnswerAsync(request));
+        app.MapGet("/health", () => Results.Ok("ok"));
 
         await app.StartAsync().ConfigureAwait(false);
         var address = (app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()
@@ -149,7 +158,9 @@ public sealed class FakeMessagesApi : IAsyncDisposable
         _requests.Enqueue(new FakeMessagesRequest(
             request.Headers["x-api-key"].FirstOrDefault(), request.Headers["anthropic-beta"].FirstOrDefault(), body.RootElement.Clone()));
 
-        var reply = _script.TryDequeue(out var next) ? next : FakeReply.Text("The fake Messages API has nothing scripted.");
+        var reply = _script.TryDequeue(out var next)
+            ? next
+            : DefaultReply?.Invoke(body.RootElement) ?? FakeReply.Text("The fake Messages API has nothing scripted.");
         if (reply.StatusCode != 200)
         {
             return Results.Text(
@@ -194,4 +205,22 @@ public sealed class FakeMessagesApi : IAsyncDisposable
             usage = new { input_tokens = 12, output_tokens = 1, cache_read_input_tokens = 3, cache_creation_input_tokens = 4 },
         },
     });
+}
+
+/// <summary>The e2e run's script: look at job health first, then answer, so the panel shows a tool chip and streamed text.</summary>
+public static class FakeMessagesScript
+{
+    public const string Answer = "No background job failed in the last 24 hours.";
+
+    public static FakeReply ToolThenAnswer(JsonElement body)
+    {
+        var messages = body.GetProperty("messages");
+        var last = messages[messages.GetArrayLength() - 1].GetProperty("content");
+        var answersATool = last.ValueKind == JsonValueKind.Array
+            && last.EnumerateArray().Any(block => string.Equals(block.GetProperty("type").GetString(), "tool_result", StringComparison.Ordinal));
+
+        return answersATool
+            ? FakeReply.Text("No background job ", "failed in the last 24 hours.")
+            : FakeReply.ToolUse("toolu_e2e", "job_health", """{"window_hours":24}""");
+    }
 }
