@@ -8,20 +8,23 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace AiFramework.Api.Assistant;
 
 /// <summary>
-/// The ops assistant (ADR 0033). Read-only questions about monitoring data, answered as a stream.
-/// Same policy as the Monitoring pages: the assistant can see exactly what they show.
+/// The assistant (ADRs 0033, 0034): questions answered as a stream, for every signed-in user. Which
+/// tools a question gets is decided per question from the caller's capabilities, never from this
+/// attribute.
 /// </summary>
 [ApiController]
 [Route("api/assistant")]
-[Authorize(Policy = AuthorizationPolicies.Monitoring.Read)]
+[Authorize]
 [TypeFilter<AssistantStreamExceptionFilter>]
 public sealed class AssistantController(
-    ICommandDispatcher commands, AssistantAvailability availability, SseAssistantOutput output) : ControllerBase
+    ICommandDispatcher commands,
+    IAuthorizationService authorization,
+    AssistantAvailability availability,
+    SseAssistantOutput output) : ControllerBase
 {
     /// <summary>Whether the assistant is switched on, so the UI can hide itself.</summary>
     [HttpGet]
     [ProducesResponseType<AssistantStatusResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<AssistantStatusResponse> Status() => new AssistantStatusResponse { Enabled = availability.Enabled };
 
     /// <summary>
@@ -36,7 +39,6 @@ public sealed class AssistantController(
     [EnableRateLimiting(AssistantRateLimiting.PolicyName)]
     [ProducesResponseType<AssistantEventResponse>(StatusCodes.Status200OK, "text/event-stream")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
@@ -50,14 +52,19 @@ public sealed class AssistantController(
             return Problem(statusCode: StatusCodes.Status404NotFound, title: "assistant.disabled", detail: "The assistant is switched off.");
         }
 
+        // The same policy the Monitoring pages use, evaluated now: it reads the role from the
+        // database, so a demoted administrator loses the monitoring tools on this very question.
+        var scope = (await authorization.AuthorizeAsync(User, AuthorizationPolicies.Monitoring.Read).ConfigureAwait(false)).Succeeded
+            ? ToolScope.Operator
+            : ToolScope.Member;
+
         Result<AssistantAnswer> result;
         using var stopKeepAlive = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var keepAlive = output.KeepAliveAsync(availability.HeartbeatInterval, stopKeepAlive.Token);
         try
         {
             result = await commands
-                // Every caller here holds Monitoring.Read (the class policy), so every one is an operator.
-                .SendAsync(new AskAssistant(request.ConversationId, request.Question, ToolScope.Operator), cancellationToken)
+                .SendAsync(new AskAssistant(request.ConversationId, request.Question, scope), cancellationToken)
                 .ConfigureAwait(false);
         }
         finally
