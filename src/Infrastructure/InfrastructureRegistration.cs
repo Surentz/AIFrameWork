@@ -310,6 +310,7 @@ public static class InfrastructureRegistration
         // The monitoring page's read side, its retention sweeps, and traffic recording. After
         // AddJobs because TriggerableJobs enqueues through the IJobScheduler it registers.
         services.AddMonitoring();
+        services.AddAssistant();
 
         // ADR 0005 spike: registers only what the Wolverine handler needs. The Wolverine host
         // itself is wired in Program.cs, because UseWolverine hooks IHostBuilder, not IServiceCollection.
