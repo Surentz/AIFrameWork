@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -123,7 +123,9 @@ describe('ConversationSidebar', () => {
     await user.click(screen.getByRole('button', { name: 'Delete' }));
     await user.click(screen.getByRole('button', { name: 'Delete conversation' }));
 
-    expect(await screen.findByTestId('address')).toHaveTextContent(/^\/assistant$/);
+    await waitFor(() => {
+      expect(screen.getByTestId('address')).toHaveTextContent(/^\/assistant$/);
+    });
     expect(screen.queryByRole('link', { name: 'Doomed' })).not.toBeInTheDocument();
   });
 

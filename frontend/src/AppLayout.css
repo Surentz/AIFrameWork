@@ -81,3 +81,40 @@
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
+
+/* The header's icon links (the assistant), shaped like the notification bell beside them. */
+.shell__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md, 8px);
+  color: var(--color-text-muted);
+}
+
+.shell__icon:hover {
+  color: var(--color-accent);
+  background: var(--color-surface-raised, rgb(0 0 0 / 4%));
+}
+
+.shell__icon--active {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+/* A full-bleed page fills the viewport below the bar, so only its own panes scroll. */
+.shell:has(.shell__content--full) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.shell__content--full {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}

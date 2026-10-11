@@ -7,7 +7,6 @@ import {
   useTrafficSummary,
 } from './queries';
 import { ErrorPanel } from '../../components/ErrorPanel';
-import { useAssistantStatus } from '../assistant/queries';
 import './monitoring.css';
 
 /**
@@ -24,7 +23,6 @@ export function MonitoringPage(): React.JSX.Element {
   const signIns = useSignInHealth();
   const traffic = useTrafficSummary(60);
   const external = useExternalSystems();
-  const assistant = useAssistantStatus();
 
   if (access.isPending) {
     return <p role="status">Loading monitoring…</p>;
@@ -126,18 +124,6 @@ export function MonitoringPage(): React.JSX.Element {
       <p>
         <Link to="/monitoring/integrations">External system health and traffic</Link>
       </p>
-
-      {/* No error branch: an optional feature's status never puts an error panel on the overview. */}
-      {assistant.data?.enabled === true && (
-        <>
-          <h2>Assistant</h2>
-          <p>
-            <Link to="/monitoring/assistant">
-              Ask the assistant about jobs, traffic and integrations
-            </Link>
-          </p>
-        </>
-      )}
 
       <h2>Users</h2>
 
