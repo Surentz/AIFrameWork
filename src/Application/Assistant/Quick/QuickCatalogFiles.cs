@@ -40,6 +40,10 @@ public static class QuickCatalogFiles
         return new QuickCatalog(phrases, help);
     }
 
+    /// <summary>
+    /// Parses one help article. A malformed article is refused rather than skipped: an unclosed front
+    /// matter, text outside a section, a missing required field, or no sections at all each throw.
+    /// </summary>
     public static IReadOnlyList<HelpSection> ParseHelp(string markdown)
     {
         ArgumentNullException.ThrowIfNull(markdown);
@@ -50,6 +54,28 @@ public static class QuickCatalogFiles
             throw new FormatException("A help article starts with a --- front-matter block.");
         }
 
+        var (front, bodyStart) = ReadFrontMatter(lines);
+
+        // Every field is checked here, before any section, so an article with no ## sections still fails.
+        var id = Required(front, "id");
+        var title = Required(front, "title");
+        var question = Required(front, "question");
+        var link = new QuickLink(Required(front, "linkLabel"), Required(front, "link"));
+
+        var sections = ReadSections(lines, bodyStart)
+            .Select(s => new HelpSection(id, title, question, s.Heading, s.Text, link))
+            .ToList();
+        if (sections.Count == 0)
+        {
+            throw new FormatException("A help article needs at least one ## section.");
+        }
+
+        return sections;
+    }
+
+    /// <summary>Reads the --- block at the top; returns its key/value pairs and the index of the first body line.</summary>
+    private static (Dictionary<string, string> Front, int BodyStart) ReadFrontMatter(string[] lines)
+    {
         var front = new Dictionary<string, string>(StringComparer.Ordinal);
         var i = 1;
         for (; i < lines.Length && !string.Equals(lines[i].Trim(), "---", StringComparison.Ordinal); i++)
@@ -61,12 +87,23 @@ public static class QuickCatalogFiles
             }
         }
 
-        string Field(string name) => front.TryGetValue(name, out var value) && value.Length > 0
+        if (i == lines.Length)
+        {
+            throw new FormatException("A help article's front-matter block is never closed with ---.");
+        }
+
+        return (front, i + 1);
+    }
+
+    private static string Required(Dictionary<string, string> front, string name) =>
+        front.TryGetValue(name, out var value) && value.Length > 0
             ? value
             : throw new FormatException($"A help article's front matter needs '{name}'.");
 
-        var link = new QuickLink(Field("linkLabel"), Field("link"));
-        var sections = new List<HelpSection>();
+    /// <summary>Splits the body at its ## headings. Text before the first heading belongs to no section, so it is refused.</summary>
+    private static List<(string Heading, string Text)> ReadSections(string[] lines, int bodyStart)
+    {
+        var sections = new List<(string Heading, string Text)>();
         string? heading = null;
         var text = new StringBuilder();
 
@@ -74,13 +111,13 @@ public static class QuickCatalogFiles
         {
             if (heading is not null)
             {
-                sections.Add(new HelpSection(Field("id"), Field("title"), Field("question"), heading, text.ToString().Trim(), link));
+                sections.Add((heading, text.ToString().Trim()));
             }
 
             text.Clear();
         }
 
-        for (i++; i < lines.Length; i++)
+        for (var i = bodyStart; i < lines.Length; i++)
         {
             var line = lines[i].Trim();
             if (line.StartsWith("## ", StringComparison.Ordinal))
@@ -90,6 +127,11 @@ public static class QuickCatalogFiles
             }
             else if (line.Length > 0)
             {
+                if (heading is null)
+                {
+                    throw new FormatException("A help article's text before the first ## heading is not part of any section.");
+                }
+
                 text.Append(text.Length > 0 ? " " : string.Empty).Append(line);
             }
         }
