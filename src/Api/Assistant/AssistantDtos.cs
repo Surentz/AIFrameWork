@@ -15,9 +15,12 @@ public sealed record AskAssistantRequest
     public required string Question { get; init; }
 }
 
+/// <summary>Which halves of the assistant are on: instant answers, and the AI.</summary>
 public sealed record AssistantStatusResponse
 {
-    public required bool Enabled { get; init; }
+    public required bool Quick { get; init; }
+
+    public required bool Ai { get; init; }
 }
 
 public sealed record AssistantFactResponse
@@ -128,6 +131,12 @@ public sealed record AssistantMessageResponse
     public required string Text { get; init; }
 
     public required IReadOnlyList<string> Tools { get; init; }
+
+    /// <summary>A quick answer's card, when this message is one.</summary>
+    public AssistantAnswerResponse? Answer { get; init; }
+
+    /// <summary>The suggestions, when this message is a not-sure reply.</summary>
+    public AssistantSuggestionsResponse? Suggestions { get; init; }
 }
 
 public sealed record AssistantConversationResponse

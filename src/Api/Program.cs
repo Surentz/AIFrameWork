@@ -284,6 +284,18 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromHours(1),
             }));
 
+    // Instant answers call no model, so this is a volume bound only, and generous. A separate
+    // endpoint and policy because the limiter runs before model binding and cannot read the body.
+    var quickPermitLimit = builder.Configuration.GetValue("RateLimiting:AssistantQuick:PermitLimit", defaultValue: 120);
+    options.AddPolicy(AssistantRateLimiting.QuickPolicyName, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.RequestServices.GetRequiredService<ICurrentUser>().Id?.ToString() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = quickPermitLimit,
+                Window = TimeSpan.FromHours(1),
+            }));
+
     options.OnRejected = async (context, cancellationToken) =>
     {
         if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))

@@ -1,6 +1,7 @@
 using AiFramework.Api.Auth;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -22,10 +23,11 @@ public sealed class AssistantController(
     AssistantAvailability availability,
     SseAssistantOutput output) : ControllerBase
 {
-    /// <summary>Whether the assistant is switched on, so the UI can hide itself.</summary>
+    /// <summary>Which halves of the assistant are on, so the UI shows only what works.</summary>
     [HttpGet]
     [ProducesResponseType<AssistantStatusResponse>(StatusCodes.Status200OK)]
-    public ActionResult<AssistantStatusResponse> Status() => new AssistantStatusResponse { Enabled = availability.AiEnabled };
+    public ActionResult<AssistantStatusResponse> Status() =>
+        new AssistantStatusResponse { Quick = availability.QuickEnabled, Ai = availability.AiEnabled };
 
     /// <summary>
     /// Asks one question. The response is text/event-stream: text and tool events while the answer
@@ -52,11 +54,7 @@ public sealed class AssistantController(
             return Problem(statusCode: StatusCodes.Status404NotFound, title: "assistant.disabled", detail: "The assistant is switched off.");
         }
 
-        // The same policy the Monitoring pages use, evaluated now: it reads the role from the
-        // database, so a demoted administrator loses the monitoring tools on this very question.
-        var scope = (await authorization.AuthorizeAsync(User, AuthorizationPolicies.Monitoring.Read).ConfigureAwait(false)).Succeeded
-            ? ToolScope.Operator
-            : ToolScope.Member;
+        var scope = await ScopeAsync().ConfigureAwait(false);
 
         Result<AssistantAnswer> result;
         using var stopKeepAlive = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -87,4 +85,50 @@ public sealed class AssistantController(
 
         return new EmptyResult();
     }
+
+    /// <summary>
+    /// Asks one question of the instant path (ADR 0036). text/event-stream: answer or suggestions,
+    /// then done; or error. No model is called. A failure before the first event is a problem.
+    /// </summary>
+    [HttpPost("quick")]
+    [EnableRateLimiting(AssistantRateLimiting.QuickPolicyName)]
+    [ProducesResponseType<AssistantEventResponse>(StatusCodes.Status200OK, "text/event-stream")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Quick(AskAssistantRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!availability.QuickEnabled)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound, title: "assistant.quick_disabled", detail: "Instant answers are switched off.");
+        }
+
+        var scope = await ScopeAsync().ConfigureAwait(false);
+        var result = await commands
+            .SendAsync(new AskQuick(request.ConversationId, request.Question, scope), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.IsSuccess && !output.Started)
+        {
+            return result.Problem(HttpContext);
+        }
+
+        await output.WriteAsync(
+            result.IsSuccess
+                ? AssistantEventResponse.Done(result.Value)
+                : AssistantEventResponse.Error(result.Error.ToProblemDetails(HttpContext)),
+            cancellationToken).ConfigureAwait(false);
+
+        return new EmptyResult();
+    }
+
+    // The same policy the Monitoring pages use, evaluated per question: it reads the role from the
+    // database, so a demoted administrator loses the monitoring answers on this very question.
+    private async Task<ToolScope> ScopeAsync() =>
+        (await authorization.AuthorizeAsync(User, AuthorizationPolicies.Monitoring.Read).ConfigureAwait(false)).Succeeded
+            ? ToolScope.Operator
+            : ToolScope.Member;
 }

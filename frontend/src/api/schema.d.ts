@@ -2505,7 +2505,7 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Whether the assistant is switched on, so the UI can hide itself. */
+        /** Which halves of the assistant are on, so the UI shows only what works. */
         readonly get: {
             readonly parameters: {
                 readonly query?: never;
@@ -2621,6 +2621,95 @@ export interface paths {
                 };
                 /** @description Service Unavailable */
                 readonly 503: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/assistant/quick": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /**
+         * Asks one question of the instant path (ADR 0036). text/event-stream: answer or suggestions,
+         *     then done; or error. No model is called. A failure before the first event is a problem.
+         */
+        readonly post: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["AskAssistantRequest"];
+                    readonly "text/json": components["schemas"]["AskAssistantRequest"];
+                    readonly "application/*+json": components["schemas"]["AskAssistantRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/event-stream": components["schemas"]["AssistantEventResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                readonly 409: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                readonly 429: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -2904,6 +2993,16 @@ export interface components {
             readonly conversationId?: null | string;
             readonly question: string;
         };
+        /** @description An instant or help answer, already formatted. Rendered as a card, never as Markdown. */
+        readonly AssistantAnswerResponse: {
+            readonly kind: components["schemas"]["QuickAnswerKind"];
+            readonly title?: null | string;
+            readonly text: string;
+            readonly answeredAs?: null | string;
+            readonly facts: readonly components["schemas"]["AssistantFactResponse"][];
+            readonly table?: null | components["schemas"]["AssistantTableResponse"];
+            readonly link?: null | components["schemas"]["AssistantLinkResponse"];
+        };
         readonly AssistantConversationResponse: {
             /** Format: uuid */
             readonly id: string;
@@ -2919,7 +3018,8 @@ export interface components {
         };
         /**
          * @description One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of
-         *     the answer), tool (a tool started), done (saved; carries the conversation id), error (carries a
+         *     the answer), tool (a tool started), answer (an instant or help answer, whole),
+         *     suggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a
          *     ProblemDetails; nothing from this question was saved).
          */
         readonly AssistantEventResponse: {
@@ -2930,17 +3030,42 @@ export interface components {
             readonly conversationId?: null | string;
             readonly outcome?: null | components["schemas"]["AssistantOutcome"];
             readonly problem?: null | components["schemas"]["ProblemDetails"];
+            readonly answer?: null | components["schemas"]["AssistantAnswerResponse"];
+            readonly suggestions?: null | components["schemas"]["AssistantSuggestionsResponse"];
+        };
+        readonly AssistantFactResponse: {
+            readonly label: string;
+            readonly value: string;
+        };
+        /** @description An in-app path. The page renders it as a link only if it matches its allow-list. */
+        readonly AssistantLinkResponse: {
+            readonly label: string;
+            readonly to: string;
         };
         /** @description One message as the page shows it. Role is user or assistant; Tools are the tool names the answer used. */
         readonly AssistantMessageResponse: {
             readonly role: string;
             readonly text: string;
             readonly tools: readonly string[];
+            readonly answer?: null | components["schemas"]["AssistantAnswerResponse"];
+            readonly suggestions?: null | components["schemas"]["AssistantSuggestionsResponse"];
         };
         /** @enum {unknown} */
         readonly AssistantOutcome: "Answered" | "Capped" | "Truncated" | null;
+        /** @description Which halves of the assistant are on: instant answers, and the AI. */
         readonly AssistantStatusResponse: {
-            readonly enabled: boolean;
+            readonly quick: boolean;
+            readonly ai: boolean;
+        };
+        /** @description What to offer when the router was not sure. AiAvailable says whether Ask the AI may be shown. */
+        readonly AssistantSuggestionsResponse: {
+            readonly text: string;
+            readonly options: readonly string[];
+            readonly aiAvailable: boolean;
+        };
+        readonly AssistantTableResponse: {
+            readonly columns: readonly string[];
+            readonly rows: readonly (readonly string[])[];
         };
         /**
          * @description The reason is owned by `CancelOrderValidator`, not duplicated here as a DataAnnotation —
@@ -3363,6 +3488,8 @@ export interface components {
             /** Format: date-time */
             readonly updatedAt: string;
         };
+        /** @enum {unknown} */
+        readonly QuickAnswerKind: "Instant" | "Help";
         /**
          * @description Business-rule validation (length, charset, password policy) is owned by the validators in
          *     `src/Application/Users`, not duplicated here as DataAnnotations. See `src/Api/CLAUDE.md`.

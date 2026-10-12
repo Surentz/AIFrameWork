@@ -52,11 +52,13 @@ public sealed class AssistantConversationsController(
             {
                 Id = result.Value.Id,
                 Title = result.Value.Title,
-                Messages = [.. result.Value.Messages.Select(static m => new AssistantMessageResponse
+                Messages = [.. result.Value.Messages.Select(m => new AssistantMessageResponse
                 {
                     Role = m.Role,
                     Text = m.Text,
                     Tools = m.Tools,
+                    Answer = m.Answer is { } answer ? AssistantCards.ToResponse(answer) : null,
+                    Suggestions = m.Suggestions is { } suggestions ? AssistantCards.ToResponse(suggestions, availability.AiEnabled) : null,
                 })],
             })
             : result.Problem(HttpContext);
