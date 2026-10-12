@@ -25,7 +25,7 @@ public sealed class AssistantController(
     /// <summary>Whether the assistant is switched on, so the UI can hide itself.</summary>
     [HttpGet]
     [ProducesResponseType<AssistantStatusResponse>(StatusCodes.Status200OK)]
-    public ActionResult<AssistantStatusResponse> Status() => new AssistantStatusResponse { Enabled = availability.Enabled };
+    public ActionResult<AssistantStatusResponse> Status() => new AssistantStatusResponse { Enabled = availability.AiEnabled };
 
     /// <summary>
     /// Asks one question. The response is text/event-stream: text and tool events while the answer
@@ -47,7 +47,7 @@ public sealed class AssistantController(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (!availability.Enabled)
+        if (!availability.AiEnabled)
         {
             return Problem(statusCode: StatusCodes.Status404NotFound, title: "assistant.disabled", detail: "The assistant is switched off.");
         }

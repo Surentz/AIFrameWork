@@ -20,7 +20,7 @@ public sealed class AssistantConversationsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
-        if (!availability.Enabled)
+        if (!availability.AnyEnabled)
         {
             return Disabled();
         }
@@ -41,7 +41,7 @@ public sealed class AssistantConversationsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
-        if (!availability.Enabled)
+        if (!availability.AnyEnabled)
         {
             return Disabled();
         }
@@ -71,7 +71,7 @@ public sealed class AssistantConversationsController(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (!availability.Enabled)
+        if (!availability.AnyEnabled)
         {
             return Disabled();
         }
@@ -86,7 +86,7 @@ public sealed class AssistantConversationsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        if (!availability.Enabled)
+        if (!availability.AnyEnabled)
         {
             return Disabled();
         }

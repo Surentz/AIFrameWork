@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using AiFramework.Application.IntegrationEvents;
 using AiFramework.Application.Monitoring;
 using AiFramework.Application.Notifications;
@@ -26,6 +27,7 @@ using AiFramework.Infrastructure.Security;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure;
@@ -111,6 +113,17 @@ public static class InfrastructureRegistration
     {
         services.AddCommand<AskAssistant, AssistantAnswer, AskAssistantHandler>();
         services.AddScoped<IValidator<AskAssistant>, AskAssistantValidator>();
+
+        // Instant answers (ADR 0036). Registered in every host, like AskAssistant, so the worker's
+        // build-time validation sees a complete graph; only the API builds the index
+        // (QuickRegistration.AddQuickAnswerIndexing), so in the worker the router reports unavailable.
+        services.AddCommand<AskQuick, AssistantAnswer, AskQuickHandler>();
+        services.AddScoped<IValidator<AskQuick>, AskQuickValidator>();
+        services.AddScoped<IntentRouter>();
+        services.AddScoped<QuickAnswerComposer>();
+        services.AddScoped<ParameterResolver>();
+        services.AddSingleton<QuickIndexState>();
+        services.TryAddSingleton(QuickRouting.Default);
         services.AddScoped<AssistantToolbox>();
         services.AddQuery<GetAssistantConversations, IReadOnlyList<AssistantConversationSummary>, GetAssistantConversationsHandler>();
         services.AddQuery<GetAssistantConversation, AssistantConversationView, GetAssistantConversationHandler>();

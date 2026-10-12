@@ -227,8 +227,9 @@ builder.Services.AddOptions<AssistantOptions>()
         "Assistant:ApiKeyFile must name an existing file when Assistant:Enabled is true.")
     .ValidateOnStart();
 builder.Services.AddSingleton(new AssistantAvailability(
-    assistantSection.GetValue<bool>("Enabled"),
-    TimeSpan.FromSeconds(assistantSection.GetValue("HeartbeatSeconds", defaultValue: 15))));
+    AiEnabled: assistantSection.GetValue<bool>("Enabled"),
+    QuickEnabled: assistantSection.GetValue<bool>("Quick:Enabled"),
+    HeartbeatInterval: TimeSpan.FromSeconds(assistantSection.GetValue("HeartbeatSeconds", defaultValue: 15))));
 
 // Volume defence on the credential endpoints, alongside the per-account lockout in
 // SignInHandler. Partitioned by remote address, not by username: the limiter runs before model

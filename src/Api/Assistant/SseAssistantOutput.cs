@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Api.Assistant;
@@ -9,7 +10,7 @@ namespace AiFramework.Api.Assistant;
 /// failure before then is still an ordinary ProblemDetails response. Flushes every write, and
 /// serialises them: the keep-alive runs alongside the answer.
 /// </summary>
-public sealed class SseAssistantOutput(IHttpContextAccessor accessor, IOptions<Microsoft.AspNetCore.Mvc.JsonOptions> json)
+public sealed class SseAssistantOutput(IHttpContextAccessor accessor, IOptions<Microsoft.AspNetCore.Mvc.JsonOptions> json, AssistantAvailability availability)
     : IAssistantOutput, IDisposable
 {
     private const string KeepAlive = ": keep-alive\n\n";
@@ -23,6 +24,12 @@ public sealed class SseAssistantOutput(IHttpContextAccessor accessor, IOptions<M
 
     public Task ToolAsync(string toolName, CancellationToken cancellationToken) =>
         WriteAsync(AssistantEventResponse.ToolStarted(toolName), cancellationToken);
+
+    public Task AnswerAsync(QuickAnswer answer, CancellationToken cancellationToken) =>
+        WriteAsync(AssistantEventResponse.Answered(AssistantCards.ToResponse(answer)), cancellationToken);
+
+    public Task SuggestionsAsync(QuickSuggestions suggestions, CancellationToken cancellationToken) =>
+        WriteAsync(AssistantEventResponse.Suggested(AssistantCards.ToResponse(suggestions, availability.AiEnabled)), cancellationToken);
 
     public Task WriteAsync(AssistantEventResponse streamEvent, CancellationToken cancellationToken)
     {
