@@ -61,10 +61,7 @@ public static class InfrastructureRegistration
         services.AddQuery<GetNotifications, NotificationPage, GetNotificationsHandler>();
         services.AddQuery<GetUnreadNotificationCount, int, GetUnreadNotificationCountHandler>();
 
-        services.AddCommand<CreateProduct, Guid, CreateProductHandler>();
-        services.AddCommand<UpdateProduct, bool, UpdateProductHandler>();
-        services.AddQuery<GetProduct, ProductView, GetProductHandler>();
-        services.AddQuery<GetProducts, ProductPage, GetProductsHandler>();
+        RegisterProducts(services);
 
         // IExchangeRateProvider itself is not registered here - that is Infrastructure's typed
         // client (ExchangeRateClient), wired in AddInfrastructure once it exists. Registering
@@ -131,6 +128,19 @@ public static class InfrastructureRegistration
     {
         services.AddQuery<GetPopulation, PopulationView, GetPopulationHandler>();
         services.AddQuery<GetPopulationAreas, PopulationAreasView, GetPopulationAreasHandler>();
+    }
+
+    /// <summary>
+    /// The product use cases. Split out of <see cref="AddMessaging"/> for the same MA0051 reason as
+    /// <see cref="RegisterOrders"/>.
+    /// </summary>
+    private static void RegisterProducts(IServiceCollection services)
+    {
+        services.AddCommand<CreateProduct, Guid, CreateProductHandler>();
+        services.AddCommand<UpdateProduct, bool, UpdateProductHandler>();
+        services.AddQuery<GetProduct, ProductView, GetProductHandler>();
+        services.AddQuery<GetProducts, ProductPage, GetProductsHandler>();
+        services.AddQuery<FindProducts, IReadOnlyList<ProductMatch>, FindProductsHandler>();
     }
 
     /// <summary>
