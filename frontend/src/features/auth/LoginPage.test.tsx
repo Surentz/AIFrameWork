@@ -4,7 +4,6 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { server } from '../../test/handlers';
 import { withQueryClient } from '../../test/withQueryClient';
-import { OrderList } from '../orders/OrderList';
 import { LoginPage } from './LoginPage';
 
 function renderPage(): void {
@@ -16,7 +15,7 @@ function renderPage(): void {
   );
 }
 
-// Exercises the real route swap (/login -> /orders) the way the app renders it; a bare
+// Exercises the real route swap (/login -> /) the way the app renders it; a bare
 // MemoryRouter with no <Routes> lets navigate() go nowhere, which would let a broken redirect
 // pass this test.
 function renderPageWithRoutes(): void {
@@ -24,7 +23,7 @@ function renderPageWithRoutes(): void {
     <MemoryRouter initialEntries={['/login']}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/orders" element={<OrderList />} />
+        <Route path="/" element={<p>the dashboard</p>} />
       </Routes>
     </MemoryRouter>,
     { wrapper: withQueryClient() },
@@ -40,7 +39,7 @@ function requireElementById(id: string): HTMLElement {
 }
 
 describe('LoginPage', () => {
-  it('sends the typed credentials to the api and lands on the orders page', async () => {
+  it('sends the typed credentials to the api and lands on the dashboard', async () => {
     let body: unknown = null;
     server.use(
       http.post('/api/auth/login', async ({ request }) => {
@@ -59,7 +58,7 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByLabelText('Remember me'));
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    expect(await screen.findByRole('link', { name: 'SKU-1' })).toBeInTheDocument();
+    expect(await screen.findByText('the dashboard')).toBeInTheDocument();
     expect(body).toEqual({
       username: 'ada',
       password: 'correct horse',

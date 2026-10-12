@@ -22,6 +22,33 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: 'All orders' })).toBeInTheDocument();
   });
 
+  it('renders the dashboard at the root, with the sidebar beside it', async () => {
+    renderAt('/');
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Exports, in Sales' })).toHaveAttribute(
+      'href',
+      '/orders/exports',
+    );
+  });
+
+  it("keeps the operations group out of a member's sidebar and dashboard", async () => {
+    renderAt('/');
+    await screen.findByText(/Welcome back, Ada Lovelace/);
+
+    expect(screen.queryByRole('button', { name: 'Operations' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Operations' })).not.toBeInTheDocument();
+  });
+
+  it('shows an administrator the operations group in both', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)));
+    renderAt('/');
+
+    expect(await screen.findByRole('button', { name: 'Operations' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Operations', level: 2 })).toBeInTheDocument();
+  });
+
   it('renders the catalogue screens inside the app shell', async () => {
     renderAt('/products');
 

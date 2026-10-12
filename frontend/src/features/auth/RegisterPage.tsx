@@ -17,10 +17,7 @@ export function RegisterPage(): React.JSX.Element {
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>): void {
     event.preventDefault();
-    mutation.mutate(
-      { username, password, displayName },
-      { onSuccess: () => void navigate('/orders') },
-    );
+    mutation.mutate({ username, password, displayName }, { onSuccess: () => void navigate('/') });
   }
 
   const fieldErrors = mutation.error?.fieldErrors ?? {};

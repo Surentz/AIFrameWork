@@ -6,6 +6,7 @@ import { LoginPage } from './features/auth/LoginPage';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { RequireRole } from './features/auth/RequireRole';
+import { DashboardPage } from './features/dashboard/DashboardPage';
 import { FulfilmentPage } from './features/fulfilment/FulfilmentPage';
 import { IntegrationsPage } from './features/monitoring/IntegrationsPage';
 import { JobsPage } from './features/monitoring/JobsPage';
@@ -36,7 +37,7 @@ export function AppRoutes(): React.JSX.Element {
           is redirected before the shell renders a header they cannot use. */}
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<Navigate to="/orders" replace />} />
+          <Route path="/" element={<DashboardPage />} />
           <Route path="/orders" element={<OrderList />} />
           <Route path="/orders/new" element={<PlaceOrderForm />} />
           {/* Before /orders/:id, for the reason /products/new is: otherwise "exports" is an id. */}
