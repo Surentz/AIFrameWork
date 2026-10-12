@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 
 namespace AiFramework.Infrastructure.Assistant;
 
@@ -49,6 +50,18 @@ internal static class AssistantDisplay
                     // The data the model read is not shown, but a refused call (a tool the question
                     // was not offered) is not a tool the assistant used, so its chip is dropped.
                     DropRefused(tools, turn);
+                    break;
+
+                case AssistantTurnCodec.Quick:
+                    Flush(messages, ref text, ref tools);
+                    var quick = (QuickAnswerTurn)AssistantTurnCodec.Decode(turn);
+                    messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, quick.Answer.Text, [], Answer: quick.Answer));
+                    break;
+
+                case AssistantTurnCodec.Suggested:
+                    Flush(messages, ref text, ref tools);
+                    var suggested = (SuggestionsTurn)AssistantTurnCodec.Decode(turn);
+                    messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, suggested.Suggestions.Text, [], Suggestions: suggested.Suggestions));
                     break;
 
                 default:

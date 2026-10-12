@@ -1,5 +1,6 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using AiFramework.Infrastructure.Assistant;
 using AiFramework.PartnerSimulator;
 using FluentAssertions;
@@ -241,5 +242,27 @@ public sealed class ClaudeAssistantModelTests : IAsyncLifetime
         var result = await NextAsync(Request());
 
         result.Value.StopReason.Should().Be(AssistantStopReason.Refusal);
+    }
+
+    [Fact]
+    public async Task NextTurnAsync_ReplaysQuickTurnsAsPlainAssistantText_InAlternation()
+    {
+        _fake.Enqueue(FakeReply.Text("ok"));
+        var answer = new QuickAnswer(QuickAnswerKind.Instant, null, "Shipped.", [], null, null, null);
+        var suggestions = new QuickSuggestions("Not sure.", ["Is my export ready?"]);
+
+        await NextAsync(Request(
+            true,
+            new UserQuestionTurn("Has my last order shipped?", Now),
+            new QuickAnswerTurn(answer, "Shipped.\n(Linked: Open order, /orders/x)"),
+            new UserQuestionTurn("why", Now),
+            new SuggestionsTurn(suggestions, "Not sure. Suggested: Is my export ready?"),
+            new UserQuestionTurn("why", Now)));
+
+        var messages = _fake.Requests.Should().ContainSingle().Subject.Body.GetProperty("messages");
+        messages.EnumerateArray().Select(m => m.GetProperty("role").GetString())
+            .Should().Equal("user", "assistant", "user", "assistant", "user");
+        messages[1].GetProperty("content").GetString().Should().Be("Shipped.\n(Linked: Open order, /orders/x)");
+        messages[3].GetProperty("content").GetString().Should().Be("Not sure. Suggested: Is my export ready?");
     }
 }

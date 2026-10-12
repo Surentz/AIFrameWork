@@ -54,6 +54,9 @@ internal static class AnthropicRequestMapper
         UserQuestionTurn q => new() { Role = Role.User, Content = AskedAt(q) },
         ModelTurn m => new() { Role = Role.Assistant, Content = StoredBlocks.ToParams(m.Blocks) },
         ToolResultsTurn r => new() { Role = Role.User, Content = r.Results.Select(ToResult).ToList() },
+        // The stored replay text, verbatim: never re-rendered, so the history Claude sees never changes.
+        QuickAnswerTurn a => new() { Role = Role.Assistant, Content = a.Replay },
+        SuggestionsTurn s => new() { Role = Role.Assistant, Content = s.Replay },
         _ => throw new ArgumentOutOfRangeException(nameof(turn), turn.GetType().Name, "Unknown turn type."),
     };
 

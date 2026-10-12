@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 
 namespace AiFramework.Infrastructure.Assistant;
 
@@ -9,6 +10,8 @@ internal static class AssistantTurnCodec
     public const string Question = "question";
     public const string Model = "model";
     public const string ToolResults = "tool_results";
+    public const string Quick = "quick_answer";
+    public const string Suggested = "suggestions";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -19,6 +22,8 @@ internal static class AssistantTurnCodec
             UserQuestionTurn q => (Question, JsonSerializer.Serialize(new StoredQuestion(q.Text, q.AskedAt), Json)),
             ModelTurn m => (Model, m.Blocks),
             ToolResultsTurn r => (ToolResults, JsonSerializer.Serialize(r.Results, Json)),
+            QuickAnswerTurn a => (Quick, JsonSerializer.Serialize(new StoredQuickAnswer(a.Answer, a.Replay), Json)),
+            SuggestionsTurn s => (Suggested, JsonSerializer.Serialize(new StoredSuggestions(s.Suggestions, s.Replay), Json)),
             _ => throw new ArgumentOutOfRangeException(nameof(turn), turn.GetType().Name, "Unknown turn type."),
         };
 
@@ -38,6 +43,8 @@ internal static class AssistantTurnCodec
         Question => DecodeQuestion(row),
         Model => new ModelTurn(row.Payload),
         ToolResults => new ToolResultsTurn(Deserialize<List<AssistantToolResult>>(row)),
+        Quick => DecodeQuick(row),
+        Suggested => DecodeSuggestions(row),
         _ => throw new InvalidOperationException($"Turn {row.Id} has unknown kind '{row.Kind}'."),
     };
 
@@ -47,9 +54,26 @@ internal static class AssistantTurnCodec
         return new UserQuestionTurn(question.Text, question.AskedAt);
     }
 
+    private static QuickAnswerTurn DecodeQuick(AssistantTurnRow row)
+    {
+        var stored = Deserialize<StoredQuickAnswer>(row);
+        return new QuickAnswerTurn(stored.Answer, stored.Replay);
+    }
+
+    private static SuggestionsTurn DecodeSuggestions(AssistantTurnRow row)
+    {
+        var stored = Deserialize<StoredSuggestions>(row);
+        return new SuggestionsTurn(stored.Suggestions, stored.Replay);
+    }
+
     private static T Deserialize<T>(AssistantTurnRow row) =>
         JsonSerializer.Deserialize<T>(row.Payload, Json)
             ?? throw new InvalidOperationException($"Turn {row.Id} has an empty payload.");
 
     private sealed record StoredQuestion(string Text, DateTimeOffset AskedAt);
+
+    // QuickAnswerKind is stored as its number: append new kinds at the end, never reorder.
+    private sealed record StoredQuickAnswer(QuickAnswer Answer, string Replay);
+
+    private sealed record StoredSuggestions(QuickSuggestions Suggestions, string Replay);
 }
