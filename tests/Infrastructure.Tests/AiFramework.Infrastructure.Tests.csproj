@@ -33,4 +33,11 @@
     <ProjectReference Include="..\PartnerSimulator\AiFramework.PartnerSimulator.csproj" />
   </ItemGroup>
 
+  <!-- The assistant's embedding model, for the embedder tests and the evaluation gate (ADR 0036).
+       Fetched by scripts/fetch-assistant-model.ps1 into the git-ignored models/assistant, copied
+       beside the binaries as assistant-model/. Conditional, so a build without it still succeeds. -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\models\assistant\model.onnx')">
+    <None Include="$(MSBuildThisFileDirectory)..\..\models\assistant\*" LinkBase="assistant-model" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
