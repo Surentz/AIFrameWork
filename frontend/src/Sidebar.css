@@ -1,0 +1,159 @@
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 15rem;
+  height: 100dvh;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-3);
+  border-inline-end: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+/* Only the tile is accent-coloured; the wordmark stays body text. */
+.sidebar__brand svg {
+  color: var(--color-accent);
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.sidebar__link {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+.sidebar__link:hover {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
+/* NavLink adds `active` itself; styling it here keeps the component free of className callbacks. */
+.sidebar__link.active {
+  background-color: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.sidebar__link--page {
+  padding-inline-start: var(--space-5);
+}
+
+.sidebar__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-block-start: var(--space-2);
+}
+
+.sidebar__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-subtle);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: start;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color var(--transition);
+}
+
+.sidebar__heading:hover {
+  background-color: var(--color-surface-sunken);
+}
+
+.sidebar__heading:focus-visible,
+.sidebar__link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.sidebar__dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent);
+}
+
+.sidebar__chevron {
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-inline-start: auto;
+  border-inline-end: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--transition);
+}
+
+.sidebar__heading[aria-expanded='false'] .sidebar__chevron {
+  transform: rotate(-45deg);
+}
+
+.sidebar__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* `display: flex` above would otherwise beat the user agent's own [hidden] rule. */
+.sidebar__list[hidden] {
+  display: none;
+}
+
+/* Small screens: an overlay, opened by the shell's menu button. `visibility` as well as the
+   transform, so a closed menu's links cannot be tabbed to or read out. */
+@media (max-width: 47.99rem) {
+  .sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 30;
+    width: min(18rem, 85vw);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform var(--transition),
+      visibility var(--transition);
+  }
+
+  .sidebar--open {
+    transform: none;
+    visibility: visible;
+    box-shadow: 0 0 2rem rgb(0 0 0 / 20%);
+  }
+}
