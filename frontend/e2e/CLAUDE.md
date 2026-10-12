@@ -61,6 +61,11 @@ cluster run at about ten tests a minute, surfacing as navigation timeouts that l
   inline `getByRole` in the spec.
 - Where two accessible names overlap — "Sign out" and "Sign out everywhere" — use
   `{ exact: true }`. Playwright matches names as substrings by default.
+- **The sidebar folds** (ADR 0035). A page's nav link is not visible while its group is closed, so a
+  spec that clicks one uses `shell.goTo(page, 'Group', 'Page')`, which opens the group first.
+  Assertions that a link is absent use `shell.navLink` / `shell.groupButton` with
+  `toHaveCount(0)` / `toBeHidden()`. A dashboard subtile is named `"<page>, in <group>"`
+  (`dashboard.subtile`), so it never collides with the sidebar's link.
 
 ## Specs
 
@@ -155,7 +160,7 @@ budget nor the administrator: it publishes `shipment.confirmed.v1` through the b
 management HTTP API directly from the host (`support/broker.ts`), and only the stack
 `playwright.config.ts` starts exposes that port — the kind cluster does not.
 
-**A `kind` run therefore executes 28 of the 61 tests** — `npm run e2e` runs all of them, where
+**A `kind` run therefore executes 31 of the 65 tests** — `npm run e2e` runs all of them, where
 the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
@@ -214,6 +219,7 @@ that `prepare-database.ts` writes into `e2e/.certs/`.
 | Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
 | Monitoring | access, overview, drill-downs, traffic window, external systems (simulator healthy, dead address unhealthy), jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
 | Assistant | a member asks from the header, sees a tool chip and the answer, and reopens it from the sidebar after a reload; an operator gets the monitoring tools (against the fake Messages API) |
+| Navigation | the dashboard is the landing page, a tile per group and none for Operations for a member, a subtile reaches its page, sidebar groups fold and unfold and the current page's group opens, the operator reaches monitoring through the sidebar |
 
 Not covered end to end, deliberately: the dead-letter retry (nothing dead-letters on purpose),
 traffic numbers (a clock race against the minute flush — ADR 0021), and realtime push (off in the

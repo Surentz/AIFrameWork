@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '../../fixtures/index.ts';
 import * as exportsPage from '../../screens/exports.ts';
+import * as shell from '../../screens/shell.ts';
 
 /**
  * An export of the caller's own orders, end to end: requested from the page, built by the worker
@@ -22,7 +23,7 @@ test.describe('order exports', { tag: '@local-only' }, () => {
 
     const exportId = await test.step('request it from the exports page', async () => {
       await signedInPage.goto('/orders');
-      await exportsPage.navLink(signedInPage).click();
+      await shell.goTo(signedInPage, 'Sales', 'Exports');
       await expect(exportsPage.pageHeading(signedInPage)).toBeVisible();
 
       // The id from the request's own response, so the wait below is for THIS export. No

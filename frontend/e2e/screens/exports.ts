@@ -20,6 +20,3 @@ export const viewer = (p: Page): Locator => p.getByRole('dialog', { name: /^Expo
     "Download export requested …", which a substring match on "Download" finds. */
 export const downloadLink = (p: Page): Locator =>
   p.getByRole('table', { name: 'Exports' }).getByRole('link', { name: 'Download' }).first();
-
-/** The header's nav entry for this page. */
-export const navLink = (p: Page): Locator => p.getByRole('link', { name: 'Exports', exact: true });

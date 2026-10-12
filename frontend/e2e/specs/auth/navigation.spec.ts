@@ -1,15 +1,15 @@
 import { expect, test } from '../../fixtures/index.ts';
+import * as dashboard from '../../screens/dashboard.ts';
 import * as login from '../../screens/login.ts';
-import * as orders from '../../screens/orders.ts';
 import * as register from '../../screens/register.ts';
 
 // None of these submits a form, so none spends an auth rate-limit permit - they run everywhere.
 
-test('sends a signed-in visitor from the root to their orders', async ({ signedInPage }) => {
+test('lands a signed-in visitor on the dashboard at the root', async ({ signedInPage }) => {
   await signedInPage.goto('/');
 
-  await expect(signedInPage).toHaveURL(/\/orders$/);
-  await expect(orders.pageHeading(signedInPage)).toBeVisible();
+  await expect(signedInPage).toHaveURL(/\/$/);
+  await expect(dashboard.heading(signedInPage)).toBeVisible();
 });
 
 test('links the sign-in and registration pages to each other', async ({ page }) => {

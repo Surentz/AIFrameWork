@@ -1,5 +1,6 @@
 import { expect, test } from '../../fixtures/index.ts';
 import * as fulfilment from '../../screens/fulfilment.ts';
+import * as shell from '../../screens/shell.ts';
 import { uniqueSku } from '../../support/identity.ts';
 
 /**
@@ -20,7 +21,7 @@ test('refuses an ordinary member', async ({ signedInPage }) => {
 });
 
 test.describe('the fulfilment queue', { tag: '@local-only' }, () => {
-  test('ships another buyer\'s order, which then leaves the queue', async ({
+  test("ships another buyer's order, which then leaves the queue", async ({
     adminPage,
     api,
     workerUser,
@@ -30,7 +31,7 @@ test.describe('the fulfilment queue', { tag: '@local-only' }, () => {
 
     await test.step('find the order in the queue', async () => {
       await adminPage.goto('/');
-      await fulfilment.navLink(adminPage).click();
+      await shell.goTo(adminPage, 'Operations', 'Fulfilment');
       await fulfilment.findOrder(adminPage, sku);
       await expect(fulfilment.orderRow(adminPage, sku)).toContainText(workerUser.username);
     });

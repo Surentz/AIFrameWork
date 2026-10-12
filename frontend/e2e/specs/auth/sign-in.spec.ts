@@ -1,4 +1,5 @@
 import { expect, test } from '../../fixtures/index.ts';
+import * as dashboard from '../../screens/dashboard.ts';
 import * as login from '../../screens/login.ts';
 import * as orders from '../../screens/orders.ts';
 import * as shell from '../../screens/shell.ts';
@@ -14,7 +15,7 @@ test('signs out and back in', async ({ signedInPage, workerUser }) => {
   await login.passwordField(signedInPage).fill(workerUser.password);
   await login.submitButton(signedInPage).click();
 
-  await expect(orders.pageHeading(signedInPage)).toBeVisible();
+  await expect(dashboard.heading(signedInPage)).toBeVisible();
 
   // "Remember me" was left unticked, so the cookie must end with the browser: a session cookie,
   // which Playwright reports with an expiry of -1.
@@ -36,7 +37,7 @@ test('keeps a remembered session beyond the browser', { tag: '@local-only' }, as
   workerUser,
 }) => {
   await login.signIn(page, { ...workerUser, rememberMe: true });
-  await expect(orders.pageHeading(page)).toBeVisible();
+  await expect(dashboard.heading(page)).toBeVisible();
 
   // IsPersistent is the whole of what "remember me" means under cookie authentication: the
   // cookie carries an expiry, so it outlives the browser session.

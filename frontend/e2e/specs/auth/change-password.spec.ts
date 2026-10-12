@@ -1,5 +1,6 @@
 import { expect, test } from '../../fixtures/index.ts';
 import * as account from '../../screens/account.ts';
+import * as dashboard from '../../screens/dashboard.ts';
 import * as login from '../../screens/login.ts';
 import * as orders from '../../screens/orders.ts';
 import * as shell from '../../screens/shell.ts';
@@ -60,7 +61,7 @@ test(
 
     await test.step('the new password is accepted', async () => {
       await login.signIn(isolatedPage, { username: freshUser.username, password: NewPassword });
-      await expect(orders.pageHeading(isolatedPage)).toBeVisible();
+      await expect(dashboard.heading(isolatedPage)).toBeVisible();
     });
   },
 );

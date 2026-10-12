@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import * as shell from './shell.ts';
 
 export const overviewHeading = (p: Page): Locator =>
   p.getByRole('heading', { name: 'Monitoring', level: 1 });
@@ -12,7 +13,7 @@ export const endpointBreakdownHeading = (p: Page): Locator =>
   p.getByRole('heading', { name: 'By endpoint and handler', level: 2 });
 
 /** The shell's nav entry, rendered only for an administrator. */
-export const navLink = (p: Page): Locator => p.getByRole('link', { name: 'Monitoring' });
+export const navLink = (p: Page): Locator => shell.navLink(p, 'Monitoring');
 
 /** A tile group on the overview, each labelled by what it counts. */
 export const tiles = (p: Page, label: string): Locator => p.getByRole('list', { name: label });

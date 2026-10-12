@@ -1,10 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
+import * as shell from './shell.ts';
 
 export const pageHeading = (p: Page): Locator =>
   p.getByRole('heading', { name: 'Fulfilment', level: 1 });
 
 /** The shell's nav entry, rendered only for an administrator. */
-export const navLink = (p: Page): Locator => p.getByRole('link', { name: 'Fulfilment' });
+export const navLink = (p: Page): Locator => shell.navLink(p, 'Fulfilment');
 
 /** The refusal `RequireRole` renders in place of the page. */
 export const refusal = (p: Page): Locator => p.getByRole('alert');

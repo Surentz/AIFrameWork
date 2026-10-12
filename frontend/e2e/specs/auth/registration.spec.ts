@@ -1,5 +1,5 @@
 import { expect, test } from '../../fixtures/index.ts';
-import * as orders from '../../screens/orders.ts';
+import * as dashboard from '../../screens/dashboard.ts';
 import * as register from '../../screens/register.ts';
 import { uniqueUsername } from '../../support/identity.ts';
 
@@ -13,10 +13,10 @@ import { uniqueUsername } from '../../support/identity.ts';
 test('registers a new account through the form', { tag: '@local-only' }, async ({ page }) => {
   await register.submit(page, { username: uniqueUsername() });
 
-  // Registration signs in and lands on /orders; waiting for that is what makes this a real
+  // Registration signs in and lands on the dashboard; waiting for that is what makes this a real
   // session rather than a race.
-  await page.waitForURL('**/orders');
-  await expect(orders.pageHeading(page)).toBeVisible();
+  await page.waitForURL((url) => url.pathname === '/');
+  await expect(dashboard.heading(page)).toBeVisible();
 });
 
 test('refuses a username that is already taken', { tag: '@local-only' }, async ({ page, api }) => {
