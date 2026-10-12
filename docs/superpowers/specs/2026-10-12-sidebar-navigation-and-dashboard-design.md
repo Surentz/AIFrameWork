@@ -49,8 +49,8 @@ export function visibleGroups(role: string | undefined): readonly NavGroup[];
 export function groupForPath(pathname: string): NavGroup | undefined;
 ```
 
-- `visibleGroups` drops admin groups for non-admins. The admin filter lives here and nowhere
-  else. As today it is cosmetics, not the control: the API's capability policies and
+- `visibleGroups` drops admin groups for non-admins (no group is ever empty, so there is nothing
+  else to drop). The admin filter lives here and nowhere else. As today it is cosmetics, not the control: the API's capability policies and
   `RequireRole` in `routes.tsx` still refuse (ADR 0020).
 - `end` carries today's `NavLink end` behaviour (`/orders`, `/products`) so `/orders/new` and
   `/products/:id` do not light up the list entry.
@@ -65,7 +65,8 @@ export function groupForPath(pathname: string): NavGroup | undefined;
 - New `Sidebar` component: `<nav aria-label="Main">`, a Dashboard link, then one section per
   visible group. The label is `Main` because the assistant's conversation list is already
   `navigation` named `Conversations` and both exist on `/assistant`.
-- Group headings are `<button aria-expanded aria-controls>`; Enter and Space toggle. A heading
+- Group headings are `<button aria-expanded aria-controls>`; Enter and Space toggle. They are
+  buttons, never heading elements: the e2e catalogue screen finds `heading "Catalogue"`. A heading
   whose group holds the current page and is folded shows a dot.
 - Fold state is a `useNavFold` hook: `Record<groupId, boolean>` in `localStorage`, every read and
   write in try/catch, rendering correctly with storage unavailable. On every navigation the group
@@ -80,11 +81,15 @@ export function groupForPath(pathname: string): NavGroup | undefined;
 
 ### Dashboard (`features/dashboard/DashboardPage.tsx`, new)
 
-- Route `/` renders the page; `<Navigate to="/orders">` goes. Login still lands on `/`.
-- Greeting from `useSession().displayName`, then a grid of tiles from `visibleGroups(role)`. A
-  tile is a labelled region: icon, heading, description, and a list of subtile links, each with
-  its item description as supporting text.
-- The grid is one column on narrow screens, two from 40rem, three from 64rem.
+- Route `/` renders the page; `<Navigate to="/orders">` goes. `LoginPage` and `RegisterPage`
+  navigate to `/` (they hard-coded `/orders`).
+- An `<h1>Dashboard</h1>` (not a "Welcome back" heading: the login page's heading is "Welcome
+  back"), then a paragraph greeting `useSession().displayName`, then a grid of tiles from
+  `visibleGroups(role)`. A tile is a labelled region: icon, heading, description, and a list of
+  subtile links, each with its item description as supporting text. A subtile link's accessible
+  name is `"<page>, in <group>"`, so it never matches the sidebar's link to the same page.
+- The grid is one column on narrow screens, two from 40rem, three from 80rem (the 15rem sidebar
+  takes width from the 64rem content column).
 - Error and loading: the only data is the session, which `RequireAuth` has already resolved, so
   there is no query and no error branch to add. If `session` is momentarily undefined the page
   renders the tiles for a non-admin and corrects itself, as the current nav does.

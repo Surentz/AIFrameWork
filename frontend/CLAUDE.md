@@ -22,6 +22,19 @@ error go away.
 - **Never swallow an error.** No `catch {}`, no `.catch(() => null)` to silence a red line.
 - **No `any`, no `!`.**
 
+## Navigation
+
+`src/navigation.ts` is the one list of groups and pages (ADR 0035). The sidebar and the dashboard
+both render from it, so **a new page is added there or it is reachable only by URL.** An
+administrator group sets `adminOnly`; that hides the group and nothing else — the route still needs
+`RequireRole` in `routes.tsx` and the API its policy.
+
+Group headings in the sidebar are `<button>`s, never headings (the e2e catalogue screen finds
+`heading "Catalogue"`), and a dashboard subtile's accessible name is `"<page>, in <group>"` so it
+never shares a name with the sidebar's link to the same page. Which groups are open is remembered in
+`localStorage` (`aiframework.nav.open`); every access is in try/catch and the UI works without it.
+Specs reach a page with `shell.goTo` (`e2e/screens/shell.ts`), which unfolds its group first.
+
 ## The API proxy
 
 Dev runs two processes: Vite on 5173 and the API on 5234. `vite.config.ts` proxies `/api` to
