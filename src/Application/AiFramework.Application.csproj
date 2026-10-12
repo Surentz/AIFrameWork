@@ -9,4 +9,11 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
   </ItemGroup>
 
+  <!-- The instant-answer catalog (ADR 0036). LogicalName gives a stable "quick/en/..." name; the
+       loader normalises the separator, which is "\" on Windows. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assistant\Quick\Catalog\**\*.json;Assistant\Quick\Catalog\**\*.md"
+                      LogicalName="quick/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>
