@@ -67,4 +67,60 @@ public sealed class OnnxTextEmbedderTests : IDisposable
         result.Error.Kind.Should().Be(ErrorKind.Unavailable);
         result.Error.Code.Should().Be("assistant.quick_unavailable");
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not a vocabulary\nat all\n")]
+    [InlineData("[PAD]\n[CLS]\n[SEP]\n")]
+    [InlineData("[PAD]\n[UNK]\n[CLS]\n[SEP]\n[PAD]\n")]
+    public void Embed_WithABrokenVocabulary_IsUnavailableEveryTime(string vocabulary)
+    {
+        var directory = NewModelDirectory();
+        try
+        {
+            File.WriteAllBytes(Path.Combine(directory, "model.onnx"), [0x08, 0x01]);
+            File.WriteAllText(Path.Combine(directory, "vocab.txt"), vocabulary);
+            using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions { ModelPath = directory }));
+
+            AssertUnavailable(embedder.Embed("first question"));
+            AssertUnavailable(embedder.Embed("second question"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Embed_WithACorruptModel_IsUnavailableEveryTime()
+    {
+        var directory = NewModelDirectory();
+        try
+        {
+            File.WriteAllBytes(Path.Combine(directory, "model.onnx"), [0x08, 0x01]);
+            File.Copy(Path.Combine(new QuickModelOptions().ModelPath, "vocab.txt"), Path.Combine(directory, "vocab.txt"));
+            using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions { ModelPath = directory }));
+
+            AssertUnavailable(embedder.Embed("first question"));
+            AssertUnavailable(embedder.Embed("second question"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static string NewModelDirectory()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    private static void AssertUnavailable(Result<float[]> result)
+    {
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Kind.Should().Be(ErrorKind.Unavailable);
+        result.Error.Code.Should().Be("assistant.quick_unavailable");
+    }
 }

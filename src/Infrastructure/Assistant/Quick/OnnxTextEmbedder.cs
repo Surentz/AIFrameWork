@@ -12,6 +12,13 @@ namespace AiFramework.Infrastructure.Assistant.Quick;
 /// token's 384-number hidden state out, scaled to unit length. Loaded on first use, so a host that
 /// never embeds (the worker) never loads it. <see cref="InferenceSession.Run(IReadOnlyCollection{NamedOnnxValue})"/>
 /// is safe to call concurrently. ADR 0036.
+/// <para>
+/// A failed load is permanent for the process: <c>Lazy</c> caches the null, so every later call answers
+/// Unavailable until the process restarts, even after the model files are fixed on disk.
+/// </para>
+/// <para>
+/// One tokenizer instance is shared by every concurrent <see cref="Embed"/> call.
+/// </para>
 /// </summary>
 public sealed class OnnxTextEmbedder(IOptions<QuickModelOptions> options) : ITextEmbedder, IDisposable
 {
@@ -111,7 +118,8 @@ public sealed class OnnxTextEmbedder(IOptions<QuickModelOptions> options) : ITex
         }
     }
 
-    // Returns null rather than throwing, so the caller can answer Unavailable.
+    // Returns null rather than throwing, so the caller can answer Unavailable. The model file is read
+    // by ONNX Runtime, so an unreadable (locked, denied) file surfaces as IOException.
     private static InferenceSession? OpenSession(string modelFile)
     {
         try
@@ -122,15 +130,34 @@ public sealed class OnnxTextEmbedder(IOptions<QuickModelOptions> options) : ITex
         {
             return null;
         }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
+    // BertTokenizer.Create reports a vocabulary it cannot use with ArgumentException (a missing special
+    // token such as [UNK], or a duplicate entry) and reads the file with IOException. Measured against
+    // Microsoft.ML.Tokenizers 2.0.0; it never throws OnnxRuntimeException.
     private static BertTokenizer? OpenTokenizer(string vocabFile)
     {
         try
         {
             return BertTokenizer.Create(vocabFile, new BertOptions { LowerCaseBeforeTokenization = true });
         }
-        catch (OnnxRuntimeException)
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
         {
             return null;
         }
