@@ -207,20 +207,36 @@ public sealed class FakeMessagesApi : IAsyncDisposable
     });
 }
 
-/// <summary>The e2e run's script: look at job health first, then answer, so the panel shows a tool chip and streamed text.</summary>
+/// <summary>
+/// The e2e run's script: one tool, then an answer, so the page shows a chip and streamed text.
+/// Which tool follows from what the request offers: an operator's question checks job health, a
+/// member's (offered no monitoring tools) checks their orders.
+/// </summary>
 public static class FakeMessagesScript
 {
-    public const string Answer = "No background job failed in the last 24 hours.";
+    public const string OperatorAnswer = "No background job failed in the last 24 hours.";
+
+    public const string MemberAnswer = "You have no open orders.";
 
     public static FakeReply ToolThenAnswer(JsonElement body)
     {
+        var operatorTools = body.TryGetProperty("tools", out var tools)
+            && tools.EnumerateArray().Any(t => string.Equals(t.GetProperty("name").GetString(), "job_health", StringComparison.Ordinal));
+
         var messages = body.GetProperty("messages");
         var last = messages[messages.GetArrayLength() - 1].GetProperty("content");
         var answersATool = last.ValueKind == JsonValueKind.Array
             && last.EnumerateArray().Any(block => string.Equals(block.GetProperty("type").GetString(), "tool_result", StringComparison.Ordinal));
 
-        return answersATool
-            ? FakeReply.Text("No background job ", "failed in the last 24 hours.")
-            : FakeReply.ToolUse("toolu_e2e", "job_health", """{"window_hours":24}""");
+        if (answersATool)
+        {
+            return operatorTools
+                ? FakeReply.Text("No background job ", "failed in the last 24 hours.")
+                : FakeReply.Text("You have ", "no open orders.");
+        }
+
+        return operatorTools
+            ? FakeReply.ToolUse("toolu_e2e", "job_health", """{"window_hours":24}""")
+            : FakeReply.ToolUse("toolu_e2e", "my_orders", """{"cursor":null}""");
     }
 }

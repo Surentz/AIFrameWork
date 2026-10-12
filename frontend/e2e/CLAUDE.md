@@ -155,7 +155,7 @@ budget nor the administrator: it publishes `shipment.confirmed.v1` through the b
 management HTTP API directly from the host (`support/broker.ts`), and only the stack
 `playwright.config.ts` starts exposes that port — the kind cluster does not.
 
-**A `kind` run therefore executes 28 of the 60 tests** — `npm run e2e` runs all of them, where
+**A `kind` run therefore executes 28 of the 61 tests** — `npm run e2e` runs all of them, where
 the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
@@ -200,7 +200,7 @@ intermediate into Windows `CurrentUser\CA`. CI generates them every run. `integr
 `@local-only` and `test.slow()` (the worker checks every 5 s in e2e, so it waits on the page's 30 s refetch).
 
 The fake Messages API is a fifth `webServer` (`tests/PartnerSimulator -- messages`): the ops
-assistant's stand-in for Anthropic, scripted to call `job_health` and then answer (see the
+assistant's stand-in for Anthropic, scripted to call `job_health` (an operator) or `my_orders` (a member) and then answer (see the
 `assistant` skill). The API runs with `Assistant__Enabled=true` against it and a throwaway key file
 that `prepare-database.ts` writes into `e2e/.certs/`.
 
@@ -212,7 +212,8 @@ that `prepare-database.ts` writes into `e2e/.certs/`.
 | Orders | place, list + paging + empty state, detail (price, total, product link), validation, fulfilment (member refused, operator ships from the queue, cancelled confirmation), shipment confirmed via the broker, export to PDF (request, built by the worker, notified, read in the in-app viewer — drawn by pdf.js, Esc closes, focus returns — and downloaded) |
 | Products | create, edit, edit-from-detail, duplicate sku, field validation (all as the operator), member refused the form, paging |
 | Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
-| Monitoring | access, overview, drill-downs, traffic window, external systems (simulator healthy, dead address unhealthy), jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search), the assistant (a question answered with a tool chip, against the fake Messages API) |
+| Monitoring | access, overview, drill-downs, traffic window, external systems (simulator healthy, dead address unhealthy), jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
+| Assistant | a member asks from the header, sees a tool chip and the answer, and reopens it from the sidebar after a reload; an operator gets the monitoring tools (against the fake Messages API) |
 
 Not covered end to end, deliberately: the dead-letter retry (nothing dead-letters on purpose),
 traffic numbers (a clock race against the minute flush — ADR 0021), and realtime push (off in the

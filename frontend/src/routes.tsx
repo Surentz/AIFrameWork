@@ -54,6 +54,8 @@ export function AppRoutes(): React.JSX.Element {
           </Route>
           <Route path="/products/:id" element={<ProductDetail />} />
           <Route path="/notifications" element={<NotificationList />} />
+          <Route path="/assistant" element={<AssistantPage />} />
+          <Route path="/assistant/:conversationId" element={<AssistantPage />} />
           <Route path="/statistics/population" element={<PopulationPage />} />
           <Route path="/account/password" element={<ChangePasswordPage />} />
 
@@ -67,7 +69,7 @@ export function AppRoutes(): React.JSX.Element {
             <Route path="/monitoring/logins" element={<LoginsPage />} />
             <Route path="/monitoring/traffic" element={<TrafficPage />} />
             <Route path="/monitoring/users" element={<UsersPage />} />
-            <Route path="/monitoring/assistant" element={<AssistantPage />} />
+            <Route path="/monitoring/assistant" element={<Navigate to="/assistant" replace />} />
             <Route path="/fulfilment" element={<FulfilmentPage />} />
           </Route>
         </Route>

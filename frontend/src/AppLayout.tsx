@@ -1,6 +1,7 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ErrorPanel } from './components/ErrorPanel';
 import { Mark } from './components/Mark';
+import { AssistantLink } from './features/assistant/AssistantLink';
 import { useLogout, useSession } from './features/auth/queries';
 import { NotificationBell } from './features/notifications/NotificationBell';
 import { useNotificationStream } from './features/notifications/stream';
@@ -10,6 +11,10 @@ export function AppLayout(): React.JSX.Element {
   const { data: session } = useSession();
   const logout = useLogout();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // The assistant is a full-height, full-width page (sidebar + chat); every other screen keeps the
+  // centred, padded column.
+  const fullBleed = pathname === '/assistant' || pathname.startsWith('/assistant/');
 
   // Here rather than inside NotificationBell: one connection per signed-in session, not one per
   // component that happens to care. The layout is also the only thing guaranteed mounted for the
@@ -50,6 +55,7 @@ export function AppLayout(): React.JSX.Element {
           {/* Inside the layout, so it renders on every signed-in screen and nowhere else - the
               feed is per-user and the query would 401 on /login. */}
           <NotificationBell />
+          <AssistantLink />
           {/* RequireAuth guards this subtree, so session is set by the time the shell renders -
               but the query can still be refetching, so this stays defensive rather than
               asserting. */}
@@ -70,7 +76,7 @@ export function AppLayout(): React.JSX.Element {
 
       {logout.error && <ErrorPanel error={logout.error} className="shell__error" />}
 
-      <main className="shell__content">
+      <main className={fullBleed ? 'shell__content shell__content--full' : 'shell__content'}>
         <Outlet />
       </main>
     </div>

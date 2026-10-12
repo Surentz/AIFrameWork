@@ -120,4 +120,29 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('link', { name: 'All orders' })).not.toBeInTheDocument();
     expect(screen.getByRole('main')).toBeInTheDocument();
   });
+
+  it('opens the assistant for a member, with its icon in the header', async () => {
+    server.use(http.get('/api/assistant', () => HttpResponse.json({ enabled: true })));
+    renderAt('/assistant');
+
+    expect(await screen.findByRole('textbox', { name: 'Your question' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Assistant' })).toHaveAttribute('href', '/assistant');
+  });
+
+  it('shows no assistant icon while the assistant is off', async () => {
+    renderAt('/orders');
+
+    await screen.findByRole('link', { name: 'SKU-1' });
+    expect(screen.queryByRole('link', { name: 'Assistant' })).not.toBeInTheDocument();
+  });
+
+  it('sends the old monitoring address to the assistant', async () => {
+    server.use(
+      http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)),
+      http.get('/api/assistant', () => HttpResponse.json({ enabled: true })),
+    );
+    renderAt('/monitoring/assistant');
+
+    expect(await screen.findByRole('navigation', { name: 'Conversations' })).toBeInTheDocument();
+  });
 });
