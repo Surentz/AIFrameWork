@@ -46,6 +46,22 @@ public sealed class IntentRouterTests
     }
 
     [Fact]
+    public void Route_UsesTheSpellingCorrection_WhenItYieldsAnInstantMatchTheOriginalDidNot()
+    {
+        // "ordres" is no catalog word, so the original question is unsure; its correction is
+        // "show my recent orders", which clears the threshold.
+        var embedder = Embedder()
+            .Add("show my recent ordres", 0.3f, 0.3f, 0.3f, 0.3f)
+            .Add("show my recent orders", 0.98f, 0.1f, 0, 0);
+
+        var decision = Router(embedder).Route("show my recent ordres", ToolScope.Member).Value;
+
+        var routed = decision.Should().BeOfType<RouteToIntent>().Subject;
+        routed.Intent.Id.Should().Be(QuickIntents.RecentOrders);
+        routed.AnsweredAs.Should().Be("show my recent orders");
+    }
+
+    [Fact]
     public void AMatchBelowTheThreshold_IsUnsure_AndSuggestsTheClosest()
     {
         var embedder = Embedder().Add("orders and exports?", 0.6f, 0.55f, 0, 0);
