@@ -65,7 +65,7 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
     }
 
     private string[] OfferedTools(int request) =>
-        [.. _fake.Requests[request].Body.GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString()!)];
+        [.. _fake.Requests[request].Body.GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString() ?? string.Empty)];
 
     private static async Task<List<JsonElement>> EventsAsync(HttpResponseMessage response)
     {
