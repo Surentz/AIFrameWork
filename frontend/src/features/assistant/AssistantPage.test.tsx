@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { server } from '../../test/handlers';
 import { sseEvent, sseResponse } from '../../test/sse';
 import { withQueryClient } from '../../test/withQueryClient';
@@ -17,6 +17,9 @@ function renderAt(path: string, enabled = true): void {
     <>
       <AssistantPage />
       <Address />
+      <Link to="/assistant" state={{ fresh: 1 }}>
+        Header icon
+      </Link>
     </>
   );
   render(
@@ -195,5 +198,21 @@ describe('AssistantPage', () => {
     renderAt('/assistant/gone');
 
     expect(await screen.findByText(/does not exist or has expired/)).toBeInTheDocument();
+  });
+
+  it('starts a fresh chat when the header icon is used on a new chat that has messages', async () => {
+    server.use(
+      http.post('/api/assistant/messages', () =>
+        sseResponse(sseEvent({ type: 'text', delta: 'Old answer.' }), sseEvent({ type: 'error', problem: { status: 503, title: 'x', detail: 'Failed.' } })),
+      ),
+    );
+    renderAt('/assistant');
+    await ask('Old?');
+    await screen.findByText('Failed.');
+
+    await userEvent.click(screen.getByRole('link', { name: 'Header icon' }));
+
+    expect(await screen.findByRole('heading', { name: 'How can I help you today?' })).toBeInTheDocument();
+    expect(screen.queryByText('Old answer.')).not.toBeInTheDocument();
   });
 });

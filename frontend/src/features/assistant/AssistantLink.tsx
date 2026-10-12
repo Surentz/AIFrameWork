@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAssistantStatus } from './queries';
 
 /**
@@ -8,6 +8,7 @@ import { useAssistantStatus } from './queries';
  */
 export function AssistantLink(): React.JSX.Element | null {
   const status = useAssistantStatus();
+  const navigate = useNavigate();
   if (status.data?.enabled !== true) {
     return null;
   }
@@ -15,6 +16,11 @@ export function AssistantLink(): React.JSX.Element | null {
   return (
     <NavLink
       to="/assistant"
+      // Even on /assistant it starts a fresh chat: the token is what tells the page apart.
+      onClick={(event) => {
+        event.preventDefault();
+        void navigate('/assistant', { state: { fresh: Date.now() } });
+      }}
       className={({ isActive }) => (isActive ? 'shell__icon shell__icon--active' : 'shell__icon')}
       aria-label="Assistant"
       title="Assistant"

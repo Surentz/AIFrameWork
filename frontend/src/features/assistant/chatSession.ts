@@ -7,6 +7,8 @@ interface SessionState {
   readonly arrived: boolean;
   /** Bumped for every fresh new chat, so its key changes even when the address does not. */
   readonly generation: number;
+  /** The last header-icon token seen, so one click is acted on once. */
+  readonly token: number | undefined;
 }
 
 export interface ChatSession {
@@ -25,11 +27,15 @@ export interface ChatSession {
  * its first answer moves the address to /assistant/<id>; every other change of conversation — the
  * sidebar, New chat, the header icon — is a fresh instance.
  */
-export function useChatSession(conversationId: string | undefined): ChatSession {
+export function useChatSession(
+  conversationId: string | undefined,
+  freshToken?: number,
+): ChatSession {
   const [session, setSession] = useState<SessionState>({
     adopted: undefined,
     arrived: false,
     generation: 0,
+    token: undefined,
   });
 
   // Adjusting state during render, the pattern React's docs give for "adjusting state when a prop
@@ -37,14 +43,23 @@ export function useChatSession(conversationId: string | undefined): ChatSession 
   // /assistant (still waiting), then /assistant/<id> (arrived). Only leaving it after that — or
   // going to some other conversation before it arrived — forgets the adopted chat and makes the
   // next new chat a new instance.
-  if (session.adopted !== undefined) {
+  // The header icon on a new chat changes no address, so it carries a token instead: a new token is
+  // a request for a fresh chat, whatever the address.
+  if (freshToken !== undefined && freshToken !== session.token) {
+    setSession({
+      adopted: undefined,
+      arrived: false,
+      generation: session.generation + 1,
+      token: freshToken,
+    });
+  } else if (session.adopted !== undefined) {
     if (conversationId === session.adopted && !session.arrived) {
       setSession({ ...session, arrived: true });
     } else if (
       conversationId !== session.adopted &&
       (session.arrived || conversationId !== undefined)
     ) {
-      setSession({ adopted: undefined, arrived: false, generation: session.generation + 1 });
+      setSession({ ...session, adopted: undefined, arrived: false, generation: session.generation + 1 });
     }
   }
 
@@ -56,6 +71,7 @@ export function useChatSession(conversationId: string | undefined): ChatSession 
 
   const fresh = useCallback(() => {
     setSession((current) => ({
+      ...current,
       adopted: undefined,
       arrived: false,
       generation: current.generation + 1,

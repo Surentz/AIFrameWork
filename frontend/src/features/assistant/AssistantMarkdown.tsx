@@ -4,9 +4,12 @@ import remarkGfm from 'remark-gfm';
 
 /**
  * Links leave the app in a new tab and get no handle on it. react-markdown's default URL transform
- * already empties javascript: and other unsafe URLs before this sees them.
+ * already empties javascript: and other unsafe URLs before this sees them. An image is never
+ * loaded: a model-chosen URL fetched by the browser would carry whatever the model put in it to a
+ * third party, so only the alt text is shown.
  */
 const components: Components = {
+  img: ({ alt }) => <span>{alt}</span>,
   a: ({ href, children }) => (
     <a href={href} target="_blank" rel="noopener noreferrer">
       {children}
