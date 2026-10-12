@@ -26,7 +26,7 @@ describe('AppRoutes', () => {
     renderAt('/products');
 
     expect(await screen.findByRole('link', { name: 'Widget' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Catalogue' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Products' })).toBeInTheDocument();
   });
 
   it('renders the notifications feed inside the app shell, with the bell in the chrome', async () => {
@@ -78,7 +78,7 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: 'Monitoring' })).toBeInTheDocument();
   });
 
-  it('keeps the monitoring nav entry out of an ordinary member\'s shell', async () => {
+  it("keeps the monitoring nav entry out of an ordinary member's shell", async () => {
     // The default handler answers with a Member session. Hiding the entry is cosmetics - the API
     // refuses the endpoint regardless - but a link to a page you cannot open is still a bug.
     renderAt('/orders');
@@ -96,7 +96,7 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: 'Fulfilment' })).toBeInTheDocument();
   });
 
-  it('keeps the fulfilment nav entry out of an ordinary member\'s shell', async () => {
+  it("keeps the fulfilment nav entry out of an ordinary member's shell", async () => {
     renderAt('/orders');
 
     expect(await screen.findByRole('link', { name: 'All orders' })).toBeInTheDocument();

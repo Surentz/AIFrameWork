@@ -1,69 +1,31 @@
 .shell {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
   min-height: 100dvh;
   background-color: var(--color-canvas);
 }
 
-.shell__bar {
+.shell__body {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3) var(--space-5);
-  padding: var(--space-4) var(--space-5);
-  border-block-end: 1px solid var(--color-border);
-  background-color: var(--color-surface);
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
-.shell__brand {
+.shell__bar {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  color: var(--color-text);
-  font-size: var(--text-base);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-decoration: none;
-}
-
-/* Only the tile is accent-coloured; the wordmark stays body text so the pair does not read as
-   one long purple link. */
-.shell__brand svg {
-  color: var(--color-accent);
-}
-
-.shell__nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-}
-
-.shell__nav a {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-  text-decoration: none;
-  transition:
-    background-color var(--transition),
-    color var(--transition);
-}
-
-.shell__nav a:hover {
-  background-color: var(--color-surface-sunken);
-  color: var(--color-text);
-}
-
-/* NavLink adds `active` itself; styling it here keeps the component free of className callbacks. */
-.shell__nav a.active {
-  background-color: var(--color-accent-soft);
-  color: var(--color-accent);
-  font-weight: 600;
+  padding: var(--space-3) var(--space-5);
+  border-block-end: 1px solid var(--color-border);
+  background-color: var(--color-surface);
 }
 
 .shell__session {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  margin-inline-start: auto;
 }
 
 .shell__user {
@@ -77,12 +39,13 @@
 }
 
 .shell__content {
+  width: 100%;
   max-width: 64rem;
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
 
-/* The header's icon links (the assistant), shaped like the notification bell beside them. */
+/* The header's icon links (the assistant) and the menu button, shaped like the notification bell. */
 .shell__icon {
   display: inline-flex;
   align-items: center;
@@ -103,11 +66,21 @@
   background: var(--color-accent-soft);
 }
 
+.shell__menu {
+  display: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.shell__scrim {
+  display: none;
+}
+
 /* A full-bleed page fills the viewport below the bar, so only its own panes scroll. */
 .shell:has(.shell__content--full) {
-  display: flex;
-  flex-direction: column;
   height: 100dvh;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .shell__content--full {
@@ -117,4 +90,33 @@
   margin: 0;
   padding: 0;
   display: flex;
+}
+
+/* Small screens: one column. The sidebar leaves the grid (it is fixed, see Sidebar.css) and the
+   menu button and scrim appear. */
+@media (max-width: 47.99rem) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell__bar {
+    padding-inline: var(--space-4);
+  }
+
+  .shell__menu {
+    display: inline-flex;
+  }
+
+  .shell__scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    border: 0;
+    background: rgb(0 0 0 / 40%);
+  }
+
+  .shell__content {
+    padding-inline: var(--space-4);
+  }
 }
