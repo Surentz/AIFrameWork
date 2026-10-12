@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { server } from '../../test/handlers';
 import { openSseResponse, sseEvent, sseResponse } from '../../test/sse';
 import { withQueryClient } from '../../test/withQueryClient';
@@ -15,9 +16,33 @@ const answer = (...events: Record<string, unknown>[]): void => {
   );
 };
 
-function Harness({ operator = false }: { readonly operator?: boolean }): React.JSX.Element {
+interface HarnessProps {
+  readonly operator?: boolean;
+  readonly quickEnabled?: boolean;
+  readonly aiEnabled?: boolean;
+}
+
+function Harness({ operator = false, quickEnabled, aiEnabled }: HarnessProps): React.JSX.Element {
   const [draft, setDraft] = useState('');
-  return <Chat onSaved={() => undefined} operator={operator} draft={draft} onDraftChange={setDraft} />;
+  return (
+    <Chat
+      onSaved={() => undefined}
+      operator={operator}
+      draft={draft}
+      onDraftChange={setDraft}
+      quickEnabled={quickEnabled}
+      aiEnabled={aiEnabled}
+    />
+  );
+}
+
+function renderWith(props: HarnessProps): void {
+  render(
+    <MemoryRouter>
+      <Harness {...props} />
+    </MemoryRouter>,
+    { wrapper: withQueryClient() },
+  );
 }
 
 function renderChat(operator = false): void {
@@ -281,5 +306,72 @@ describe('AssistantPage', () => {
     await userEvent.paste('x'.repeat(1801));
 
     expect(screen.getByText('1801 / 2000')).toBeInTheDocument();
+  });
+});
+
+describe('instant answers', () => {
+  it('asks the quick endpoint when instant answers are on, and shows the card', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        sseResponse(
+          sseEvent({ type: 'answer', answer: { kind: 'Instant', text: 'You have no orders yet.', facts: [], link: { label: 'Place an order', to: '/orders/new' } } }),
+          sseEvent({ type: 'done', conversationId: 'c1', outcome: 'Answered' }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Has my last order shipped?');
+
+    expect(await screen.findByRole('article', { name: 'Instant answer' })).toHaveTextContent('You have no orders yet.');
+  });
+
+  it('asks a suggestion instantly, and the AI only when asked', async () => {
+    const quick: string[] = [];
+    const ai: string[] = [];
+    server.use(
+      http.post('/api/assistant/quick', async ({ request }) => {
+        quick.push(((await request.json()) as { question: string }).question);
+        return sseResponse(
+          sseEvent({ type: 'suggestions', suggestions: { text: "I'm not sure what you mean.", options: ['Is my export ready?'], aiAvailable: true } }),
+          sseEvent({ type: 'done', conversationId: 'c1', outcome: 'Answered' }),
+        );
+      }),
+      http.post('/api/assistant/messages', async ({ request }) => {
+        ai.push(((await request.json()) as { question: string }).question);
+        return sseResponse(sseEvent({ type: 'text', delta: 'A poem.' }), sseEvent({ type: 'done', conversationId: 'c1', outcome: 'Answered' }));
+      }),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: true });
+
+    await ask('Write me a poem');
+    await userEvent.click(await screen.findByRole('button', { name: 'Is my export ready?' }));
+    const [askAi] = await screen.findAllByRole('button', { name: /Ask the AI/ });
+    if (askAi === undefined) {
+      throw new Error('Ask the AI was not offered');
+    }
+    await userEvent.click(askAi);
+
+    await waitFor(() => {
+      expect(ai).toEqual(['Write me a poem']);
+    });
+    expect(quick).toEqual(['Write me a poem', 'Is my export ready?']);
+  });
+
+  it('hides Ask the AI when the AI is off', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        sseResponse(
+          sseEvent({ type: 'suggestions', suggestions: { text: "I'm not sure what you mean.", options: [], aiAvailable: false } }),
+          sseEvent({ type: 'done', conversationId: 'c1', outcome: 'Answered' }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Write me a poem');
+
+    expect(await screen.findByText("I'm not sure what you mean.")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ask the AI/ })).not.toBeInTheDocument();
   });
 });

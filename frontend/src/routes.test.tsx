@@ -149,7 +149,7 @@ describe('AppRoutes', () => {
   });
 
   it('opens the assistant for a member, with its icon in the header', async () => {
-    server.use(http.get('/api/assistant', () => HttpResponse.json({ enabled: true })));
+    server.use(http.get('/api/assistant', () => HttpResponse.json({ quick: false, ai: true })));
     renderAt('/assistant');
 
     expect(await screen.findByRole('textbox', { name: 'Your question' })).toBeInTheDocument();
@@ -166,7 +166,7 @@ describe('AppRoutes', () => {
   it('sends the old monitoring address to the assistant', async () => {
     server.use(
       http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)),
-      http.get('/api/assistant', () => HttpResponse.json({ enabled: true })),
+      http.get('/api/assistant', () => HttpResponse.json({ quick: false, ai: true })),
     );
     renderAt('/monitoring/assistant');
 

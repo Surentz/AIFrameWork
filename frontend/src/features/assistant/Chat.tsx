@@ -3,6 +3,8 @@ import { ErrorPanel } from '../../components/ErrorPanel';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { Composer } from './Composer';
 import type { AssistantMessage, ConversationState } from './conversation';
+import { QuickAnswerCard } from './QuickAnswerCard';
+import { SuggestionsReply } from './SuggestionsReply';
 import { useAssistantConversation } from './useAssistantConversation';
 
 /** What each tool looked at, in the words its chip shows. */
@@ -32,10 +34,19 @@ interface ChatProps {
   /** The composer's text, held by the page so it survives New chat. */
   readonly draft: string;
   readonly onDraftChange: (draft: string) => void;
+  /** Instant answers are on: questions go to the quick path first. */
+  readonly quickEnabled?: boolean | undefined;
+  /** The AI is on: a not-sure reply offers "Ask the AI instead". */
+  readonly aiEnabled?: boolean | undefined;
 }
 
 /** One conversation: the messages, centred, and the composer pinned under them. */
-export function Chat({ initial, onSaved, operator, draft, onDraftChange }: ChatProps): React.JSX.Element {
+export function Chat({ initial, onSaved, operator,
+  draft,
+  onDraftChange,
+  quickEnabled = false,
+  aiEnabled = true,
+}: ChatProps): React.JSX.Element {
   const conversation = useAssistantConversation({ initial, onSaved });
   const suggestions = [
     ...memberSuggestions,
@@ -45,7 +56,7 @@ export function Chat({ initial, onSaved, operator, draft, onDraftChange }: ChatP
   function send(): void {
     const question = draft.trim();
     onDraftChange('');
-    void conversation.ask(question).then((outcome) => {
+    void conversation.ask(question, quickEnabled ? 'quick' : 'ai').then((outcome) => {
       // Nothing was saved for a failed question, so put it back: asking again needs no retyping.
       if (outcome === 'failed') {
         onDraftChange(question);
@@ -70,17 +81,29 @@ export function Chat({ initial, onSaved, operator, draft, onDraftChange }: ChatP
             </div>
           ) : (
             <ol className="assistant-log" aria-label="Conversation" role="log" aria-busy={conversation.streaming}>
-              {conversation.messages.map((message, index) => (
-                <Message
-                  key={message.id}
-                  message={message}
-                  thinking={
-                    conversation.streaming &&
-                    index === conversation.messages.length - 1 &&
-                    message.text === ''
-                  }
-                />
-              ))}
+              {conversation.messages.map((message, index) => {
+                const previous = conversation.messages[index - 1];
+                return (
+                  <Message
+                    key={message.id}
+                    message={message}
+                    thinking={
+                      conversation.streaming &&
+                      index === conversation.messages.length - 1 &&
+                      message.text === '' &&
+                      !message.answer &&
+                      !message.suggestions
+                    }
+                    busy={conversation.streaming}
+                    onPick={(question) => void conversation.ask(question, 'quick')}
+                    onAskAi={
+                      aiEnabled && message.suggestions?.aiAvailable && previous?.role === 'user'
+                        ? () => void conversation.ask(previous.text, 'ai')
+                        : undefined
+                    }
+                  />
+                );
+              })}
             </ol>
           )}
 
@@ -104,9 +127,13 @@ interface MessageProps {
   readonly message: AssistantMessage;
   /** Still streaming with no words yet: the model can think for a minute before its first one. */
   readonly thinking: boolean;
+  /** An answer is in flight: the suggestion buttons wait. */
+  readonly busy: boolean;
+  readonly onPick: (question: string) => void;
+  readonly onAskAi?: (() => void) | undefined;
 }
 
-function Message({ message, thinking }: MessageProps): React.JSX.Element {
+function Message({ message, thinking, busy, onPick, onAskAi }: MessageProps): React.JSX.Element {
   if (message.role === 'user') {
     return (
       <li className="assistant-message assistant-message--user">
@@ -116,9 +143,28 @@ function Message({ message, thinking }: MessageProps): React.JSX.Element {
     );
   }
 
+  if (message.answer) {
+    return (
+      <li className="assistant-message assistant-message--assistant">
+        <span className="visually-hidden">Assistant: </span>
+        <QuickAnswerCard answer={message.answer} />
+      </li>
+    );
+  }
+
+  if (message.suggestions) {
+    return (
+      <li className="assistant-message assistant-message--assistant">
+        <span className="visually-hidden">Assistant: </span>
+        <SuggestionsReply suggestions={message.suggestions} onPick={onPick} onAskAi={onAskAi} busy={busy} />
+      </li>
+    );
+  }
+
   return (
     <li className="assistant-message assistant-message--assistant">
       <span className="visually-hidden">Assistant: </span>
+      {message.source === 'ai' && message.text !== '' && <p className="assistant-badge assistant-badge--ai">AI answer</p>}
       {message.tools.length > 0 && (
         <ul className="assistant-tools" aria-label="Tools used">
           {message.tools.map((tool, index) => (

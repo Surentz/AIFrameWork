@@ -48,7 +48,7 @@ export function AssistantPage(): React.JSX.Element {
     return <ErrorPanel error={status.error} />;
   }
 
-  if (!status.data.enabled) {
+  if (!status.data.quick && !status.data.ai) {
     return (
       <section className="assistant-off">
         <h1>Assistant</h1>
@@ -67,9 +67,26 @@ export function AssistantPage(): React.JSX.Element {
       <h1 className="visually-hidden">Assistant</h1>
       <ConversationSidebar activeId={conversationId} onNewChat={newChat} />
       {chat.load === undefined ? (
-        <Chat key={chat.key} onSaved={onSaved} operator={operator} draft={draft} onDraftChange={setDraft} />
+        <Chat
+          key={chat.key}
+          onSaved={onSaved}
+          operator={operator}
+          draft={draft}
+          onDraftChange={setDraft}
+          quickEnabled={status.data.quick}
+          aiEnabled={status.data.ai}
+        />
       ) : (
-        <SavedChat key={chat.key} id={chat.load} onSaved={onSaved} operator={operator} draft={draft} onDraftChange={setDraft} />
+        <SavedChat
+          key={chat.key}
+          id={chat.load}
+          onSaved={onSaved}
+          operator={operator}
+          draft={draft}
+          onDraftChange={setDraft}
+          quickEnabled={status.data.quick}
+          aiEnabled={status.data.ai}
+        />
       )}
     </div>
   );
@@ -81,6 +98,8 @@ interface SavedChatProps {
   readonly operator: boolean;
   readonly draft: string;
   readonly onDraftChange: (draft: string) => void;
+  readonly quickEnabled: boolean;
+  readonly aiEnabled: boolean;
 }
 
 /** Loads a saved conversation once, then hands it to the chat, which owns it from then on. */

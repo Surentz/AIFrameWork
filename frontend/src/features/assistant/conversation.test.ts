@@ -6,7 +6,7 @@ function run(...actions: ConversationAction[]): ConversationState {
   return actions.reduce(conversationReducer, initialConversation);
 }
 
-const asked: ConversationAction = { type: 'asked', question: 'Why?' };
+const asked: ConversationAction = { type: 'asked', question: 'Why?', mode: 'ai' };
 
 describe('conversationReducer', () => {
   it('adds the question and an empty answer, and starts streaming', () => {
@@ -114,5 +114,55 @@ describe('fromSaved', () => {
       [0, 'user', 'Why?', []],
       [1, 'assistant', 'Because.', ['my_orders']],
     ]);
+  });
+});
+
+describe('quick replies', () => {
+  const quickAsked = conversationReducer(initialConversation, { type: 'asked', question: 'Has it shipped?', mode: 'quick' });
+
+  it('marks the answer as coming from the quick path', () => {
+    expect(quickAsked.messages.at(-1)?.source).toBe('quick');
+  });
+
+  it('puts an answer event on the answer', () => {
+    const state = conversationReducer(quickAsked, {
+      type: 'event',
+      event: { type: 'answer', answer: { kind: 'Instant', text: 'Shipped.', facts: [] } },
+    });
+
+    expect(state.messages.at(-1)?.answer?.text).toBe('Shipped.');
+  });
+
+  it('puts a suggestions event on the answer', () => {
+    const state = conversationReducer(quickAsked, {
+      type: 'event',
+      event: { type: 'suggestions', suggestions: { text: 'Not sure.', options: ['Is my export ready?'], aiAvailable: true } },
+    });
+
+    expect(state.messages.at(-1)?.suggestions?.options).toEqual(['Is my export ready?']);
+  });
+
+  it('keeps an answer that has a card but no text when the stream ends', () => {
+    const answered = conversationReducer(quickAsked, {
+      type: 'event',
+      event: { type: 'answer', answer: { kind: 'Instant', text: 'Shipped.', facts: [] } },
+    });
+    const state = conversationReducer(answered, { type: 'event', event: { type: 'done', conversationId: 'c1' } });
+
+    expect(state.messages).toHaveLength(2);
+  });
+
+  it('restores a saved quick answer with its card', () => {
+    const state = fromSaved({
+      id: 'c1',
+      title: 'Has it shipped?',
+      messages: [
+        { role: 'user', text: 'Has it shipped?', tools: [] },
+        { role: 'assistant', text: 'Shipped.', tools: [], answer: { kind: 'Instant', text: 'Shipped.', facts: [] } },
+      ],
+    });
+
+    expect(state.messages[1]?.answer?.text).toBe('Shipped.');
+    expect(state.messages[1]?.source).toBe('quick');
   });
 });

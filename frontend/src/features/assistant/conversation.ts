@@ -1,5 +1,12 @@
 import { ApiError } from '../../api/client';
-import type { AssistantEvent, AssistantOutcome, SavedConversation } from './types';
+import type {
+  AskMode,
+  AssistantAnswer,
+  AssistantEvent,
+  AssistantOutcome,
+  AssistantSuggestions,
+  SavedConversation,
+} from './types';
 
 export interface AssistantMessage {
   readonly id: number;
@@ -8,6 +15,12 @@ export interface AssistantMessage {
   readonly tools: readonly string[];
   readonly outcome?: AssistantOutcome | undefined;
   readonly stopped?: boolean | undefined;
+  /** An instant or help answer's card. */
+  readonly answer?: AssistantAnswer | undefined;
+  /** A not-sure reply's suggestions. */
+  readonly suggestions?: AssistantSuggestions | undefined;
+  /** Which path wrote this answer. */
+  readonly source?: AskMode | undefined;
 }
 
 export interface ConversationState {
@@ -18,7 +31,7 @@ export interface ConversationState {
 }
 
 export type ConversationAction =
-  | { readonly type: 'asked'; readonly question: string }
+  | { readonly type: 'asked'; readonly question: string; readonly mode: AskMode }
   | { readonly type: 'event'; readonly event: AssistantEvent }
   | { readonly type: 'failed'; readonly error: Error }
   | { readonly type: 'stopped' }
@@ -49,7 +62,7 @@ export function conversationReducer(
         messages: [
           ...state.messages,
           { id: state.messages.length, role: 'user', text: action.question, tools: [] },
-          { id: state.messages.length + 1, role: 'assistant', text: '', tools: [] },
+          { id: state.messages.length + 1, role: 'assistant', text: '', tools: [], source: action.mode },
         ],
       };
     case 'event':
@@ -79,6 +92,10 @@ function applyEvent(state: ConversationState, event: AssistantEvent): Conversati
       };
     case 'error':
       return { ...dropEmptyAnswer(state), streaming: false, error: toApiError(event.problem) };
+    case 'answer':
+      return updateAnswer(state, (m) => ({ ...m, answer: event.answer ?? undefined }));
+    case 'suggestions':
+      return updateAnswer(state, (m) => ({ ...m, suggestions: event.suggestions ?? undefined }));
     default:
       return state;
   }
@@ -99,7 +116,7 @@ function updateAnswer(
 /** An answer with no text and no tools says nothing; the error shown in its place does. */
 function dropEmptyAnswer(state: ConversationState): ConversationState {
   const last = state.messages.at(-1);
-  return last?.role === 'assistant' && last.text === '' && last.tools.length === 0
+  return last?.role === 'assistant' && last.text === '' && last.tools.length === 0 && last.answer === undefined && last.suggestions === undefined
     ? { ...state, messages: state.messages.slice(0, -1) }
     : state;
 }
@@ -127,6 +144,9 @@ export function fromSaved(saved: SavedConversation): ConversationState {
       role: message.role === 'user' ? 'user' : 'assistant',
       text: message.text,
       tools: message.tools,
+      answer: message.answer ?? undefined,
+      suggestions: message.suggestions ?? undefined,
+      source: message.answer || message.suggestions ? 'quick' : 'ai',
     })),
   };
 }

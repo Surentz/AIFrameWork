@@ -15,3 +15,11 @@ export type ConversationSummary = components['schemas']['AssistantConversationSu
 export type SavedConversation = components['schemas']['AssistantConversationResponse'];
 
 export type SavedMessage = components['schemas']['AssistantMessageResponse'];
+
+/** An instant or help answer: already formatted, rendered as a card, never as Markdown. */
+export type AssistantAnswer = components['schemas']['AssistantAnswerResponse'];
+
+export type AssistantSuggestions = components['schemas']['AssistantSuggestionsResponse'];
+
+/** Which path answers: the local router (quick) or the AI. */
+export type AskMode = 'quick' | 'ai';

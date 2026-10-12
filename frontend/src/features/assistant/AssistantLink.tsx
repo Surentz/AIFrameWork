@@ -2,14 +2,14 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAssistantStatus } from './queries';
 
 /**
- * The header's way in, beside the notification bell. Hidden while the assistant is switched off,
+ * The header's way in, beside the notification bell. Hidden while both halves (instant answers and the AI) are off,
  * and on a failed status too: an optional feature never puts an error panel in the shell (the page
  * itself shows the error).
  */
 export function AssistantLink(): React.JSX.Element | null {
   const status = useAssistantStatus();
   const navigate = useNavigate();
-  if (status.data?.enabled !== true) {
+  if (status.data?.quick !== true && status.data?.ai !== true) {
     return null;
   }
 
