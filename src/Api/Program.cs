@@ -12,11 +12,13 @@ using AiFramework.Api.Notifications;
 using AiFramework.Api.Observability;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using AiFramework.Application.Notifications;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Users;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Assistant;
+using AiFramework.Infrastructure.Assistant.Quick;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.ExternalSystems;
@@ -230,6 +232,20 @@ builder.Services.AddSingleton(new AssistantAvailability(
     AiEnabled: assistantSection.GetValue<bool>("Enabled"),
     QuickEnabled: assistantSection.GetValue<bool>("Quick:Enabled"),
     HeartbeatInterval: TimeSpan.FromSeconds(assistantSection.GetValue("HeartbeatSeconds", defaultValue: 15))));
+
+// Instant answers (ADR 0036): where the model is, how sure the router must be, and the index built
+// while this host starts. HERE and not in AddInfrastructure: only the API answers questions, and the
+// worker must never load the model. QuickRouting replaces AddInfrastructure's default (last wins).
+var quickSection = assistantSection.GetSection("Quick");
+builder.Services.AddOptions<QuickModelOptions>().Bind(quickSection);
+builder.Services.AddSingleton(new QuickRouting(
+    quickSection.GetValue("Threshold", QuickRouting.Default.Threshold),
+    quickSection.GetValue("Margin", QuickRouting.Default.Margin),
+    quickSection.GetValue("SuggestionFloor", QuickRouting.Default.SuggestionFloor)));
+if (quickSection.GetValue<bool>("Enabled"))
+{
+    builder.Services.AddQuickAnswerIndexing();
+}
 
 // Volume defence on the credential endpoints, alongside the per-account lockout in
 // SignInHandler. Partitioned by remote address, not by username: the limiter runs before model
