@@ -50,6 +50,30 @@ describe('useNavFold', () => {
     expect(second.result.current.isOpen('catalogue')).toBe(true);
   });
 
+  it('does not remember a group that was only opened by being on a page inside it', () => {
+    const first = renderHook(() => useNavFold('sales'));
+    first.unmount();
+
+    const second = renderHook(() => useNavFold(undefined));
+
+    expect(second.result.current.isOpen('sales')).toBe(false);
+  });
+
+  it('remembers only what the user toggled, not the groups navigation opened around it', () => {
+    const first = renderHook(({ id }) => useNavFold(id), { initialProps: { id: 'sales' } });
+    first.rerender({ id: 'insights' });
+    act(() => {
+      first.result.current.toggle('catalogue');
+    });
+    first.unmount();
+
+    const second = renderHook(() => useNavFold(undefined));
+
+    expect(second.result.current.isOpen('catalogue')).toBe(true);
+    expect(second.result.current.isOpen('sales')).toBe(false);
+    expect(second.result.current.isOpen('insights')).toBe(false);
+  });
+
   it('opens the group of a page navigated to, even if it was folded before', () => {
     const { result, rerender } = renderHook(({ id }) => useNavFold(id), {
       initialProps: { id: 'sales' },

@@ -154,6 +154,22 @@ describe('Sidebar', () => {
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the member view while the session is unresolved, then adds Operations for an administrator', () => {
+    // renderSidebar defaults an undefined role to Member, so the unresolved state is rendered by hand.
+    const sidebar = (role: UserRole | undefined): React.JSX.Element => (
+      <MemoryRouter initialEntries={['/orders']}>
+        <Sidebar role={role} open={false} onNavigate={vi.fn()} />
+      </MemoryRouter>
+    );
+    const { rerender } = render(sidebar(undefined));
+    expect(screen.queryByRole('button', { name: 'Operations' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sales' })).toBeInTheDocument();
+
+    rerender(sidebar('Admin'));
+
+    expect(screen.getByRole('button', { name: 'Operations' })).toBeInTheDocument();
+  });
+
   it('links the brand to the dashboard', () => {
     renderSidebar('/orders');
 

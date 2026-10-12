@@ -63,18 +63,30 @@ describe('AppLayout', () => {
       expect(screen.getByRole('button', { name: 'Close menu' })).toBeInTheDocument();
     });
 
-    it('closes from the scrim', async () => {
+    it('moves focus into the menu when it opens, so the keyboard does not stay behind it', async () => {
+      renderShell();
+
+      await userEvent.click(menuButton());
+
+      expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveFocus();
+    });
+
+    it('closes from the scrim and gives focus back to the menu button', async () => {
       renderShell();
       await userEvent.click(menuButton());
 
       await userEvent.click(screen.getByRole('button', { name: 'Close menu' }));
 
       expect(menuButton()).toHaveAttribute('aria-expanded', 'false');
+      expect(menuButton()).toHaveFocus();
     });
 
     it('closes on Escape and gives focus back to the menu button', async () => {
       renderShell();
       await userEvent.click(menuButton());
+      // Focus is inside the menu here, not left on the button that opened it: that is what makes
+      // the assertion below prove the Escape handler moved it back.
+      expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveFocus();
 
       await userEvent.keyboard('{Escape}');
 
@@ -82,13 +94,14 @@ describe('AppLayout', () => {
       expect(menuButton()).toHaveFocus();
     });
 
-    it('closes when a link in it is followed', async () => {
+    it('closes when a link in it is followed, and gives focus back to the menu button', async () => {
       renderShell();
       await userEvent.click(menuButton());
 
       await userEvent.click(screen.getByRole('link', { name: 'Exports' }));
 
       expect(menuButton()).toHaveAttribute('aria-expanded', 'false');
+      expect(menuButton()).toHaveFocus();
     });
   });
 });

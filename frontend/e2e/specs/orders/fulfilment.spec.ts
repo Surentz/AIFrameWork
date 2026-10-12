@@ -17,6 +17,8 @@ test('refuses an ordinary member', async ({ signedInPage }) => {
   await signedInPage.goto('/fulfilment');
 
   await expect(fulfilment.refusal(signedInPage)).toContainText('This page is for administrators');
+  // The group's button as well as the link: a folded group hides its links whether or not they exist.
+  await expect(shell.groupButton(signedInPage, 'Operations')).toHaveCount(0);
   await expect(fulfilment.navLink(signedInPage)).toHaveCount(0);
 });
 

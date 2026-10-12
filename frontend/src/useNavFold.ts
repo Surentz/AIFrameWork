@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 const storageKey = 'aiframework.nav.open';
 
@@ -45,7 +45,8 @@ export interface NavFold {
 /**
  * Which sidebar groups are open. Closed by default; the group holding the current page opens on
  * first render and again whenever navigation moves into a different group, even if the user had
- * folded it. Staying on a page inside a group the user then folds leaves it folded.
+ * folded it. Staying on a page inside a group the user then folds leaves it folded. Only the
+ * user's own folding and unfolding is stored.
  */
 export function useNavFold(activeGroupId: string | undefined): NavFold {
   const [state, setState] = useState<FoldState>(() => ({
@@ -63,14 +64,14 @@ export function useNavFold(activeGroupId: string | undefined): NavFold {
     }
   }
 
-  useEffect(() => {
-    writeStored(state);
-  }, [state]);
-
   return {
     isOpen: (groupId) => state[groupId] === true,
     toggle: (groupId) => {
-      setState((current) => ({ ...current, [groupId]: current[groupId] !== true }));
+      const open = state[groupId] !== true;
+      setState((current) => ({ ...current, [groupId]: open }));
+      // Only what the user chose is remembered. Groups that navigation opened around them are not,
+      // or every group ever visited would stay open and "closed by default" would decay to "open".
+      writeStored({ ...readStored(), [groupId]: open });
     },
   };
 }

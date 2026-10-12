@@ -25,11 +25,22 @@ export function AppLayout(): React.JSX.Element {
   // Its error is intentionally not rendered - see NotificationStreamState.error.
   useNotificationStream();
 
-  // Escape closes the small-screen menu and gives focus back to the button that opened it.
+  // Closing the small-screen menu hands focus back to the button that opened it. Otherwise it
+  // would stay on a link inside a panel that has just become hidden, and fall to the page body.
+  function closeMenu(): void {
+    if (menuOpen) {
+      setMenuOpen(false);
+      menuButton.current?.focus();
+    }
+  }
+
+  // Opening the menu moves focus into it (the sidebar comes before the button in the DOM, so
+  // tabbing on from the button would otherwise skip it); Escape closes it again.
   useEffect(() => {
     if (!menuOpen) {
       return undefined;
     }
+    document.querySelector<HTMLElement>('#app-sidebar nav a')?.focus();
     function closeOnEscape(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
         setMenuOpen(false);
@@ -44,22 +55,14 @@ export function AppLayout(): React.JSX.Element {
 
   return (
     <div className="shell">
-      <Sidebar
-        role={session?.role}
-        open={menuOpen}
-        onNavigate={() => {
-          setMenuOpen(false);
-        }}
-      />
+      <Sidebar role={session?.role} open={menuOpen} onNavigate={closeMenu} />
       {menuOpen && (
         <button
           type="button"
           className="shell__scrim"
           tabIndex={-1}
           aria-label="Close menu"
-          onClick={() => {
-            setMenuOpen(false);
-          }}
+          onClick={closeMenu}
         />
       )}
 

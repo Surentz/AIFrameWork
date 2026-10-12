@@ -1,5 +1,6 @@
 import { expect, test } from '../../fixtures/index.ts';
 import * as monitoring from '../../screens/monitoring.ts';
+import * as shell from '../../screens/shell.ts';
 
 /**
  * The operator's view, end to end: a real cookie, a real role read from Postgres on every
@@ -85,7 +86,13 @@ test.describe('monitoring access', () => {
 
   test("keeps the monitoring nav entry out of a member's shell", async ({ signedInPage }) => {
     await signedInPage.goto('/orders');
+    // Wait for the shell first: an absence assertion passes at once on the "Checking your session"
+    // screen, before the sidebar exists, and so would pass whatever the sidebar went on to show.
+    await expect(shell.groupButton(signedInPage, 'Sales')).toBeVisible();
 
+    // The group's button, not the link: Operations is folded on /orders either way, and a folded
+    // link is hidden whether or not it was rendered, so the link alone could never fail this test.
+    await expect(shell.groupButton(signedInPage, 'Operations')).toHaveCount(0);
     await expect(monitoring.navLink(signedInPage)).toBeHidden();
   });
 });
