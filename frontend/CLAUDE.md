@@ -31,8 +31,9 @@ administrator group sets `adminOnly`; that hides the group and nothing else — 
 
 Group headings in the sidebar are `<button>`s, never headings (the e2e catalogue screen finds
 `heading "Catalogue"`), and a dashboard subtile's accessible name is `"<page>, in <group>"` so it
-never shares a name with the sidebar's link to the same page. Which groups are open is remembered in
-`localStorage` (`aiframework.nav.open`); every access is in try/catch and the UI works without it.
+never shares a name with the sidebar's link to the same page. What the user folds or unfolds is
+remembered in `localStorage` (`aiframework.nav.open`) — never the groups navigation opened for
+them; every access is in try/catch and the UI works without it.
 Specs reach a page with `shell.goTo` (`e2e/screens/shell.ts`), which unfolds its group first.
 
 ## The API proxy

@@ -32,8 +32,10 @@ Design: `docs/superpowers/specs/2026-10-12-sidebar-navigation-and-dashboard-desi
   that is not in the config is reachable only by URL.
 - **The sidebar groups fold.** Group headings are `<button aria-expanded>`s, closed by default. The
   group holding the current page opens on load and whenever navigation moves into it, even if the
-  user had folded it; staying on a page inside a group the user folds leaves it folded. The open set
-  is remembered per browser in `localStorage`, and every access is guarded so the UI works without it.
+  user had folded it; staying on a page inside a group the user folds leaves it folded. What the user
+  folds or unfolds is remembered per browser in `localStorage`; groups that navigation opened are not,
+  or every group ever visited would end up permanently open. Every access is guarded so the UI works
+  without storage.
 - **The dashboard is navigation only.** `/` renders a tile per visible group with a subtile per page.
   It makes no request of its own, so it has no loading or error state. Sign-in and registration now
   land on `/`.
