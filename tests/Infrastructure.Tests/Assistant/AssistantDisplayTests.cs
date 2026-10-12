@@ -37,11 +37,15 @@ public sealed class AssistantDisplayTests
         var conversation = Guid.NewGuid();
         var broken = Row(conversation, 1, AssistantTurnCodec.Quick, "{ not json");
         var brokenSuggestions = Row(conversation, 2, AssistantTurnCodec.Suggested, "null");
+        var emptyQuick = Row(conversation, 4, AssistantTurnCodec.Quick, "{}");
+        var replayOnly = Row(conversation, 5, AssistantTurnCodec.Suggested, "{\"replay\":\"x\"}");
         var rows = new[]
         {
             AssistantTurnCodec.Encode(conversation, 0, new UserQuestionTurn("Has it shipped?", Now), Now),
             broken,
             brokenSuggestions,
+            emptyQuick,
+            replayOnly,
             AssistantTurnCodec.Encode(conversation, 3, new QuickAnswerTurn(new QuickAnswer(QuickAnswerKind.Instant, null, "Fine.", [], null, null, null), "Fine."), Now),
         };
 

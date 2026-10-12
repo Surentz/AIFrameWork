@@ -57,14 +57,19 @@ internal static class AssistantTurnCodec
     private static QuickAnswerTurn DecodeQuick(AssistantTurnRow row)
     {
         var stored = Deserialize<StoredQuickAnswer>(row);
-        return new QuickAnswerTurn(stored.Answer, stored.Replay);
+        return new QuickAnswerTurn(
+            stored.Answer ?? throw Incomplete(row), stored.Replay ?? throw Incomplete(row));
     }
 
     private static SuggestionsTurn DecodeSuggestions(AssistantTurnRow row)
     {
         var stored = Deserialize<StoredSuggestions>(row);
-        return new SuggestionsTurn(stored.Suggestions, stored.Replay);
+        return new SuggestionsTurn(
+            stored.Suggestions ?? throw Incomplete(row), stored.Replay ?? throw Incomplete(row));
     }
+
+    private static InvalidOperationException Incomplete(AssistantTurnRow row) =>
+        new($"Turn {row.Id} is missing a stored field.");
 
     private static T Deserialize<T>(AssistantTurnRow row) =>
         JsonSerializer.Deserialize<T>(row.Payload, Json)
@@ -73,7 +78,7 @@ internal static class AssistantTurnCodec
     private sealed record StoredQuestion(string Text, DateTimeOffset AskedAt);
 
     // QuickAnswerKind is stored as its number: append new kinds at the end, never reorder.
-    private sealed record StoredQuickAnswer(QuickAnswer Answer, string Replay);
+    private sealed record StoredQuickAnswer(QuickAnswer? Answer, string? Replay);
 
-    private sealed record StoredSuggestions(QuickSuggestions Suggestions, string Replay);
+    private sealed record StoredSuggestions(QuickSuggestions? Suggestions, string? Replay);
 }

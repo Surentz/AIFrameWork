@@ -41,4 +41,26 @@ public sealed class AssistantTurnCodecTests
         decoded.Suggestions.Options.Should().Equal("Is my export ready?");
         decoded.Replay.Should().Be("Not sure. Suggested: Is my export ready?");
     }
+
+    [Theory]
+    [InlineData(AssistantTurnCodec.Quick, "{}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Suggested, "{}")]
+    [InlineData(AssistantTurnCodec.Suggested, "{\"suggestions\":{\"text\":\"t\",\"options\":[]}}")]
+    public void Decode_AQuickRowMissingAField_ThrowsInvalidOperation(string kind, string payload)
+    {
+        var row = new AssistantTurnRow
+        {
+            Id = Guid.NewGuid(),
+            ConversationId = Guid.NewGuid(),
+            Seq = 1,
+            Kind = kind,
+            Payload = payload,
+            CreatedAt = Now,
+        };
+
+        var act = () => AssistantTurnCodec.Decode(row);
+
+        act.Should().Throw<InvalidOperationException>();
+    }
 }
