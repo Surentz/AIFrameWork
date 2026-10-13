@@ -3,6 +3,26 @@
 **Type:** `feat(assistant)`, delivered as two PRs, each opened against `main` (PR 2 after PR 1 merges).
 **Amends:** ADR 0033 (an ops assistant on Claude) and ADR 0034 (the assistant for every user).
 
+## Rulings made in the plan
+
+These replace what the sections below say wherever they differ.
+
+1. **Separate endpoint, not a `mode` field.** The rate limiter runs before model binding, so quick
+   and AI questions could not get separate limits. Quick: `POST /api/assistant/quick` (120 an hour);
+   AI: `POST /api/assistant/messages`, unchanged (20 an hour, 404 when the AI is off). There is no
+   `assistant.ai_disabled` 400.
+2. **No automatic fall-through to the AI.** When the router is unavailable the quick endpoint says so
+   and offers *Ask the AI*; it never calls Claude itself.
+4. **In-house spelling corrector** (edit distance over the catalog's own vocabulary), not SymSpell
+   and a common-English list; a correction is used only when it produces an instant match.
+5. **No trigram index yet.** Product search uses `pg_trgm`'s `word_similarity` through raw SQL; the
+   migration enables the extension only. Revisit past roughly 10,000 products.
+7. **The index is built at start-up** (a hosted service awaiting the build), not lazily.
+8. **"Signing out everywhere" replaces "cancelling an order"** as a help article: members have no
+   cancel button.
+
+Known gap: the evaluation set holds 88 questions, not about 150.
+
 ## Intent
 
 The assistant exists to help customers do their work in the application. Their questions are
@@ -35,7 +55,7 @@ Success:
 | Where the model runs | **In-process**, ONNX Runtime, behind an Application port, **API host only**. |
 | Vector storage | **In memory. No vector database.** About 250 vectors at launch (under 400 KB, microseconds to search). See "Growth" for when that changes. |
 | Curation | Intents, example phrases and help articles are **files in the repo**, reviewed in PRs and gated in CI. No in-app editing yet. |
-| Spelling | **A correction pass from day one** (SymSpell), plus fuzzy matching of product and area names. |
+| Spelling | **A correction pass from day one** (in-house edit-distance corrector, ruling 4), plus fuzzy matching of product and area names. |
 | Badges | Kept: every reply says whether it is an *Instant answer*, *Help*, *Not sure* or an *AI answer*. |
 | Links | One primary link per answer. |
 | Administrators and question text | Administrators may read the text of **missed and thumbs-down questions**, scrubbed, read live from the transcript, gone when the conversation is deleted or expires. |
@@ -45,11 +65,12 @@ Mockup (gitignored): `.superpowers/brainstorm/325-1791830762/content/assistant-q
 ## Architecture
 
 ```
-POST /api/assistant/messages  { conversationId?, question, mode: "auto" | "ai" }
+POST /api/assistant/quick     { conversationId?, question }      (ruling 1)
+POST /api/assistant/messages  { conversationId?, question }      (the AI, unchanged)
         │
         ▼
-AskAssistantHandler ── mode = ai ─────────────────────────────► Claude tool loop (unchanged)
-        │ mode = auto
+AskAssistantHandler (messages) ─────────────────────────────► Claude tool loop (unchanged)
+AskQuick (quick)
         ▼
 SpellingCorrector ──► IntentRouter ──► ITextEmbedder (local ONNX model)
                          │  best phrase in memory, threshold + margin, original vs corrected
@@ -71,8 +92,8 @@ SpellingCorrector ──► IntentRouter ──► ITextEmbedder (local ONNX mod
 - **`PhraseIndex`**: the in-memory vectors and the brute-force cosine search
   (`System.Numerics.Tensors.TensorPrimitives`). It is the single seam a vector database would
   replace later; nothing else knows how vectors are stored.
-- **`SpellingCorrector`**: SymSpell over a dictionary built from the catalog's own phrases, intent
-  and screen names, product names and a common-English word list. It corrects only words it does
+- **`SpellingCorrector`**: An in-house edit-distance corrector over the catalog's own vocabulary
+  (phrases, intent and screen names; ruling 4). It corrects only words it does
   not know, and never touches ids, SKUs, numbers or quoted text.
 - **`IntentRouter`**: embeds the original question and, if the corrector changed it, the corrected
   one; scores both against the index; keeps the better. A match is **instant** only if its score
@@ -100,8 +121,8 @@ SpellingCorrector ──► IntentRouter ──► ITextEmbedder (local ONNX mod
   the evaluation set). Tokenised with `Microsoft.ML.Tokenizers`. Loaded once.
 - **`QuickCatalogLoader`**: at startup, reads the embedded phrases and help sections, embeds them,
   builds the `PhraseIndex` and the spelling dictionary.
-- **`FindProducts`** query support: a `pg_trgm` trigram index on product name and SKU (a new
-  migration; `pg_trgm` ships with the standard Postgres images, including `postgres:17-alpine`).
+- **`FindProducts`** query support: `pg_trgm` `word_similarity` on product name and SKU, with no index yet (ruling 5). The
+  migration enables the extension; `pg_trgm` ships with the standard Postgres images, including `postgres:17-alpine`).
 - Registered **in the API host only**, like `ICurrentUser`. The worker never answers questions
   and must not load the model.
 
@@ -109,9 +130,8 @@ SpellingCorrector ──► IntentRouter ──► ITextEmbedder (local ONNX mod
 
 - `GET /api/assistant` reports both switches, `{ quick, ai }`, instead of one `enabled` flag. The
   page and the header icon read it.
-- `POST /api/assistant/messages` gains `mode` (`auto` default, or `ai`). With quick answers off,
-  `auto` behaves like `ai`. `mode=ai` while the AI is off is a 400 (`assistant.ai_disabled`); with
-  both off the endpoint is a 404, as today.
+- `POST /api/assistant/quick` answers quick questions (ruling 1); `POST /api/assistant/messages`
+  stays the AI endpoint and is a 404 when the AI is off. There is no `mode` field.
 - The SSE stream gains two events alongside the existing ones:
   - `answer`: `{ kind: "instant" | "help", text, answeredAs?, facts?, table?, link: { label, to }, turn }`
   - `suggestions`: `{ text, options: string[], aiAvailable, turn }`
@@ -134,8 +154,7 @@ SpellingCorrector ──► IntentRouter ──► ITextEmbedder (local ONNX mod
 | `integrations` | Operator | "Are the partner systems up?" | `external_systems` | Table | `/monitoring/integrations` |
 | `sign_ins` | Operator | "Any lockouts?" | `sign_in_health` (24 h) | Facts | `/monitoring/logins` |
 
-**Help articles at launch**: placing an order, exporting your orders, cancelling an order (explains
-how; links to the orders list), changing your password, notifications, the catalogue. One Markdown
+**Help articles at launch**: placing an order, exporting your orders, signing out everywhere (ruling 8; replaces cancelling an order), changing your password, notifications, the catalogue. One Markdown
 file each, with a title, a link and sections; **each section is indexed separately**, and a help
 answer quotes the matched section verbatim.
 
@@ -198,7 +217,7 @@ The cap of 50 exists because the whole conversation is replayed to Claude on *As
 | A parameter cannot be resolved, or two candidates tie | Suggestions or "Did you mean…". Never a guess. |
 | The order is not the caller's, or does not exist | "I couldn't find order 3f2a… among your orders" + **All orders →** (the same not-found as today's tools). |
 | The tool's query fails | "Your orders couldn't be loaded right now" + the screen's link. No silent switch to the AI. |
-| The model did not load | The router reports itself unavailable. `auto` questions go to the AI if it is enabled; otherwise the reply links to the main screens. **`/health/ready` is not affected**: the assistant must never take a pod out of rotation. |
+| The model did not load | The router reports itself unavailable. The quick endpoint says instant answers are unavailable and offers *Ask the AI* (ruling 2); it never calls Claude itself. **`/health/ready` is not affected**: the assistant must never take a pod out of rotation. |
 | The spelling correction wins but is doubtful | It is held to the same threshold and margin; if it fails them, the reply is suggestions. When it wins, the answer shows *Answered as: …*. |
 
 Logging follows the repo rule: `Behaviors.LoggedAsync` already logs the command; the question text
@@ -220,8 +239,8 @@ is never logged.
   present, and one primary link. It is built from structured data, **never Markdown or HTML**.
   The link is a router `Link` whose path must match an allow-list of route patterns; anything
   else is not rendered as a link.
-- Suggestion chips send their canonical question in `auto` mode, which always answers instantly.
-- **Ask the AI** re-sends the question in `ai` mode; shown only when `aiAvailable`.
+- Suggestion chips send their canonical question to the quick endpoint, which always answers instantly.
+- **Ask the AI** re-sends the question to the AI endpoint; shown only when `aiAvailable`.
 - 👍/👎 (PR 2) call the rating endpoint.
 - Badges: *Instant answer*, *Help*, *Not sure what you mean*, *AI answer*.
 - The header's assistant icon shows when **either** quick answers or the AI is enabled (today: the
