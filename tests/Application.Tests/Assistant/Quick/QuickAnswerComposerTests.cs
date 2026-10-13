@@ -176,6 +176,43 @@ public sealed class QuickAnswerComposerTests
     }
 
     [Fact]
+    public async Task ProductInfo_WhenOneExactNameContainsAnother_NamesTheLongerOne()
+    {
+        // word_similarity scores every name contained in the question 1.0, and the shorter sorts first.
+        var pro = Guid.NewGuid();
+        _queries.SendAsync(Arg.Any<FindProducts>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<ProductMatch>>(
+            [
+                new ProductMatch(Guid.NewGuid(), "W-1", "Widget", 9.95m, 1),
+                new ProductMatch(pro, "W-2", "Widget Pro", 19.95m, 1),
+            ]));
+
+        var answer = (QuickAnswer)await ComposeAsync(QuickIntents.ProductInfo, "How much is the Widget Pro?");
+
+        answer.Text.Should().Be("Widget Pro costs 19.95.");
+        answer.Facts.Should().Contain(new QuickFact("SKU", "W-2"));
+        answer.Link.Should().Be(new QuickLink("Open product", $"/products/{pro}"));
+    }
+
+    [Fact]
+    public async Task ProductInfo_ForTwoUnrelatedExactNames_AsksWhichOne_NeverPicks()
+    {
+        _queries.SendAsync(Arg.Any<FindProducts>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<ProductMatch>>(
+            [
+                new ProductMatch(Guid.NewGuid(), "G-1", "Gadget", 4.95m, 1),
+                new ProductMatch(Guid.NewGuid(), "W-1", "Widget", 9.95m, 1),
+                new ProductMatch(Guid.NewGuid(), "W-3", "Widget Max", 29.95m, 0.6),
+            ]));
+
+        var reply = await ComposeAsync(QuickIntents.ProductInfo, "is the widget dearer than the gadget?");
+
+        var suggestions = reply.Should().BeOfType<QuickSuggestions>().Subject;
+        suggestions.Text.Should().Be("Which product did you mean?");
+        suggestions.Options.Should().Equal("How much is Gadget?", "How much is Widget?");
+    }
+
+    [Fact]
     public async Task Population_ForAResolvedArea_GivesTheFigure()
     {
         _queries.SendAsync(Arg.Any<GetPopulationAreas>(), Arg.Any<CancellationToken>())

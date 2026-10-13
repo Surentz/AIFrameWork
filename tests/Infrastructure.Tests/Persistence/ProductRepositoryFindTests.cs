@@ -49,6 +49,20 @@ public sealed class ProductRepositoryFindTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task FindAsync_ScoresEveryNameContainedInTheQuestionAsExact()
+    {
+        // The composer relies on this: "Widget" and "Widget Pro" both come back as exact for a question
+        // naming "Widget Pro", the shorter first, so it must pick by containment, not by order.
+        var word = $"Widget{Unique()}";
+        var plain = await SeedAsync(word, $"W-{Unique()}".ToUpperInvariant(), 9.95m);
+        var pro = await SeedAsync($"{word} Pro", $"W-{Unique()}".ToUpperInvariant());
+
+        var found = await FindAsync($"How much is the {word} Pro?");
+
+        found.Where(m => m.Score >= 0.999).Select(m => m.Id).Should().Equal(plain.Id, pro.Id);
+    }
+
+    [Fact]
     public async Task FindAsync_FindsBySku()
     {
         var sku = $"SKU-{Unique()}".ToUpperInvariant();

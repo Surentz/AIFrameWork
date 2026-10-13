@@ -26,6 +26,9 @@ public sealed class QuickAnswerComposer(IQueryDispatcher queries, ParameterResol
     /// <summary>How far the best product must lead the next to be named without asking.</summary>
     public const double ProductLead = 0.1;
 
+    /// <summary>A score this high means the name (or SKU) appears whole in the question.</summary>
+    private const double ExactScore = 0.999;
+
     private static readonly TimeSpan ActiveWindow = TimeSpan.FromMinutes(15);
 
     private static readonly QuickLink AllOrders = new("All orders", "/orders");
@@ -221,22 +224,42 @@ public sealed class QuickAnswerComposer(IQueryDispatcher queries, ParameterResol
             return Answer("I couldn't find that product in the catalogue. Try its exact name or SKU.", [], null, Catalogue);
         }
 
-        var best = matches[0];
-        var exact = best.Score >= 0.999;
-        if (!exact && matches.Count > 1 && best.Score - matches[1].Score < ProductLead)
+        // word_similarity scores every name contained in the question as exact, so "Widget Pro" brings
+        // "Widget" back at 1.0 too. Among exact matches the one whose name contains all the others is
+        // meant; exact matches that don't nest are two products named, and are asked about.
+        var exactMatches = matches.Where(m => m.Score >= ExactScore).ToList();
+        if (exactMatches.Count > 1)
         {
-            return new QuickSuggestions(
-                "Which product did you mean?",
-                [.. matches.Take(IntentRouter.MaxSuggestions).Select(m => $"How much is {m.Name}?")]);
+            var containing = exactMatches
+                .Where(c => exactMatches.All(o => c.Name.Contains(o.Name, StringComparison.OrdinalIgnoreCase)))
+                .MaxBy(c => c.Name.Length);
+            if (containing is null)
+            {
+                return WhichProduct(exactMatches);
+            }
+
+            return ProductAnswer(containing, containing.Name);
         }
 
-        var name = exact ? best.Name : $"{best.Name}, the closest match,";
-        return Answer(
-            $"{name} costs {QuickText.Money(best.Price)}.",
-            [new("Name", best.Name), new("SKU", best.Sku), new("Price", QuickText.Money(best.Price))],
-            null,
-            new QuickLink("Open product", $"/products/{best.Id}"));
+        var best = matches[0];
+        var exact = exactMatches.Count == 1;
+        if (!exact && matches.Count > 1 && best.Score - matches[1].Score < ProductLead)
+        {
+            return WhichProduct(matches);
+        }
+
+        return ProductAnswer(best, exact ? best.Name : $"{best.Name}, the closest match,");
     }
+
+    private static QuickSuggestions WhichProduct(IEnumerable<ProductMatch> candidates) => new(
+        "Which product did you mean?",
+        [.. candidates.Take(IntentRouter.MaxSuggestions).Select(m => $"How much is {m.Name}?")]);
+
+    private static QuickAnswer ProductAnswer(ProductMatch product, string subject) => Answer(
+        $"{subject} costs {QuickText.Money(product.Price)}.",
+        [new("Name", product.Name), new("SKU", product.Sku), new("Price", QuickText.Money(product.Price))],
+        null,
+        new QuickLink("Open product", $"/products/{product.Id}"));
 
     private async Task<QuickReply> PopulationAsync(string question, CancellationToken ct)
     {
