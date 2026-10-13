@@ -7,9 +7,12 @@ namespace AiFramework.Infrastructure.Assistant.Quick;
 
 /// <summary>
 /// Builds the instant-answer index while the API starts (about a second) and publishes it, so a
-/// started API either answers instantly or knows it cannot. A missing or broken model is logged and
-/// left unpublished, never thrown: instant answers then say they are unavailable and offer the AI,
-/// and readiness is unaffected. Registered by the API only. ADR 0036.
+/// started API either answers instantly or knows it cannot. A missing or broken model, or a native
+/// runtime that will not load, is logged and left unpublished, not thrown: instant answers then say
+/// they are unavailable and offer the AI, and readiness is unaffected. A broken embedded catalog is
+/// different: the FormatException or InvalidOperationException from <see cref="QuickCatalogFiles.Load"/>
+/// or <see cref="PhraseIndex.Build"/> is a bug in this build's files, and is left to fail the start-up.
+/// Registered by the API only. ADR 0036.
 /// </summary>
 public sealed partial class QuickCatalogLoader(QuickIndexState state, ITextEmbedder embedder, ILogger<QuickCatalogLoader> logger)
     : IHostedService

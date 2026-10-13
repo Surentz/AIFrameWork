@@ -3,6 +3,7 @@ using AiFramework.Application.Assistant;
 using AiFramework.Application.Assistant.Quick;
 using AiFramework.Infrastructure.Assistant.Quick;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit.Abstractions;
 
@@ -24,7 +25,7 @@ public sealed class QuickEvaluationTests(ITestOutputHelper output) : IDisposable
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    private readonly OnnxTextEmbedder _embedder = new(Options.Create(new QuickModelOptions()));
+    private readonly OnnxTextEmbedder _embedder = new(Options.Create(new QuickModelOptions()), NullLogger<OnnxTextEmbedder>.Instance);
 
     public void Dispose() => _embedder.Dispose();
 

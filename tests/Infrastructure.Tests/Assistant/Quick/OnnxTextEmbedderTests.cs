@@ -2,13 +2,14 @@ using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant.Quick;
 using AiFramework.Infrastructure.Assistant.Quick;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure.Tests.Assistant.Quick;
 
 public sealed class OnnxTextEmbedderTests : IDisposable
 {
-    private readonly OnnxTextEmbedder _embedder = new(Options.Create(new QuickModelOptions()));
+    private readonly OnnxTextEmbedder _embedder = new(Options.Create(new QuickModelOptions()), NullLogger<OnnxTextEmbedder>.Instance);
 
     public void Dispose() => _embedder.Dispose();
 
@@ -59,7 +60,7 @@ public sealed class OnnxTextEmbedderTests : IDisposable
         using var missing = new OnnxTextEmbedder(Options.Create(new QuickModelOptions
         {
             ModelPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-        }));
+        }), NullLogger<OnnxTextEmbedder>.Instance);
 
         var result = missing.Embed("anything");
 
@@ -80,7 +81,7 @@ public sealed class OnnxTextEmbedderTests : IDisposable
         {
             File.WriteAllBytes(Path.Combine(directory, "model.onnx"), [0x08, 0x01]);
             File.WriteAllText(Path.Combine(directory, "vocab.txt"), vocabulary);
-            using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions { ModelPath = directory }));
+            using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions { ModelPath = directory }), NullLogger<OnnxTextEmbedder>.Instance);
 
             AssertUnavailable(embedder.Embed("first question"));
             AssertUnavailable(embedder.Embed("second question"));
@@ -99,7 +100,7 @@ public sealed class OnnxTextEmbedderTests : IDisposable
         {
             File.WriteAllBytes(Path.Combine(directory, "model.onnx"), [0x08, 0x01]);
             File.Copy(Path.Combine(new QuickModelOptions().ModelPath, "vocab.txt"), Path.Combine(directory, "vocab.txt"));
-            using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions { ModelPath = directory }));
+            using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions { ModelPath = directory }), NullLogger<OnnxTextEmbedder>.Instance);
 
             AssertUnavailable(embedder.Embed("first question"));
             AssertUnavailable(embedder.Embed("second question"));
@@ -109,6 +110,27 @@ public sealed class OnnxTextEmbedderTests : IDisposable
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    [Theory]
+    [MemberData(nameof(NativeLoadFailures))]
+    public void Embed_WhenTheNativeRuntimeCannotLoad_IsUnavailableEveryTime(Exception failure)
+    {
+        // A missing or mismatched onnxruntime library surfaces from the session constructor; the real
+        // one is already loaded in this process, so the test fails the constructor instead.
+        using var embedder = new OnnxTextEmbedder(
+            Options.Create(new QuickModelOptions()), NullLogger<OnnxTextEmbedder>.Instance, _ => throw failure);
+
+        AssertUnavailable(embedder.Embed("first question"));
+        AssertUnavailable(embedder.Embed("second question"));
+    }
+
+    public static TheoryData<Exception> NativeLoadFailures() =>
+    [
+        new DllNotFoundException("onnxruntime"),
+        new EntryPointNotFoundException("OrtGetApiBase"),
+        new BadImageFormatException("onnxruntime"),
+        new TypeInitializationException("Microsoft.ML.OnnxRuntime.NativeMethods", new DllNotFoundException("onnxruntime")),
+    ];
 
     private static string NewModelDirectory()
     {

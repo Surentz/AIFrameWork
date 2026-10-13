@@ -1,5 +1,6 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant.Quick;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -20,7 +21,7 @@ namespace AiFramework.Infrastructure.Assistant.Quick;
 /// One tokenizer instance is shared by every concurrent <see cref="Embed"/> call.
 /// </para>
 /// </summary>
-public sealed class OnnxTextEmbedder(IOptions<QuickModelOptions> options) : ITextEmbedder, IDisposable
+public sealed partial class OnnxTextEmbedder : ITextEmbedder, IDisposable
 {
     /// <summary>The model's position limit. A longer question is cut; for a question that never matters.</summary>
     public const int MaxTokens = 512;
@@ -28,7 +29,21 @@ public sealed class OnnxTextEmbedder(IOptions<QuickModelOptions> options) : ITex
     private static readonly Error Unavailable = new(
         ErrorKind.Unavailable, "assistant.quick_unavailable", "Instant answers aren't available right now.");
 
-    private readonly Lazy<Model?> _model = new(() => Load(options.Value.ModelPath), LazyThreadSafetyMode.ExecutionAndPublication);
+    private readonly Lazy<Model?> _model;
+
+    public OnnxTextEmbedder(IOptions<QuickModelOptions> options, ILogger<OnnxTextEmbedder> logger)
+        : this(options, logger, static modelFile => new InferenceSession(modelFile))
+    {
+    }
+
+    /// <summary>Opens the session through <paramref name="openSession"/>, so a test can fail the native load.</summary>
+    internal OnnxTextEmbedder(IOptions<QuickModelOptions> options, ILogger<OnnxTextEmbedder> logger, Func<string, InferenceSession> openSession)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(openSession);
+        _model = new(() => Load(options.Value.ModelPath, openSession, logger), LazyThreadSafetyMode.ExecutionAndPublication);
+    }
 
     public Result<float[]> Embed(string text)
     {
@@ -89,7 +104,7 @@ public sealed class OnnxTextEmbedder(IOptions<QuickModelOptions> options) : ITex
         }
     }
 
-    private static Model? Load(string directory)
+    private static Model? Load(string directory, Func<string, InferenceSession> openSession, ILogger logger)
     {
         var modelFile = Path.Combine(directory, "model.onnx");
         var vocabFile = Path.Combine(directory, "vocab.txt");
@@ -101,7 +116,7 @@ public sealed class OnnxTextEmbedder(IOptions<QuickModelOptions> options) : ITex
         InferenceSession? session = null;
         try
         {
-            session = OpenSession(modelFile);
+            session = OpenSession(modelFile, openSession, logger);
             var tokenizer = OpenTokenizer(vocabFile);
             if (session is null || tokenizer is null)
             {
@@ -118,27 +133,56 @@ public sealed class OnnxTextEmbedder(IOptions<QuickModelOptions> options) : ITex
         }
     }
 
-    // Returns null rather than throwing, so the caller can answer Unavailable. The model file is read
-    // by ONNX Runtime, so an unreadable (locked, denied) file surfaces as IOException.
-    private static InferenceSession? OpenSession(string modelFile)
+    // Returns null rather than throwing, so the caller can answer Unavailable and the API still starts.
+    // The model file is read by ONNX Runtime, so an unreadable (locked, denied) file surfaces as
+    // IOException. The first session also loads the native onnxruntime library: a missing or
+    // wrong-platform one throws DllNotFoundException, EntryPointNotFoundException or
+    // BadImageFormatException, usually wrapped in the TypeInitializationException of the type whose
+    // static constructor loaded it.
+    private static InferenceSession? OpenSession(string modelFile, Func<string, InferenceSession> openSession, ILogger logger)
     {
         try
         {
-            return new InferenceSession(modelFile);
+            return openSession(modelFile);
         }
-        catch (OnnxRuntimeException)
+        catch (OnnxRuntimeException ex)
         {
-            return null;
+            return NotLoaded(logger, ex);
         }
-        catch (IOException)
+        catch (TypeInitializationException ex)
         {
-            return null;
+            return NotLoaded(logger, ex);
         }
-        catch (UnauthorizedAccessException)
+        catch (DllNotFoundException ex)
         {
-            return null;
+            return NotLoaded(logger, ex);
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            return NotLoaded(logger, ex);
+        }
+        catch (BadImageFormatException ex)
+        {
+            return NotLoaded(logger, ex);
+        }
+        catch (IOException ex)
+        {
+            return NotLoaded(logger, ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return NotLoaded(logger, ex);
         }
     }
+
+    private static InferenceSession? NotLoaded(ILogger logger, Exception exception)
+    {
+        LogModelNotLoaded(logger, exception);
+        return null;
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "The instant-answer model could not be loaded; instant answers are unavailable until the API restarts.")]
+    private static partial void LogModelNotLoaded(ILogger logger, Exception exception);
 
     // BertTokenizer.Create reports a vocabulary it cannot use with ArgumentException (a missing special
     // token such as [UNK], or a duplicate entry) and reads the file with IOException. Measured against

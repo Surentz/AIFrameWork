@@ -12,7 +12,7 @@ public sealed class QuickCatalogLoaderTests
     [Fact]
     public async Task StartAsync_PublishesAnIndexThatAnswersACanonicalQuestion()
     {
-        using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions()));
+        using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions()), NullLogger<OnnxTextEmbedder>.Instance);
         var state = new QuickIndexState();
 
         await new QuickCatalogLoader(state, embedder, NullLogger<QuickCatalogLoader>.Instance).StartAsync(CancellationToken.None);
@@ -29,7 +29,21 @@ public sealed class QuickCatalogLoaderTests
         using var embedder = new OnnxTextEmbedder(Options.Create(new QuickModelOptions
         {
             ModelPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-        }));
+        }), NullLogger<OnnxTextEmbedder>.Instance);
+        var state = new QuickIndexState();
+
+        await new QuickCatalogLoader(state, embedder, NullLogger<QuickCatalogLoader>.Instance).StartAsync(CancellationToken.None);
+
+        state.IsReady.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task StartAsync_WhenTheNativeRuntimeCannotLoad_LeavesTheIndexUnpublished_AndDoesNotThrow()
+    {
+        using var embedder = new OnnxTextEmbedder(
+            Options.Create(new QuickModelOptions()),
+            NullLogger<OnnxTextEmbedder>.Instance,
+            _ => throw new TypeInitializationException("Microsoft.ML.OnnxRuntime.NativeMethods", new DllNotFoundException("onnxruntime")));
         var state = new QuickIndexState();
 
         await new QuickCatalogLoader(state, embedder, NullLogger<QuickCatalogLoader>.Instance).StartAsync(CancellationToken.None);
