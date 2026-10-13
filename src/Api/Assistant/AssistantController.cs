@@ -21,13 +21,17 @@ public sealed class AssistantController(
     ICommandDispatcher commands,
     IAuthorizationService authorization,
     AssistantAvailability availability,
+    QuickIndexState quickIndex,
     SseAssistantOutput output) : ControllerBase
 {
-    /// <summary>Which halves of the assistant are on, so the UI shows only what works.</summary>
+    /// <summary>
+    /// Which halves of the assistant work, so the UI offers only those. Instant answers count only once
+    /// their index is built: until then (or if it never builds) questions go to the AI.
+    /// </summary>
     [HttpGet]
     [ProducesResponseType<AssistantStatusResponse>(StatusCodes.Status200OK)]
     public ActionResult<AssistantStatusResponse> Status() =>
-        new AssistantStatusResponse { Quick = availability.QuickEnabled, Ai = availability.AiEnabled };
+        new AssistantStatusResponse { Quick = availability.QuickEnabled && quickIndex.IsReady, Ai = availability.AiEnabled };
 
     /// <summary>
     /// Asks one question. The response is text/event-stream: text and tool events while the answer
@@ -88,7 +92,8 @@ public sealed class AssistantController(
 
     /// <summary>
     /// Asks one question of the instant path (ADR 0036). text/event-stream: answer or suggestions,
-    /// then done; or error. No model is called. A failure before the first event is a problem.
+    /// then done; or error. No model is called. A failure before the first event is a problem: a 503
+    /// when the instant-answer index is not built, and nothing is saved.
     /// </summary>
     [HttpPost("quick")]
     [EnableRateLimiting(AssistantRateLimiting.QuickPolicyName)]
@@ -97,6 +102,7 @@ public sealed class AssistantController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Quick(AskAssistantRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

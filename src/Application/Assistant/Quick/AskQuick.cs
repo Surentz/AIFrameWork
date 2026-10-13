@@ -20,7 +20,10 @@ public sealed class AskQuickValidator : AbstractValidator<AskQuick>
 /// <summary>
 /// Routes the question, answers it from the caller's own data or suggests, writes the reply, and
 /// appends the question and the reply to the conversation as one transaction (the unit of work
-/// commits after the command). Never calls a model and never dispatches a command. ADR 0036.
+/// commits after the command). Never calls a model and never dispatches a command. When the router
+/// is unavailable (the index did not build, or the model failed) the question fails Unavailable and
+/// nothing is stored: a stored "not available" would count against the conversation and be replayed
+/// to Claude as something the assistant said. ADR 0036.
 /// </summary>
 public sealed class AskQuickHandler(
     IntentRouter router,
@@ -30,8 +33,6 @@ public sealed class AskQuickHandler(
     ICurrentUser currentUser,
     IClock clock) : ICommandHandler<AskQuick, AssistantAnswer>
 {
-    public static QuickSuggestions NotAvailable { get; } = new("Instant answers aren't available right now.", []);
-
     public async Task<Result<AssistantAnswer>> HandleAsync(AskQuick command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -42,6 +43,12 @@ public sealed class AskQuickHandler(
         }
 
         var question = command.Question.Trim();
+        var routed = router.Route(question, command.Scope);
+        if (!routed.IsSuccess)
+        {
+            return Result.Failure<AssistantAnswer>(routed.Error);
+        }
+
         var now = clock.UtcNow;
         var opened = await AssistantConversationOpener.OpenAsync(
             conversations, command.ConversationId, ownerId, question, now, forAi: false, cancellationToken).ConfigureAwait(false);
@@ -50,7 +57,7 @@ public sealed class AskQuickHandler(
             return Result.Failure<AssistantAnswer>(opened.Error);
         }
 
-        var reply = await ReplyAsync(question, command.Scope, cancellationToken).ConfigureAwait(false);
+        var reply = await ReplyAsync(routed.Value, question, cancellationToken).ConfigureAwait(false);
         if (reply is QuickAnswer answer)
         {
             await output.AnswerAsync(answer, cancellationToken).ConfigureAwait(false);
@@ -64,20 +71,12 @@ public sealed class AskQuickHandler(
         return Result.Success(new AssistantAnswer(opened.Value.Id, AssistantOutcome.Answered));
     }
 
-    private async Task<QuickReply> ReplyAsync(string question, ToolScope scope, CancellationToken cancellationToken)
-    {
-        var routed = router.Route(question, scope);
-        if (!routed.IsSuccess)
-        {
-            return NotAvailable;
-        }
-
-        return routed.Value switch
+    private async Task<QuickReply> ReplyAsync(RouteDecision routed, string question, CancellationToken cancellationToken) =>
+        routed switch
         {
             RouteToIntent intent => await composer.ComposeAsync(intent.Intent, question, intent.AnsweredAs, cancellationToken).ConfigureAwait(false),
             RouteToHelp help => QuickAnswerComposer.Help(help.Section, help.AnsweredAs),
             RouteUnsure { Suggestions.Count: > 0 } unsure => new QuickSuggestions("I'm not sure what you mean. Did you mean one of these?", unsure.Suggestions),
             _ => new QuickSuggestions("I'm not sure what you mean.", []),
         };
-    }
 }

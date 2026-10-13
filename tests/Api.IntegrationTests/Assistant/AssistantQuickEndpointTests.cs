@@ -54,6 +54,40 @@ public sealed class AssistantQuickEndpointTests(ApiFactory factory) : IAsyncLife
     }
 
     [Fact]
+    public async Task Status_WhenTheIndexDidNotBuild_ReportsQuickOff()
+    {
+        await using var unbuilt = WithoutAModel();
+        var client = await MemberAsync(unbuilt);
+
+        var status = await client.GetFromJsonAsync<JsonElement>("/api/assistant");
+
+        status.GetProperty("quick").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Quick_WhenTheIndexDidNotBuild_IsUnavailable_AndSavesNothing()
+    {
+        await using var unbuilt = WithoutAModel();
+        var client = await MemberAsync(unbuilt);
+
+        var response = await client.PostAsJsonAsync("/api/assistant/quick", new { Question = "Has my last order shipped?" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        problem.GetProperty("title").GetString().Should().Be("assistant.quick_unavailable");
+        var saved = await client.GetFromJsonAsync<JsonElement>("/api/assistant/conversations");
+        saved.GetArrayLength().Should().Be(0);
+    }
+
+    // Instant answers switched on, but the model folder is empty, so the start-up build publishes nothing.
+    private WebApplicationFactory<Program> WithoutAModel() => factory.WithWebHostBuilder(b =>
+    {
+        b.UseSetting("Assistant:Quick:Enabled", "true");
+        b.UseSetting("Assistant:Quick:ModelPath", Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        b.UseSetting("RateLimiting:AssistantQuick:PermitLimit", "1000");
+    });
+
+    [Fact]
     public async Task Quick_AnswersAMembersOrderQuestionInstantly_AndSavesIt()
     {
         var client = await MemberAsync();

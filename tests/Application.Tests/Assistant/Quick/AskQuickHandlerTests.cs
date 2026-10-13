@@ -74,16 +74,22 @@ public sealed class AskQuickHandlerTests
     }
 
     [Fact]
-    public async Task WhenTheIndexIsNotReady_TheReplySaysSo_AndNothingIsGuessed()
+    public async Task WhenTheIndexIsNotReady_TheQuestionFailsUnavailable_AndNothingIsWrittenOrStored()
     {
+        // Stored, a "not available" reply would count against the conversation's limit and be
+        // replayed to Claude as if the assistant had said it.
         var handler = new AskQuickHandler(
             new IntentRouter(new QuickIndexState(), _embedder, Routing),
             new QuickAnswerComposer(_queries, new ParameterResolver(_queries)),
             _conversations, _output, _user, _clock);
 
-        await handler.HandleAsync(new AskQuick(null, "anything", ToolScope.Member), CancellationToken.None);
+        var result = await handler.HandleAsync(new AskQuick(null, "anything", ToolScope.Member), CancellationToken.None);
 
-        await _output.Received(1).SuggestionsAsync(AskQuickHandler.NotAvailable, Arg.Any<CancellationToken>());
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Kind.Should().Be(ErrorKind.Unavailable);
+        result.Error.Code.Should().Be("assistant.quick_unavailable");
+        _output.ReceivedCalls().Should().BeEmpty();
+        _conversations.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]

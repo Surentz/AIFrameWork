@@ -2505,7 +2505,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Which halves of the assistant are on, so the UI shows only what works. */
+        /**
+         * Which halves of the assistant work, so the UI offers only those. Instant answers count only once
+         *     their index is built: until then (or if it never builds) questions go to the AI.
+         */
         readonly get: {
             readonly parameters: {
                 readonly query?: never;
@@ -2649,7 +2652,8 @@ export interface paths {
         readonly put?: never;
         /**
          * Asks one question of the instant path (ADR 0036). text/event-stream: answer or suggestions,
-         *     then done; or error. No model is called. A failure before the first event is a problem.
+         *     then done; or error. No model is called. A failure before the first event is a problem: a 503
+         *     when the instant-answer index is not built, and nothing is saved.
          */
         readonly post: {
             readonly parameters: {
@@ -2710,6 +2714,17 @@ export interface paths {
                 };
                 /** @description Too Many Requests */
                 readonly 429: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                readonly 503: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
