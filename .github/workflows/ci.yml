@@ -70,6 +70,18 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
           restore-keys: nuget-${{ runner.os }}-
 
+      # The assistant's embedding model (ADR 0036): the Api and Infrastructure.Tests projects copy
+      # it beside their binaries at build time, and the embedder and evaluation tests fail without it.
+      - name: Cache the assistant model
+        uses: actions/cache@v6
+        with:
+          path: models/assistant
+          key: assistant-model-${{ hashFiles('scripts/fetch-assistant-model.ps1') }}
+
+      - name: Fetch the assistant model
+        shell: pwsh
+        run: ./scripts/fetch-assistant-model.ps1
+
       - run: dotnet restore
 
       # Whitespace only: code-style and analyzer rules already fail the build below, so

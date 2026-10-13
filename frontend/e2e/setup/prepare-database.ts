@@ -21,6 +21,11 @@ import { E2E_ASSISTANT_KEY_FILE, E2E_CERT_DIR, E2E_CONNECTION_STRING } from '../
 // dotnet-ef is a local tool (.config/dotnet-tools.json); without a restore this only works
 // by accident, on a machine that also happens to have it installed globally.
 execFileSync('dotnet', ['tool', 'restore'], { stdio: 'inherit' });
+// The assistant's embedding model (ADR 0036): the API build below copies it beside its binaries,
+// and instant answers are on in the stack Playwright starts.
+execFileSync('pwsh', ['-NoProfile', '-File', '../scripts/fetch-assistant-model.ps1'], {
+  stdio: 'inherit',
+});
 
 execFileSync('docker', ['compose', '-f', '../docker-compose.e2e.yml', 'up', '-d', '--wait'], {
   stdio: 'inherit',

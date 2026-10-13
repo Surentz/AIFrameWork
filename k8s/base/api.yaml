@@ -115,10 +115,11 @@ spec:
           # neighbour. A CPU limit, by contrast, throttles: the request already guarantees a
           # share under contention, and capping on top of it would only add latency at startup
           # and under burst, where this workload is at its spikiest.
+          # The instant-answer model (ADR 0036) adds about 60 MB resident; the request covers it.
           resources:
             requests:
               cpu: 200m
-              memory: 256Mi
+              memory: 320Mi
             limits:
               memory: 768Mi
           securityContext:

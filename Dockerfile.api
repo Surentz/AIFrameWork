@@ -14,6 +14,12 @@ COPY src/Worker/AiFramework.Worker.csproj src/Worker/
 RUN dotnet restore src/Api/AiFramework.Api.csproj
 RUN dotnet restore src/Worker/AiFramework.Worker.csproj
 
+# The assistant's embedding model (ADR 0036), fetched and SHA-256-checked here, before the publish,
+# so the Api project's conditional item copies it beside the binaries as assistant-model/. Its own
+# layer, cached until the script (and with it the pinned hash) changes. The SDK image has pwsh.
+COPY scripts/fetch-assistant-model.ps1 scripts/
+RUN pwsh -NoProfile -File scripts/fetch-assistant-model.ps1
+
 COPY src/ src/
 # The commit this image was built from, for service.version on every span and log record
 # (ObservabilityResource). The build context has no .git, so the SDK cannot find it for itself;

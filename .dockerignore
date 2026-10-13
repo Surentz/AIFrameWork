@@ -8,6 +8,8 @@
 frontend/playwright-report/
 frontend/test-results/
 **/*.user
+# Fetched inside the image (Dockerfile.api); never sent as build context.
+models/
 
 # Nothing below is COPY'd by either Dockerfile, so excluding it changes no image — it only
 # stops the daemon transferring it as build context on every build. docs/ alone is several MB.
