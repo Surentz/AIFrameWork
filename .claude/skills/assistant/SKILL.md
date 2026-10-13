@@ -129,8 +129,9 @@ Most member questions are answered without Claude. The slice lives in
 
 - **Adding an intent.** A `QuickIntents` entry, at least 10 phrases in `Catalog/en/phrases.json`
   including its canonical question, a case in `QuickAnswerComposer`, and evaluation questions in
-  `tests/Infrastructure.Tests/Assistant/Quick/evaluation.en.json`. An evaluation question is never
-  the same wording as a phrase, or the gate tests the catalog against itself.
+  `tests/Infrastructure.Tests/Assistant/Quick/evaluation.en.json`. An in-scope evaluation question
+  is never the same wording as a phrase, or the gate tests the catalog against itself. The only
+  deliberate repeats are operator phrases asked as a member, labelled `unsure`: they must not answer.
 - **Adding a help article.** A Markdown file under `Catalog/en/help/`: front matter (title, link),
   then `##` sections, plain text, using the real button labels. Each section is indexed separately
   and a help answer quotes the matched section verbatim.

@@ -71,7 +71,6 @@
   { "question": "did any job fial today", "expect": "job_health", "scope": "operator", "typo": true },
   { "question": "show the dead leters", "expect": "dead_letters", "scope": "operator", "typo": true },
   { "question": "are the partner sytems up", "expect": "integrations", "scope": "operator", "typo": true },
-  { "question": "has my last order shipped?", "expect": "order_status", "scope": "operator" },
   { "question": "Did any background job fail today?", "expect": "unsure", "scope": "member" },
   { "question": "Show the dead letters", "expect": "unsure", "scope": "member" },
   { "question": "What is the error rate?", "expect": "unsure", "scope": "member" },

@@ -16,7 +16,7 @@ namespace AiFramework.Infrastructure.Tests.Assistant.Quick;
 /// </summary>
 public sealed class QuickEvaluationTests(ITestOutputHelper output) : IDisposable
 {
-    // Measured 2026-10-13 with Threshold 0.80 Margin 0.04: instant 0.945 (69/73), typos 1.00 (10/10).
+    // Measured 2026-10-13 with Threshold 0.80 Margin 0.04: instant 0.944 (68/72), typos 1.00 (10/10).
     // Each floor is the measured rate minus 0.05, rounded down to two places.
     private const double InstantFloor = 0.89;
     private const double TypoFloor = 0.95;
