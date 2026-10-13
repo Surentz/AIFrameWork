@@ -54,19 +54,44 @@ internal static class AssistantTurnCodec
         return new UserQuestionTurn(question.Text, question.AskedAt);
     }
 
+    // JSON fills a missing member with null whatever the record declares, so a payload written by an
+    // older shape of QuickAnswer would decode "successfully" and fail later, wherever a non-nullable
+    // member is first read. Every member the records declare non-nullable is checked here instead.
     private static QuickAnswerTurn DecodeQuick(AssistantTurnRow row)
     {
         var stored = Deserialize<StoredQuickAnswer>(row);
-        return new QuickAnswerTurn(
-            stored.Answer ?? throw Incomplete(row), stored.Replay ?? throw Incomplete(row));
+        if (stored.Answer is not { } answer || stored.Replay is null || !IsComplete(answer))
+        {
+            throw Incomplete(row);
+        }
+
+        return new QuickAnswerTurn(answer, stored.Replay);
     }
 
     private static SuggestionsTurn DecodeSuggestions(AssistantTurnRow row)
     {
         var stored = Deserialize<StoredSuggestions>(row);
-        return new SuggestionsTurn(
-            stored.Suggestions ?? throw Incomplete(row), stored.Replay ?? throw Incomplete(row));
+        if (stored.Suggestions is not { } suggestions || stored.Replay is null || !IsComplete(suggestions))
+        {
+            throw Incomplete(row);
+        }
+
+        return new SuggestionsTurn(suggestions, stored.Replay);
     }
+
+    private static bool IsComplete(QuickAnswer answer) =>
+        Enum.IsDefined(answer.Kind)
+        && answer.Text is not null
+        && answer.Facts is not null
+        && answer.Facts.All(f => f is { Label: not null, Value: not null })
+        && (answer.Table is null || (answer.Table.Columns is { } columns && AllPresent(columns)
+            && answer.Table.Rows is { } rows && rows.All(r => r is not null && AllPresent(r))))
+        && (answer.Link is null || answer.Link is { Label: not null, To: not null });
+
+    private static bool IsComplete(QuickSuggestions suggestions) =>
+        suggestions.Text is not null && suggestions.Options is { } options && AllPresent(options);
+
+    private static bool AllPresent(IReadOnlyList<string> values) => values.All(v => v is not null);
 
     private static InvalidOperationException Incomplete(AssistantTurnRow row) =>
         new($"Turn {row.Id} is missing a stored field.");

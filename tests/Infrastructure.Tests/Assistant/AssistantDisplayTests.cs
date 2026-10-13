@@ -39,6 +39,8 @@ public sealed class AssistantDisplayTests
         var brokenSuggestions = Row(conversation, 2, AssistantTurnCodec.Suggested, "null");
         var emptyQuick = Row(conversation, 4, AssistantTurnCodec.Quick, "{}");
         var replayOnly = Row(conversation, 5, AssistantTurnCodec.Suggested, "{\"replay\":\"x\"}");
+        var emptyAnswer = Row(conversation, 6, AssistantTurnCodec.Quick, "{\"answer\":{},\"replay\":\"x\"}");
+        var emptySuggestions = Row(conversation, 7, AssistantTurnCodec.Suggested, "{\"suggestions\":{},\"replay\":\"x\"}");
         var rows = new[]
         {
             AssistantTurnCodec.Encode(conversation, 0, new UserQuestionTurn("Has it shipped?", Now), Now),
@@ -46,6 +48,8 @@ public sealed class AssistantDisplayTests
             brokenSuggestions,
             emptyQuick,
             replayOnly,
+            emptyAnswer,
+            emptySuggestions,
             AssistantTurnCodec.Encode(conversation, 3, new QuickAnswerTurn(new QuickAnswer(QuickAnswerKind.Instant, null, "Fine.", [], null, null, null), "Fine."), Now),
         };
 

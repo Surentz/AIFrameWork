@@ -47,6 +47,20 @@ public sealed class AssistantTurnCodecTests
     [InlineData(AssistantTurnCodec.Quick, "{\"replay\":\"x\"}")]
     [InlineData(AssistantTurnCodec.Suggested, "{}")]
     [InlineData(AssistantTurnCodec.Suggested, "{\"suggestions\":{\"text\":\"t\",\"options\":[]}}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":0,\"text\":\"t\"},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":0,\"facts\":[]},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":9,\"text\":\"t\",\"facts\":[]},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":0,\"text\":\"t\",\"facts\":[{}]},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":0,\"text\":\"t\",\"facts\":[null]},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":0,\"text\":\"t\",\"facts\":[],\"link\":{}},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":0,\"text\":\"t\",\"facts\":[],\"table\":{}},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":0,\"text\":\"t\",\"facts\":[],\"table\":{\"columns\":[\"a\"],\"rows\":[null]}},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Quick, "{\"answer\":{\"kind\":0,\"text\":\"t\",\"facts\":[],\"table\":{\"columns\":[\"a\"],\"rows\":[[null]]}},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Suggested, "{\"suggestions\":{},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Suggested, "{\"suggestions\":{\"text\":\"t\"},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Suggested, "{\"suggestions\":{\"options\":[]},\"replay\":\"x\"}")]
+    [InlineData(AssistantTurnCodec.Suggested, "{\"suggestions\":{\"text\":\"t\",\"options\":[null]},\"replay\":\"x\"}")]
     public void Decode_AQuickRowMissingAField_ThrowsInvalidOperation(string kind, string payload)
     {
         var row = new AssistantTurnRow
@@ -61,6 +75,6 @@ public sealed class AssistantTurnCodecTests
 
         var act = () => AssistantTurnCodec.Decode(row);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage($"*{row.Id}*");
     }
 }
