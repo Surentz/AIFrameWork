@@ -235,7 +235,8 @@ builder.Services.AddSingleton(new AssistantAvailability(
 
 // Instant answers (ADR 0036): where the model is, how sure the router must be, and the index built
 // while this host starts. HERE and not in AddInfrastructure: only the API answers questions, and the
-// worker must never load the model. QuickRouting replaces AddInfrastructure's default (last wins).
+// worker must never load the model. QuickRouting wins over AddInfrastructure's default because it is
+// registered first: AddInfrastructure, called below, only TryAdds QuickRouting.Default.
 var quickSection = assistantSection.GetSection("Quick");
 builder.Services.AddOptions<QuickModelOptions>().Bind(quickSection);
 builder.Services.AddSingleton(new QuickRouting(

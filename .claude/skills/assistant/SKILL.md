@@ -115,9 +115,10 @@ stored turns without ever rewriting them.
 
 ## Spend
 
-The Console workspace's spend limit is the hard cap. In the app: 20 questions per **user**
-per hour (`RateLimiting__Assistant__PermitLimit`), 8 tool rounds per question, 20 questions per
-conversation. Tokens and tool calls are metered as `aiframework.assistant.tokens{kind}` and
+The Console workspace's spend limit is the hard cap. In the app: 20 AI questions per **user**
+per hour (`RateLimiting__Assistant__PermitLimit`), 8 tool rounds per question, and 50 questions
+per conversation in total, of which at most 20 go to the AI (`AssistantLimits`; instant answers
+have their own 120 an hour, `RateLimiting__AssistantQuick__PermitLimit`). Tokens and tool calls are metered as `aiframework.assistant.tokens{kind}` and
 `aiframework.assistant.tool_calls{tool}`.
 
 ## Instant answers (ADR 0036)
