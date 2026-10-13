@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using AiFramework.Domain.Users;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -127,9 +129,16 @@ public sealed class AssistantQuickEndpointTests(ApiFactory factory) : IAsyncLife
 
         var response = await client.PostAsJsonAsync("/api/assistant/quick", new { Question = "Did any background job fail today?" });
 
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadAsStringAsync();
         body.Should().NotContain("/monitoring");
         body.Should().NotContain("background job failed");
+        var reply = (await EventsAsync(response))[0];
+        reply.GetProperty("type").GetString().Should().BeOneOf("answer", "suggestions");
+        var options = reply.TryGetProperty("suggestions", out var suggestions)
+            ? suggestions.GetProperty("options").EnumerateArray().Select(o => o.GetString()).ToList()
+            : [];
+        options.Should().NotIntersectWith(QuickIntents.All.Where(i => i.Scope == ToolScope.Operator).Select(i => i.CanonicalQuestion));
     }
 
     [Fact]
