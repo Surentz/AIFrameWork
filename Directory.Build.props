@@ -33,7 +33,7 @@
        can break a build on code nobody touched. See spec section 6.2 and D8. -->
   <ItemGroup>
     <PackageReference Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" PrivateAssets="all" />
-    <PackageReference Include="Meziantou.Analyzer" Version="3.0.294" PrivateAssets="all" />
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.302" PrivateAssets="all" />
     <PackageReference Include="AsyncFixer" Version="2.1.0" PrivateAssets="all" />
   </ItemGroup>
 
