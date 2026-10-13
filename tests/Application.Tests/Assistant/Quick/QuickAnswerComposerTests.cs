@@ -252,6 +252,57 @@ public sealed class QuickAnswerComposerTests
     }
 
     [Fact]
+    public async Task SignIns_GivesCountsOnly_NeverALockedOutUsername()
+    {
+        _queries.SendAsync(Arg.Any<GetSignInHealth>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new SignInHealthView(
+                40, 3, 2, 1, Placed, new ActiveUsersView(5, TimeSpan.FromMinutes(15)),
+                [new LockedOutUserView(Guid.NewGuid(), "jens.hansen", Shipped)])));
+
+        var answer = (QuickAnswer)await ComposeAsync(QuickIntents.SignIns, "Any lockouts?");
+
+        answer.Facts.Should().Contain(new QuickFact("Locked out now", "1"));
+        Everything(answer).Should().NotContain("jens.hansen");
+    }
+
+    [Fact]
+    public async Task DeadLetters_NeverShowTheExceptionMessage()
+    {
+        var letter = new DeadLetterView(
+            Guid.NewGuid(), "SendOrderConfirmation", "SmtpException", "Mailbox jens.hansen@example.com is full", Placed, null, Replayable: true);
+        _queries.SendAsync(Arg.Any<GetDeadLetters>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new DeadLetterPage([letter], 1, 1)));
+
+        var answer = (QuickAnswer)await ComposeAsync(QuickIntents.DeadLetters, "Anything dead-lettered?");
+
+        answer.Table!.Rows.Should().ContainSingle().Which.Should().Contain("SmtpException");
+        Everything(answer).Should().NotContain("jens.hansen");
+    }
+
+    [Fact]
+    public async Task Integrations_NeverShowAHealthCheckDescription()
+    {
+        var system = new ExternalSystemRowView(
+            "StatBank", ExternalSystemState.Unhealthy, "Token request as client jens.hansen was refused", Placed, Stale: false, null, false, 10, 2, 0, 12, 80);
+        _queries.SendAsync(Arg.Any<GetExternalSystemStatus>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new ExternalSystemsView(Placed, [system])));
+
+        var answer = (QuickAnswer)await ComposeAsync(QuickIntents.Integrations, "Are the partner systems up?");
+
+        answer.Text.Should().Be("1 of 1 external systems need attention.");
+        Everything(answer).Should().NotContain("jens.hansen");
+    }
+
+    // Every string the answer carries, and the replay text Claude would later be sent.
+    private static string Everything(QuickAnswer answer) => string.Join(
+        '\n',
+        new[] { answer.Title, answer.Text, answer.AnsweredAs, answer.Link?.Label, answer.Link?.To, QuickReplay.For(answer) }
+            .Concat(answer.Facts.SelectMany(f => new[] { f.Label, f.Value }))
+            .Concat(answer.Table?.Columns ?? [])
+            .Concat(answer.Table?.Rows.SelectMany(r => r) ?? [])
+            .OfType<string>());
+
+    [Fact]
     public async Task Traffic_FormatsTheErrorRateAsAPercentage()
     {
         var overall = new TrafficRowView(default, "all", 600, 6, 0, null, 20, 80, 120);
