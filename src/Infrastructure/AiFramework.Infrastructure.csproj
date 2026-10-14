@@ -117,7 +117,7 @@
       only one Infrastructure.csproj's own graph sees.
     -->
     <PackageReference Include="OpenTelemetry.Api" Version="1.19.1" />
-    <PackageReference Include="PDFsharp-MigraDoc" Version="6.2.4" />
+    <PackageReference Include="PDFsharp-MigraDoc" Version="6.5.0" />
     <PackageReference Include="WolverineFx" Version="6.46.0" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.46.0" />
     <PackageReference Include="WolverineFx.Postgresql" Version="6.46.0" />
