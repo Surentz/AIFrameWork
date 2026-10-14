@@ -56,7 +56,11 @@ now follows explicit clicks.
 
 Costs:
 
-- A 34 MB model in the API image and about 60 MB resident per pod.
+- A 34 MB model and a 29 MB linux-x64 ONNX native library in the API image (the native library
+  also reaches the worker, which references Infrastructure but never loads it), and about 60 MB
+  resident per pod. Both images are published for `linux-x64` only: the package carries native
+  libraries for every platform, and publishing without a runtime identifier shipped about 200 MB of
+  them (API publish 345 MB to 139 MB, worker 307 MB to 102 MB).
 - Catalogue curation is manual: an intent needs at least 10 phrases, a composer case and evaluation
   questions; a help article is a Markdown file.
 - A question outside the catalogue needs a click to reach the AI.
