@@ -21,8 +21,6 @@ namespace Internal.Generated.WolverineHandlers
             _serviceScopeFactory = serviceScopeFactory;
         }
 
-
-
         public override async System.Threading.Tasks.Task HandleAsync(Wolverine.Runtime.MessageContext context, System.Threading.CancellationToken cancellation)
         {
             await using var serviceScope = _serviceScopeFactory.CreateAsyncScope();
@@ -61,18 +59,14 @@ namespace Internal.Generated.WolverineHandlers
 
                 await AiFramework.Infrastructure.Jobs.JobRunMiddleware.AfterAsync(context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
             }
-
             catch (System.Exception exception)
             {
                 await AiFramework.Infrastructure.Jobs.JobRunMiddleware.OnExceptionAsync(exception, context.Envelope, jobRunRecorder, cancellation).ConfigureAwait(false);
             }
-
         }
-
     }
 
     // END: BuildOrderExportHandler38543851
     
     
 }
-

@@ -7,19 +7,15 @@ namespace Internal.Generated.WolverineHandlers
     [global::System.CodeDom.Compiler.GeneratedCode("JasperFx", "1.0.0")]
     public sealed class GeneratedHandlerRegistry : Wolverine.Runtime.Handlers.HandlerRegistry
     {
-
-
         public override System.Type[] HandlerTypes()
         {
             return new System.Type[] { typeof(AiFramework.Application.Assistant.PruneAssistantConversationsHandler), typeof(AiFramework.Application.Maintenance.PruneProcessedOutboxHandler), typeof(AiFramework.Application.Monitoring.PruneAdminActionsHandler), typeof(AiFramework.Application.Monitoring.PruneJobRunsHandler), typeof(AiFramework.Application.Monitoring.PruneSignInEventsHandler), typeof(AiFramework.Application.Monitoring.PruneTrafficBucketsHandler), typeof(AiFramework.Application.Orders.BuildOrderExportHandler), typeof(AiFramework.Application.Orders.PruneOrderExportsHandler), typeof(AiFramework.Application.Orders.SendOrderConfirmationHandler), typeof(AiFramework.Infrastructure.EventPath.OrderPlacedNotificationHandler), typeof(AiFramework.Infrastructure.Integration.ShipmentConfirmedHandler) };
         }
 
-
         public override System.Type[] MessageTypes()
         {
             return System.Array.Empty<System.Type>();
         }
-
     }
 
     // END: GeneratedHandlerRegistry
@@ -30,8 +26,6 @@ namespace Internal.Generated.WolverineHandlers
     [global::System.CodeDom.Compiler.GeneratedCode("JasperFx", "1.0.0")]
     public sealed class AotRoots
     {
-
-
         [global::System.Runtime.CompilerServices.ModuleInitializer]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Internal.Generated.WolverineHandlers.GeneratedHandlerRegistry))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Internal.Generated.WolverineHandlers.BuildOrderExportHandler38543851))]
@@ -57,47 +51,23 @@ namespace Internal.Generated.WolverineHandlers
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Infrastructure.EventPath.OrderPlacedNotificationHandler))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Infrastructure.Integration.ShipmentConfirmedHandler))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Assistant.PruneAssistantConversations))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Assistant.PruneAssistantConversations>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Assistant.PruneAssistantConversations>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.IntegrationEvents.ShipmentConfirmedV1>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Maintenance.PruneProcessedOutbox))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Maintenance.PruneProcessedOutbox>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Maintenance.PruneProcessedOutbox>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Monitoring.PruneAdminActions))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Monitoring.PruneAdminActions>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Monitoring.PruneAdminActions>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Monitoring.PruneJobRuns))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Monitoring.PruneJobRuns>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Monitoring.PruneJobRuns>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Monitoring.PruneSignInEvents))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Monitoring.PruneSignInEvents>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Monitoring.PruneSignInEvents>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Monitoring.PruneTrafficBuckets))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Monitoring.PruneTrafficBuckets>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Monitoring.PruneTrafficBuckets>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Orders.BuildOrderExport))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Orders.BuildOrderExport>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Orders.BuildOrderExport>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Orders.PruneOrderExports))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Orders.PruneOrderExports>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Orders.PruneOrderExports>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Application.Orders.SendOrderConfirmation))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Application.Orders.SendOrderConfirmation>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Application.Orders.SendOrderConfirmation>))]
         [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::AiFramework.Infrastructure.EventPath.OrderPlacedNotification))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.MessageRouter<AiFramework.Infrastructure.EventPath.OrderPlacedNotification>))]
-        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.All, typeof(global::Wolverine.Runtime.Routing.EmptyMessageRouter<AiFramework.Infrastructure.EventPath.OrderPlacedNotification>))]
         public static void Pin()
         {
             // Intentionally empty. The [DynamicDependency] attributes above are the payload: they root the generated types for Native AOT, and [ModuleInitializer] guarantees this method is itself an ILC root.
         }
-
     }
 
     // END: AotRoots
     
     
 }
-

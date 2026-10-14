@@ -15,8 +15,6 @@ namespace Internal.Generated.WolverineHandlers
             _serviceScopeFactory = serviceScopeFactory;
         }
 
-
-
         public override async System.Threading.Tasks.Task HandleAsync(Wolverine.Runtime.MessageContext context, System.Threading.CancellationToken cancellation)
         {
             await using var serviceScope = _serviceScopeFactory.CreateAsyncScope();
@@ -36,13 +34,10 @@ namespace Internal.Generated.WolverineHandlers
             
             // The actual message execution
             await shipmentConfirmedHandler.Handle(shipmentConfirmedV1, cancellation).ConfigureAwait(false);
-
         }
-
     }
 
     // END: ShipmentConfirmedV1Handler1858014267
     
     
 }
-
