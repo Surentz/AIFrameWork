@@ -9,8 +9,12 @@ import * as assistant from '../../screens/assistant.ts';
  */
 // @local-only: the fake runs only on the managed stack.
 test.describe('assistant', { tag: '@local-only' }, () => {
-  test('a member asks from the header and reopens the conversation later', async ({ signedInPage }) => {
-    const text = `Write me a poem about the rain ${String(Date.now())}`;
+  test('a member asks from the header and reopens the conversation later', async ({
+    signedInPage,
+  }) => {
+    // Exactly the wording the evaluation set holds as unsure: anything appended could route it to an
+    // instant answer, and then Ask the AI is never offered.
+    const text = 'Write me a poem about the rain';
 
     await test.step('ask from the header icon', async () => {
       await signedInPage.goto('/orders');
@@ -25,7 +29,11 @@ test.describe('assistant', { tag: '@local-only' }, () => {
     await test.step('find it in the sidebar after a reload', async () => {
       await signedInPage.reload();
 
-      await expect(assistant.sidebarEntry(signedInPage, text)).toBeVisible();
+      // The worker user may hold older conversations with this title; the open one is the newest.
+      await expect(assistant.sidebarEntry(signedInPage, text)).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
       await expect(assistant.conversation(signedInPage)).toContainText('You have no open orders.');
     });
   });
