@@ -1,0 +1,78 @@
+# Merges green Dependabot PRs overnight, one per run, so a week's updates land without anyone
+# clicking merge. The rules - what may merge, what waits, what is always left for a human - live in
+# .github/scripts/dependabot-merge.js and its tests.
+#
+# Each run merges at most the oldest Dependabot PR whose required checks all passed on its current
+# head, which is up to date with main, mergeable, and has no semver-major update. It then updates
+# the branch of the next green PR with main, so that PR's CI reruns before the next run. Five runs
+# a night drain a backlog of five.
+#
+# The merge needs a GitHub App, because main's ruleset requires two approving reviews and only a
+# bypass actor can merge without them. Merges made by an app also trigger main's own CI, which
+# merges made with GITHUB_TOKEN would not. One-time setup:
+#
+#   1. Create a private GitHub App (Settings > Developer settings > GitHub Apps > New): no webhook;
+#      repository permissions Contents: read and write, Pull requests: read and write, Checks:
+#      read, Workflows: read and write (Dependabot updates .github/workflows itself, and updating a
+#      branch after main's workflows changed writes them too). Generate a private key.
+#   2. Install the app on this repository only.
+#   3. Save its Client ID as the repository variable MERGE_APP_CLIENT_ID and the private key as the
+#      repository secret MERGE_APP_PRIVATE_KEY.
+#   4. Add the app to the `main` ruleset's bypass list in "Pull requests only" mode, so it can
+#      merge a pull request without the reviews but can never push to main directly.
+#
+# Until step 3 is done the job is skipped. Run it by hand from the Actions tab to see what it
+# would do: manual runs default to a dry run that merges nothing.
+name: Dependabot merge
+
+on:
+  # Every 2 hours from 22:00 to 06:00 Copenhagen summer time (20:00-04:00 UTC); an hour earlier in
+  # winter. Cron is UTC and does not follow daylight saving.
+  schedule:
+    - cron: '0 20,22,0,2,4 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report what would be merged and updated, without doing it
+        type: boolean
+        default: true
+
+# Never two at once: a second run would see the first one's merge half-done.
+concurrency:
+  group: dependabot-merge
+  cancel-in-progress: false
+
+# GITHUB_TOKEN only reads the script; every write goes through the app's token.
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    name: merge green Dependabot PRs
+    runs-on: ubuntu-latest
+    if: vars.MERGE_APP_CLIENT_ID != ''
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MERGE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-checks: read
+          permission-workflows: write
+
+      - uses: actions/github-script@v9
+        env:
+          # Scheduled runs merge for real; manual runs only when dry_run is unticked.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        with:
+          github-token: ${{ steps.app.outputs.token }}
+          script: |
+            const { run } = require('./.github/scripts/dependabot-merge.js');
+            await run({ github, context, core, dryRun: process.env.DRY_RUN === 'true' });

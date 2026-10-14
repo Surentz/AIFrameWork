@@ -285,8 +285,17 @@ Two things fail silently:
 - **Renaming an artifact** silently turns its suite into "not run": `collect()` in the script
   finds each one by its folder name.
 
-`test report` is the only job with write permissions (`pull-requests: write`). That raises the
-read-only token Dependabot's PRs get by default. A PR from a fork stays read-only whatever the
-workflow asks for, so it gets no comment, but the report is still in the job summary.
+`test report` is the only job in `ci.yml` with write permissions (`pull-requests: write`). That
+raises the read-only token Dependabot's PRs get by default. A PR from a fork stays read-only
+whatever the workflow asks for, so it gets no comment, but the report is still in the job summary.
+
+**Dependabot PRs merge themselves overnight** (`.github/workflows/dependabot-merge.yml`, rules in
+`.github/scripts/dependabot-merge.js`): five runs a night, each merging at most the oldest
+Dependabot PR whose required checks all passed on an up-to-date branch, then updating the next
+green PR's branch so its CI reruns. A failed check, a semver-major update, a conflict or a draft
+is never merged. That is how the WolverineFx and API-contract bumps wait for a human. It merges
+through a GitHub App on the ruleset's bypass list ("Pull requests only"), whose setup is in the
+workflow's header. Until that app is configured the job is skipped. Never widen it beyond
+Dependabot's PRs: the bypass skips the two required reviews.
 
 Design rationale for this setup: `docs/superpowers/specs/2026-08-27-claude-framework-design.md`

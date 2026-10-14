@@ -4,6 +4,8 @@
 #
 # Grouped so a week's updates arrive as a handful of PRs, not one per package. Each PR runs the
 # full CI like any other and must pass the `main` ruleset's checks before it can merge.
+# .github/workflows/dependabot-merge.yml merges the green ones overnight, one at a time; a
+# semver-major update or a red check always waits for a human.
 #
 # Two kinds of bump go red in CI by design, and Dependabot cannot fix either itself - check out
 # its branch, use the `regenerate` skill, and push the result onto the PR:
