@@ -111,7 +111,7 @@ export function aPopulation(areaCode: string): Population {
 export const handlers = [
   http.post('/api/auth/login', () => HttpResponse.json(aSession)),
   // Off by default: a test that wants the assistant on says so with server.use.
-  http.get('/api/assistant', () => HttpResponse.json({ enabled: false })),
+  http.get('/api/assistant', () => HttpResponse.json({ quick: false, ai: false })),
   http.get('/api/assistant/conversations', () => HttpResponse.json([])),
   http.get('/api/monitoring/jobs/health', () =>
     HttpResponse.json({

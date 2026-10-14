@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { askAssistant } from '../../api/assistant';
+import { askAssistant, askQuick } from '../../api/assistant';
 import { conversationReducer, initialConversation } from './conversation';
 import type { ConversationState } from './conversation';
+import type { AskMode } from './types';
 
 /** How one question ended. Only `answered` was saved on the server. */
 export type AskOutcome = 'answered' | 'failed' | 'stopped';
@@ -14,7 +15,7 @@ export interface ConversationOptions {
 }
 
 export interface AssistantConversation extends ConversationState {
-  readonly ask: (question: string) => Promise<AskOutcome>;
+  readonly ask: (question: string, mode?: AskMode) => Promise<AskOutcome>;
   readonly stop: () => void;
 }
 
@@ -29,13 +30,13 @@ export function useAssistantConversation(options: ConversationOptions = {}): Ass
   const inFlight = useRef<AbortController | null>(null);
 
   const ask = useCallback(
-    (question: string): Promise<AskOutcome> => {
+    (question: string, mode: AskMode = 'ai'): Promise<AskOutcome> => {
       const controller = new AbortController();
       inFlight.current = controller;
-      dispatch({ type: 'asked', question });
+      dispatch({ type: 'asked', question, mode });
 
       let outcome: AskOutcome = 'answered';
-      return askAssistant(
+      return (mode === 'quick' ? askQuick : askAssistant)(
         { conversationId: state.conversationId ?? null, question },
         {
           signal: controller.signal,

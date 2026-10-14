@@ -148,6 +148,9 @@ export default defineConfig({
               // 20 questions per administrator per hour otherwise, and every assistant spec asks as
               // the one operator: a repeat_each run above 20 would fail on a 429 that reads as a flake.
               RateLimiting__Assistant__PermitLimit: '1000000',
+              // Instant answers (ADR 0036), from the model the setup fetched.
+              Assistant__Quick__Enabled: 'true',
+              RateLimiting__AssistantQuick__PermitLimit: '1000000',
             },
           },
           {

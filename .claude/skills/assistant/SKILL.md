@@ -115,7 +115,33 @@ stored turns without ever rewriting them.
 
 ## Spend
 
-The Console workspace's spend limit is the hard cap. In the app: 20 questions per **user**
-per hour (`RateLimiting__Assistant__PermitLimit`), 8 tool rounds per question, 20 questions per
-conversation. Tokens and tool calls are metered as `aiframework.assistant.tokens{kind}` and
+The Console workspace's spend limit is the hard cap. In the app: 20 AI questions per **user**
+per hour (`RateLimiting__Assistant__PermitLimit`), 8 tool rounds per question, and 50 questions
+per conversation in total, of which at most 20 go to the AI (`AssistantLimits`; instant answers
+have their own 120 an hour, `RateLimiting__AssistantQuick__PermitLimit`). Tokens and tool calls are metered as `aiframework.assistant.tokens{kind}` and
 `aiframework.assistant.tool_calls{tool}`.
+
+## Instant answers (ADR 0036)
+
+Most member questions are answered without Claude. The slice lives in
+`src/Application/Assistant/Quick` (router, index, composer, replay text) and
+`src/Infrastructure/Assistant/Quick` (ONNX embedder, catalog loader, registration).
+`POST /api/assistant/quick` serves it (120 an hour); the AI stays on `/messages` (20 an hour).
+
+- **Adding an intent.** A `QuickIntents` entry, at least 10 phrases in `Catalog/en/phrases.json`
+  including its canonical question, a case in `QuickAnswerComposer`, and evaluation questions in
+  `tests/Infrastructure.Tests/Assistant/Quick/evaluation.en.json`. An in-scope evaluation question
+  is never the same wording as a phrase, or the gate tests the catalog against itself. The only
+  deliberate repeats are operator phrases asked as a member, labelled `unsure`: they must not answer.
+- **Adding a help article.** A Markdown file under `Catalog/en/help/`: front matter (title, link),
+  then `##` sections, plain text, using the real button labels. Each section is indexed separately
+  and a help answer quotes the matched section verbatim.
+- **The model.** `scripts/fetch-assistant-model.ps1` downloads and hash-checks bge-small-en-v1.5 into
+  `models/assistant` (git-ignored); the build copies it as `assistant-model/`. A test that needs it
+  fails when it is missing.
+- **Tuning.** `QuickRouting` (Threshold 0.80, Margin 0.04, SuggestionFloor 0.55) is overridable under
+  `Assistant:Quick`. `QuickEvaluationTests` holds the floors; re-measure before changing either.
+- **Only the API host builds the index** (`AddQuickAnswerIndexing`, called from `Program.cs`). The
+  worker must never load the model.
+- **Transcripts.** Quick replies are `QuickAnswerTurn` and `SuggestionsTurn`; their replay text is
+  fixed at write time and sent to Claude verbatim. Never re-render one from a template.

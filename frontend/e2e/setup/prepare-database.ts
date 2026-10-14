@@ -13,14 +13,33 @@
 //
 // Teardown is teardown-database.ts, which run.ts runs after Playwright exits - not Playwright's
 // globalTeardown, which runs before the webServers stop.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { E2E_ASSISTANT_KEY_FILE, E2E_CERT_DIR, E2E_CONNECTION_STRING } from '../support/env.ts';
 
+// PowerShell 7 (pwsh) where it exists - CI, Linux, macOS - and Windows PowerShell 5.1 on a Windows
+// machine without it. The fetch script runs under both.
+function fetchAssistantModel(): void {
+  const script = '../scripts/fetch-assistant-model.ps1';
+  const hasPwsh = spawnSync('pwsh', ['-NoProfile', '-Command', 'exit 0']).status === 0;
+  if (hasPwsh) {
+    execFileSync('pwsh', ['-NoProfile', '-File', script], { stdio: 'inherit' });
+  } else if (process.platform === 'win32') {
+    execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], {
+      stdio: 'inherit',
+    });
+  } else {
+    throw new Error('PowerShell 7 (pwsh) is required to fetch the assistant model.');
+  }
+}
+
 // dotnet-ef is a local tool (.config/dotnet-tools.json); without a restore this only works
 // by accident, on a machine that also happens to have it installed globally.
 execFileSync('dotnet', ['tool', 'restore'], { stdio: 'inherit' });
+// The assistant's embedding model (ADR 0036): the API build below copies it beside its binaries,
+// and instant answers are on in the stack Playwright starts.
+fetchAssistantModel();
 
 execFileSync('docker', ['compose', '-f', '../docker-compose.e2e.yml', 'up', '-d', '--wait'], {
   stdio: 'inherit',

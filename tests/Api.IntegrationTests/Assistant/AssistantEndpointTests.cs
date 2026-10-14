@@ -82,7 +82,8 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
 
         var status = await client.GetFromJsonAsync<JsonElement>("/api/assistant");
 
-        status.GetProperty("enabled").GetBoolean().Should().BeFalse();
+        status.GetProperty("quick").GetBoolean().Should().BeFalse();
+        status.GetProperty("ai").GetBoolean().Should().BeFalse();
     }
 
     [Fact]
@@ -134,7 +135,7 @@ public sealed class AssistantEndpointTests(ApiFactory factory) : IAsyncLifetime
 
         var status = await client.GetFromJsonAsync<JsonElement>("/api/assistant");
 
-        status.GetProperty("enabled").GetBoolean().Should().BeTrue();
+        status.GetProperty("ai").GetBoolean().Should().BeTrue();
     }
 
     [Fact]

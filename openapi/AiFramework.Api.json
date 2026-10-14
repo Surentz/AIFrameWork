@@ -3302,7 +3302,7 @@
         "tags": [
           "Assistant"
         ],
-        "summary": "Whether the assistant is switched on, so the UI can hide itself.",
+        "summary": "Which halves of the assistant work, so the UI offers only those. Instant answers count only once\ntheir index is built: until then (or if it never builds) questions go to the AI.",
         "responses": {
           "200": {
             "description": "OK",
@@ -3334,6 +3334,146 @@
         ],
         "summary": "Asks one question. The response is text/event-stream: text and tool events while the answer\nis written, then done or error. A failure before the first event is an ordinary problem.",
         "description": "done is written only after the command returned, which is after the unit of work committed:\ndone means saved.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskAssistantRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskAssistantRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskAssistantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantEventResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assistant/quick": {
+      "post": {
+        "tags": [
+          "Assistant"
+        ],
+        "summary": "Asks one question of the instant path (ADR 0036). text/event-stream: answer or suggestions,\nthen done; or error. No model is called. A failure before the first event is a problem: a 503\nwhen the instant-answer index is not built, and nothing is saved.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3937,6 +4077,61 @@
         },
         "description": "A question. No length annotation: the 2,000-character rule belongs to AskAssistantValidator,\nand duplicating it here would pre-empt that validator with a differently shaped 400."
       },
+      "AssistantAnswerResponse": {
+        "required": [
+          "kind",
+          "text",
+          "facts"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/QuickAnswerKind"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "answeredAs": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantFactResponse"
+            }
+          },
+          "table": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AssistantTableResponse"
+              }
+            ]
+          },
+          "link": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AssistantLinkResponse"
+              }
+            ]
+          }
+        },
+        "description": "An instant or help answer, already formatted. Rendered as a card, never as Markdown."
+      },
       "AssistantConversationResponse": {
         "required": [
           "id",
@@ -4028,9 +4223,60 @@
                 "$ref": "#/components/schemas/ProblemDetails"
               }
             ]
+          },
+          "answer": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AssistantAnswerResponse"
+              }
+            ]
+          },
+          "suggestions": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AssistantSuggestionsResponse"
+              }
+            ]
           }
         },
-        "description": "One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of\nthe answer), tool (a tool started), done (saved; carries the conversation id), error (carries a\nProblemDetails; nothing from this question was saved)."
+        "description": "One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of\nthe answer), tool (a tool started), answer (an instant or help answer, whole),\nsuggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a\nProblemDetails; nothing from this question was saved)."
+      },
+      "AssistantFactResponse": {
+        "required": [
+          "label",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "AssistantLinkResponse": {
+        "required": [
+          "label",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "description": "An in-app path. The page renders it as a link only if it matches its allow-list."
       },
       "AssistantMessageResponse": {
         "required": [
@@ -4051,6 +4297,28 @@
             "items": {
               "type": "string"
             }
+          },
+          "answer": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "A quick answer's card, when this message is one.",
+                "$ref": "#/components/schemas/AssistantAnswerResponse"
+              }
+            ]
+          },
+          "suggestions": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "The suggestions, when this message is a not-sure reply.",
+                "$ref": "#/components/schemas/AssistantSuggestionsResponse"
+              }
+            ]
           }
         },
         "description": "One message as the page shows it. Role is user or assistant; Tools are the tool names the answer used."
@@ -4065,12 +4333,64 @@
       },
       "AssistantStatusResponse": {
         "required": [
-          "enabled"
+          "quick",
+          "ai"
         ],
         "type": "object",
         "properties": {
-          "enabled": {
+          "quick": {
             "type": "boolean"
+          },
+          "ai": {
+            "type": "boolean"
+          }
+        },
+        "description": "Which halves of the assistant are on: instant answers, and the AI."
+      },
+      "AssistantSuggestionsResponse": {
+        "required": [
+          "text",
+          "options",
+          "aiAvailable"
+        ],
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aiAvailable": {
+            "type": "boolean"
+          }
+        },
+        "description": "What to offer when the router was not sure. AiAvailable says whether Ask the AI may be shown."
+      },
+      "AssistantTableResponse": {
+        "required": [
+          "columns",
+          "rows"
+        ],
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -5286,6 +5606,12 @@
             "format": "date-time"
           }
         }
+      },
+      "QuickAnswerKind": {
+        "enum": [
+          "Instant",
+          "Help"
+        ]
       },
       "RegisterRequest": {
         "required": [

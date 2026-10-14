@@ -63,8 +63,6 @@ public sealed class AskAssistantHandler(
 {
     public const int MaxToolRounds = 8;
 
-    public const int MaxQuestionsPerConversation = 20;
-
     public async Task<Result<AssistantAnswer>> HandleAsync(AskAssistant command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -75,7 +73,8 @@ public sealed class AskAssistantHandler(
         }
 
         var now = clock.UtcNow;
-        var opened = await OpenAsync(command.ConversationId, ownerId, command.Question, now, cancellationToken).ConfigureAwait(false);
+        var opened = await AssistantConversationOpener.OpenAsync(
+            conversations, command.ConversationId, ownerId, command.Question, now, forAi: true, cancellationToken).ConfigureAwait(false);
         if (!opened.IsSuccess)
         {
             return Result.Failure<AssistantAnswer>(opened.Error);
@@ -119,29 +118,6 @@ public sealed class AskAssistantHandler(
     private static Result<AssistantOutcome> Incomplete() =>
         Result.Failure<AssistantOutcome>(new Error(
             ErrorKind.Unavailable, "assistant.incomplete", "The assistant stopped part-way through. Try again."));
-
-    private async Task<Result<AssistantConversation>> OpenAsync(
-        Guid? conversationId, Guid ownerId, string question, DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        if (conversationId is not { } id)
-        {
-            var started = new AssistantConversation(Guid.NewGuid(), ownerId, 0, []);
-            conversations.Start(started.Id, ownerId, AssistantTitle.From(question), now);
-            return Result.Success(started);
-        }
-
-        var existing = await conversations.FindAsync(id, cancellationToken).ConfigureAwait(false);
-        if (existing is null || existing.OwnerId != ownerId)
-        {
-            return Result.Failure<AssistantConversation>(new Error(
-                ErrorKind.NotFound, "assistant.conversation_not_found", "That conversation does not exist or has expired. Start a new one."));
-        }
-
-        return existing.QuestionCount >= MaxQuestionsPerConversation
-            ? Result.Failure<AssistantConversation>(new Error(
-                ErrorKind.Validation, "assistant.conversation_full", $"This conversation has reached {MaxQuestionsPerConversation} questions. Start a new one."))
-            : Result.Success(existing);
-    }
 
     private async Task<Result<AssistantOutcome>> RunAsync(
         IReadOnlyList<AssistantTurn> history, List<AssistantTurn> added, ToolScope scope, CancellationToken cancellationToken)

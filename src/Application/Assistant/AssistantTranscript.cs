@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiFramework.Application.Assistant.Quick;
 
 namespace AiFramework.Application.Assistant;
 
@@ -22,6 +23,16 @@ public sealed record ModelTurn(string Blocks) : AssistantTurn;
 
 /// <summary>The answer to every tool call of the model turn before it, as one user turn.</summary>
 public sealed record ToolResultsTurn(IReadOnlyList<AssistantToolResult> Results) : AssistantTurn;
+
+/// <summary>
+/// An instant or help answer exactly as shown, and <paramref name="Replay"/>, the text Claude is
+/// given for it if the user later asks the AI. Both are fixed when the turn is written: rendering
+/// either again from a template would change history, which Claude rejects (ADR 0033, ADR 0036).
+/// </summary>
+public sealed record QuickAnswerTurn(QuickAnswer Answer, string Replay) : AssistantTurn;
+
+/// <summary>The suggestions offered when the router was not sure, and their fixed replay text.</summary>
+public sealed record SuggestionsTurn(QuickSuggestions Suggestions, string Replay) : AssistantTurn;
 
 public sealed record AssistantToolCall(string Id, string Name, JsonElement Input);
 

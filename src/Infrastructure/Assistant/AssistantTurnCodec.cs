@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 
 namespace AiFramework.Infrastructure.Assistant;
 
@@ -9,6 +10,8 @@ internal static class AssistantTurnCodec
     public const string Question = "question";
     public const string Model = "model";
     public const string ToolResults = "tool_results";
+    public const string Quick = "quick_answer";
+    public const string Suggested = "suggestions";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -19,6 +22,8 @@ internal static class AssistantTurnCodec
             UserQuestionTurn q => (Question, JsonSerializer.Serialize(new StoredQuestion(q.Text, q.AskedAt), Json)),
             ModelTurn m => (Model, m.Blocks),
             ToolResultsTurn r => (ToolResults, JsonSerializer.Serialize(r.Results, Json)),
+            QuickAnswerTurn a => (Quick, JsonSerializer.Serialize(new StoredQuickAnswer(a.Answer, a.Replay), Json)),
+            SuggestionsTurn s => (Suggested, JsonSerializer.Serialize(new StoredSuggestions(s.Suggestions, s.Replay), Json)),
             _ => throw new ArgumentOutOfRangeException(nameof(turn), turn.GetType().Name, "Unknown turn type."),
         };
 
@@ -38,6 +43,8 @@ internal static class AssistantTurnCodec
         Question => DecodeQuestion(row),
         Model => new ModelTurn(row.Payload),
         ToolResults => new ToolResultsTurn(Deserialize<List<AssistantToolResult>>(row)),
+        Quick => DecodeQuick(row),
+        Suggested => DecodeSuggestions(row),
         _ => throw new InvalidOperationException($"Turn {row.Id} has unknown kind '{row.Kind}'."),
     };
 
@@ -47,9 +54,56 @@ internal static class AssistantTurnCodec
         return new UserQuestionTurn(question.Text, question.AskedAt);
     }
 
+    // JSON fills a missing member with null whatever the record declares, so a payload written by an
+    // older shape of QuickAnswer would decode "successfully" and fail later, wherever a non-nullable
+    // member is first read. Every member the records declare non-nullable is checked here instead.
+    private static QuickAnswerTurn DecodeQuick(AssistantTurnRow row)
+    {
+        var stored = Deserialize<StoredQuickAnswer>(row);
+        if (stored.Answer is not { } answer || stored.Replay is null || !IsComplete(answer))
+        {
+            throw Incomplete(row);
+        }
+
+        return new QuickAnswerTurn(answer, stored.Replay);
+    }
+
+    private static SuggestionsTurn DecodeSuggestions(AssistantTurnRow row)
+    {
+        var stored = Deserialize<StoredSuggestions>(row);
+        if (stored.Suggestions is not { } suggestions || stored.Replay is null || !IsComplete(suggestions))
+        {
+            throw Incomplete(row);
+        }
+
+        return new SuggestionsTurn(suggestions, stored.Replay);
+    }
+
+    private static bool IsComplete(QuickAnswer answer) =>
+        Enum.IsDefined(answer.Kind)
+        && answer.Text is not null
+        && answer.Facts is not null
+        && answer.Facts.All(f => f is { Label: not null, Value: not null })
+        && (answer.Table is null || (answer.Table.Columns is { } columns && AllPresent(columns)
+            && answer.Table.Rows is { } rows && rows.All(r => r is not null && AllPresent(r))))
+        && (answer.Link is null || answer.Link is { Label: not null, To: not null });
+
+    private static bool IsComplete(QuickSuggestions suggestions) =>
+        suggestions.Text is not null && suggestions.Options is { } options && AllPresent(options);
+
+    private static bool AllPresent(IReadOnlyList<string> values) => values.All(v => v is not null);
+
+    private static InvalidOperationException Incomplete(AssistantTurnRow row) =>
+        new($"Turn {row.Id} is missing a stored field.");
+
     private static T Deserialize<T>(AssistantTurnRow row) =>
         JsonSerializer.Deserialize<T>(row.Payload, Json)
             ?? throw new InvalidOperationException($"Turn {row.Id} has an empty payload.");
 
     private sealed record StoredQuestion(string Text, DateTimeOffset AskedAt);
+
+    // QuickAnswerKind is stored as its number: append new kinds at the end, never reorder.
+    private sealed record StoredQuickAnswer(QuickAnswer? Answer, string? Replay);
+
+    private sealed record StoredSuggestions(QuickSuggestions? Suggestions, string? Replay);
 }

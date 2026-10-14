@@ -12,11 +12,13 @@ using AiFramework.Api.Notifications;
 using AiFramework.Api.Observability;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using AiFramework.Application.Notifications;
 using AiFramework.Application.Users;
 using AiFramework.Domain.Users;
 using AiFramework.Infrastructure;
 using AiFramework.Infrastructure.Assistant;
+using AiFramework.Infrastructure.Assistant.Quick;
 using AiFramework.Infrastructure.Caching;
 using AiFramework.Infrastructure.EventPath;
 using AiFramework.Infrastructure.ExternalSystems;
@@ -227,8 +229,24 @@ builder.Services.AddOptions<AssistantOptions>()
         "Assistant:ApiKeyFile must name an existing file when Assistant:Enabled is true.")
     .ValidateOnStart();
 builder.Services.AddSingleton(new AssistantAvailability(
-    assistantSection.GetValue<bool>("Enabled"),
-    TimeSpan.FromSeconds(assistantSection.GetValue("HeartbeatSeconds", defaultValue: 15))));
+    AiEnabled: assistantSection.GetValue<bool>("Enabled"),
+    QuickEnabled: assistantSection.GetValue<bool>("Quick:Enabled"),
+    HeartbeatInterval: TimeSpan.FromSeconds(assistantSection.GetValue("HeartbeatSeconds", defaultValue: 15))));
+
+// Instant answers (ADR 0036): where the model is, how sure the router must be, and the index built
+// while this host starts. HERE and not in AddInfrastructure: only the API answers questions, and the
+// worker must never load the model. QuickRouting wins over AddInfrastructure's default because it is
+// registered first: AddInfrastructure, called below, only TryAdds QuickRouting.Default.
+var quickSection = assistantSection.GetSection("Quick");
+builder.Services.AddOptions<QuickModelOptions>().Bind(quickSection);
+builder.Services.AddSingleton(new QuickRouting(
+    quickSection.GetValue("Threshold", QuickRouting.Default.Threshold),
+    quickSection.GetValue("Margin", QuickRouting.Default.Margin),
+    quickSection.GetValue("SuggestionFloor", QuickRouting.Default.SuggestionFloor)));
+if (quickSection.GetValue<bool>("Enabled"))
+{
+    builder.Services.AddQuickAnswerIndexing();
+}
 
 // Volume defence on the credential endpoints, alongside the per-account lockout in
 // SignInHandler. Partitioned by remote address, not by username: the limiter runs before model
@@ -264,6 +282,18 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = assistantPermitLimit,
+                Window = TimeSpan.FromHours(1),
+            }));
+
+    // Instant answers call no model, so this is a volume bound only, and generous. A separate
+    // endpoint and policy because the limiter runs before model binding and cannot read the body.
+    var quickPermitLimit = builder.Configuration.GetValue("RateLimiting:AssistantQuick:PermitLimit", defaultValue: 120);
+    options.AddPolicy(AssistantRateLimiting.QuickPolicyName, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.RequestServices.GetRequiredService<ICurrentUser>().Id?.ToString() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = quickPermitLimit,
                 Window = TimeSpan.FromHours(1),
             }));
 

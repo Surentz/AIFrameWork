@@ -160,7 +160,7 @@ budget nor the administrator: it publishes `shipment.confirmed.v1` through the b
 management HTTP API directly from the host (`support/broker.ts`), and only the stack
 `playwright.config.ts` starts exposes that port — the kind cluster does not.
 
-**A `kind` run therefore executes 31 of the 65 tests** — `npm run e2e` runs all of them, where
+**A `kind` run therefore executes 31 of the 67 tests** — `npm run e2e` runs all of them, where
 the test host's limit is raised out of the way (ADR 0008).
 
 ## Running it
@@ -218,7 +218,7 @@ that `prepare-database.ts` writes into `e2e/.certs/`.
 | Products | create, edit, edit-from-detail, duplicate sku, field validation (all as the operator), member refused the form, paging |
 | Notifications | placed, shipped (by the operator), cancelled, price changed, View links, mark read, unread filter, bell count, mark all read |
 | Monitoring | access, overview, drill-downs, traffic window, external systems (simulator healthy, dead address unhealthy), jobs (trigger, order confirmation on the worker), sign-ins (audit filter, locked accounts), users (promote, demote, cancel, sign out, history, search) |
-| Assistant | a member asks from the header, sees a tool chip and the answer, and reopens it from the sidebar after a reload; an operator gets the monitoring tools (against the fake Messages API) |
+| Assistant | a member asks from the header, sees a tool chip and the answer, and reopens it from the sidebar after a reload; an operator gets the monitoring tools (against the fake Messages API); instant answers (an order question answered from the member's own data with a link to the order; an unrecognised question gets suggestions and Ask the AI) |
 | Navigation | the dashboard is the landing page, a tile per group and none for Operations for a member, a subtile reaches its page, sidebar groups fold and unfold and the current page's group opens, the operator reaches monitoring through the sidebar |
 
 Not covered end to end, deliberately: the dead-letter retry (nothing dead-letters on purpose),

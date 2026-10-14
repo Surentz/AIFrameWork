@@ -22,8 +22,8 @@ export interface AskOptions {
  * `error`. Rejects with an ApiError for a failure before the stream started (400, 404, 409, 429,
  * 503), with the abort when `signal` fires, and with an Error if the stream ends without either.
  */
-export async function askAssistant(body: AskAssistantRequest, options: AskOptions): Promise<void> {
-  const stream = await requestStream('/api/assistant/messages', {
+async function streamAnswer(path: string, body: AskAssistantRequest, options: AskOptions): Promise<void> {
+  const stream = await requestStream(path, {
     method: 'POST',
     body: JSON.stringify(body),
     signal: options.signal,
@@ -44,6 +44,19 @@ export async function askAssistant(body: AskAssistantRequest, options: AskOption
   if (!finished) {
     throw new Error('The answer stopped before it finished. Try again.');
   }
+}
+
+/** The AI path (ADR 0033): text and tool events, then done or error. */
+export function askAssistant(body: AskAssistantRequest, options: AskOptions): Promise<void> {
+  return streamAnswer('/api/assistant/messages', body, options);
+}
+
+/**
+ * The instant path (ADR 0036): one answer or suggestions event, then done; or error. Same failure
+ * contract as askAssistant.
+ */
+export function askQuick(body: AskAssistantRequest, options: AskOptions): Promise<void> {
+  return streamAnswer('/api/assistant/quick', body, options);
 }
 
 const conversationPath = (id: string): string =>

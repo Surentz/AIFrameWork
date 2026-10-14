@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 
 namespace AiFramework.Infrastructure.Assistant;
 
@@ -51,6 +52,12 @@ internal static class AssistantDisplay
                     DropRefused(tools, turn);
                     break;
 
+                case AssistantTurnCodec.Quick:
+                case AssistantTurnCodec.Suggested:
+                    Flush(messages, ref text, ref tools);
+                    AddQuick(messages, turn);
+                    break;
+
                 default:
                     break;
             }
@@ -81,6 +88,36 @@ internal static class AssistantDisplay
 
         var refused = results.Results.Where(static r => r.IsError).Select(static r => r.ToolCallId).ToHashSet(StringComparer.Ordinal);
         tools.RemoveAll(t => t.Id is not null && refused.Contains(t.Id));
+    }
+
+    /// <summary>A quick turn whose stored payload cannot be read is shown as nothing, never rewritten.</summary>
+    private static void AddQuick(List<AssistantDisplayMessage> messages, AssistantTurnRow turn)
+    {
+        var decoded = TryDecode(turn);
+        if (decoded is QuickAnswerTurn quick)
+        {
+            messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, quick.Answer.Text, [], Answer: quick.Answer));
+        }
+        else if (decoded is SuggestionsTurn suggested)
+        {
+            messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, suggested.Suggestions.Text, [], Suggestions: suggested.Suggestions));
+        }
+    }
+
+    private static AssistantTurn? TryDecode(AssistantTurnRow turn)
+    {
+        try
+        {
+            return AssistantTurnCodec.Decode(turn);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     /// <summary>A turn whose blocks cannot be read is shown as nothing, never rewritten.</summary>

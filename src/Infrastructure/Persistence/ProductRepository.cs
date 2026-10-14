@@ -54,4 +54,31 @@ public sealed class ProductRepository(AiFrameworkDbContext context) : IProductRe
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// word_similarity finds a product's name inside a whole question ("how much is the widjet?"),
+    /// which plain similarity, comparing whole strings, cannot. The function form uses no index; a
+    /// catalogue of thousands is a sequential scan of milliseconds. Revisit with the &lt;% operator
+    /// and a GIN trigram index past roughly 10,000 products. ADR 0036.
+    /// </summary>
+    public async Task<IReadOnlyList<ProductMatch>> FindAsync(
+        string text, IReadOnlyList<string> skus, double minimumSimilarity, int limit, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(skus);
+
+        var skuArray = skus.ToArray();
+        var rows = await context.Database.SqlQuery<ProductMatch>($"""
+            SELECT p."Id", p."Sku", p."Name", p."Price",
+                   (CASE WHEN p."Sku" = ANY({skuArray}) THEN 1.0
+                         ELSE word_similarity(lower(p."Name"), lower({text})) END)::double precision AS "Score"
+            FROM products p
+            WHERE p."Sku" = ANY({skuArray})
+               OR word_similarity(lower(p."Name"), lower({text})) >= {minimumSimilarity}
+            ORDER BY "Score" DESC, p."Name"
+            LIMIT {limit}
+            """).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return rows;
+    }
 }

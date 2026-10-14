@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using AiFramework.Application.Monitoring;
 using FluentAssertions;
 using NSubstitute;
@@ -133,15 +134,34 @@ public sealed class AskAssistantHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_FullConversation_IsAValidationFailure()
+    public async Task HandleAsync_AConversationWithTwentyAiQuestions_IsRefused()
     {
         var id = Guid.NewGuid();
+        var turns = Enumerable.Range(0, AssistantLimits.MaxAiQuestionsPerConversation)
+            .SelectMany(i => new AssistantTurn[] { new UserQuestionTurn($"q{i}", Now), new ModelTurn("[]") })
+            .ToList();
         _conversations.FindAsync(id, Arg.Any<CancellationToken>())
-            .Returns(new AssistantConversation(id, Caller, AskAssistantHandler.MaxQuestionsPerConversation, []));
+            .Returns(new AssistantConversation(id, Caller, AssistantLimits.MaxAiQuestionsPerConversation, turns));
 
-        var result = await AskAsync(id);
+        var result = await AskAsync(id, "one more");
 
         result.Error.Code.Should().Be("assistant.conversation_full");
+    }
+
+    [Fact]
+    public async Task HandleAsync_TwentyQuickQuestions_DoNotUseUpTheAiAllowance()
+    {
+        var id = Guid.NewGuid();
+        var quick = new QuickAnswerTurn(new QuickAnswer(QuickAnswerKind.Instant, null, "x", [], null, null, null), "x");
+        var turns = Enumerable.Range(0, 20)
+            .SelectMany(i => new AssistantTurn[] { new UserQuestionTurn($"q{i}", Now), quick })
+            .ToList();
+        _conversations.FindAsync(id, Arg.Any<CancellationToken>()).Returns(new AssistantConversation(id, Caller, 20, turns));
+        ModelReturns(Answer());
+
+        var result = await AskAsync(id, "now ask the AI");
+
+        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]

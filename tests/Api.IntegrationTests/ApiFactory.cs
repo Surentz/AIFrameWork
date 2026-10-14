@@ -161,6 +161,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // Off unless a test turns it on. A developer's user-secrets may switch it on, and the
         // Development host loads them; without this the "when disabled" tests fail on that machine.
         builder.UseSetting("Assistant:Enabled", "false");
+
+        // The Development host turns instant answers on; none of these tests need the model, and
+        // loading it would slow every factory start.
+        builder.UseSetting("Assistant:Quick:Enabled", "false");
     }
 
     // Its own method for the same MA0051 reason as ConfigureServicesForTests below.

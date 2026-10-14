@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using AiFramework.Application.IntegrationEvents;
 using AiFramework.Application.Monitoring;
 using AiFramework.Application.Notifications;
@@ -26,6 +27,7 @@ using AiFramework.Infrastructure.Security;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace AiFramework.Infrastructure;
@@ -61,10 +63,7 @@ public static class InfrastructureRegistration
         services.AddQuery<GetNotifications, NotificationPage, GetNotificationsHandler>();
         services.AddQuery<GetUnreadNotificationCount, int, GetUnreadNotificationCountHandler>();
 
-        services.AddCommand<CreateProduct, Guid, CreateProductHandler>();
-        services.AddCommand<UpdateProduct, bool, UpdateProductHandler>();
-        services.AddQuery<GetProduct, ProductView, GetProductHandler>();
-        services.AddQuery<GetProducts, ProductPage, GetProductsHandler>();
+        RegisterProducts(services);
 
         // IExchangeRateProvider itself is not registered here - that is Infrastructure's typed
         // client (ExchangeRateClient), wired in AddInfrastructure once it exists. Registering
@@ -114,6 +113,17 @@ public static class InfrastructureRegistration
     {
         services.AddCommand<AskAssistant, AssistantAnswer, AskAssistantHandler>();
         services.AddScoped<IValidator<AskAssistant>, AskAssistantValidator>();
+
+        // Instant answers (ADR 0036). Registered in every host, like AskAssistant, so the worker's
+        // build-time validation sees a complete graph; only the API builds the index
+        // (QuickRegistration.AddQuickAnswerIndexing), so in the worker the router reports unavailable.
+        services.AddCommand<AskQuick, AssistantAnswer, AskQuickHandler>();
+        services.AddScoped<IValidator<AskQuick>, AskQuickValidator>();
+        services.AddScoped<IntentRouter>();
+        services.AddScoped<QuickAnswerComposer>();
+        services.AddScoped<ParameterResolver>();
+        services.AddSingleton<QuickIndexState>();
+        services.TryAddSingleton(QuickRouting.Default);
         services.AddScoped<AssistantToolbox>();
         services.AddQuery<GetAssistantConversations, IReadOnlyList<AssistantConversationSummary>, GetAssistantConversationsHandler>();
         services.AddQuery<GetAssistantConversation, AssistantConversationView, GetAssistantConversationHandler>();
@@ -131,6 +141,19 @@ public static class InfrastructureRegistration
     {
         services.AddQuery<GetPopulation, PopulationView, GetPopulationHandler>();
         services.AddQuery<GetPopulationAreas, PopulationAreasView, GetPopulationAreasHandler>();
+    }
+
+    /// <summary>
+    /// The product use cases. Split out of <see cref="AddMessaging"/> for the same MA0051 reason as
+    /// <see cref="RegisterOrders"/>.
+    /// </summary>
+    private static void RegisterProducts(IServiceCollection services)
+    {
+        services.AddCommand<CreateProduct, Guid, CreateProductHandler>();
+        services.AddCommand<UpdateProduct, bool, UpdateProductHandler>();
+        services.AddQuery<GetProduct, ProductView, GetProductHandler>();
+        services.AddQuery<GetProducts, ProductPage, GetProductsHandler>();
+        services.AddQuery<FindProducts, IReadOnlyList<ProductMatch>, FindProductsHandler>();
     }
 
     /// <summary>

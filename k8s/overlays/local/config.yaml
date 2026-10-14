@@ -9,6 +9,8 @@ data:
   ASPNETCORE_ENVIRONMENT: 'Production'
   # Note the DOUBLE underscore. A single one binds nothing and warns nothing.
   Cache__Enabled: 'true'
+  # Instant answers before the AI (ADR 0036): the image carries the model; the API loads it at start.
+  Assistant__Quick__Enabled: 'true'
   Wolverine__Durable: 'true'
   RateLimiting__Auth__PermitLimit: '10'
   RateLimiting__Auth__WindowSeconds: '60'

@@ -12,7 +12,7 @@ function Address(): React.JSX.Element {
 }
 
 function renderAt(path: string, enabled = true): void {
-  server.use(http.get('/api/assistant', () => HttpResponse.json({ enabled })));
+  server.use(http.get('/api/assistant', () => HttpResponse.json({ quick: false, ai: enabled })));
   const page = (
     <>
       <AssistantPage />

@@ -48,6 +48,10 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
+        // Trigram similarity for finding a product by name in a question (FindProducts, ADR 0036).
+        // pg_trgm ships with the standard Postgres images and is a trusted extension, so the
+        // database owner may create it without being a superuser.
+        modelBuilder.HasPostgresExtension("pg_trgm");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AiFrameworkDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
     }

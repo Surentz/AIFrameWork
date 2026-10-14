@@ -1,4 +1,5 @@
 using AiFramework.Application.Abstractions;
+using AiFramework.Application.Assistant.Quick;
 using FluentValidation;
 
 namespace AiFramework.Application.Assistant;
@@ -7,9 +8,15 @@ public sealed record AssistantConversationSummary(Guid Id, string Title, DateTim
 
 /// <summary>
 /// One message as the page shows it: a question, or everything the model wrote for it with the
-/// tools it used. Built from the stored turns for display only; it never goes back to the model.
+/// tools it used, or a quick reply with its card or suggestions. Built from the stored turns for
+/// display only; it never goes back to the model.
 /// </summary>
-public sealed record AssistantDisplayMessage(string Role, string Text, IReadOnlyList<string> Tools)
+public sealed record AssistantDisplayMessage(
+    string Role,
+    string Text,
+    IReadOnlyList<string> Tools,
+    QuickAnswer? Answer = null,
+    QuickSuggestions? Suggestions = null)
 {
     public const string UserRole = "user";
 

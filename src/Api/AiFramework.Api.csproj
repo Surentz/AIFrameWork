@@ -58,4 +58,12 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
   </ItemGroup>
 
+  <!-- The assistant's embedding model (ADR 0036), fetched by scripts/fetch-assistant-model.ps1 into
+       the git-ignored models/assistant, copied beside the binaries as assistant-model/ (the default
+       Assistant:Quick:ModelPath). Conditional, so a build without it still succeeds: instant answers
+       then report themselves unavailable, and the tests that need the model fail and say why. -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\models\assistant\model.onnx')">
+    <None Include="$(MSBuildThisFileDirectory)..\..\models\assistant\*" LinkBase="assistant-model" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

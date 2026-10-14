@@ -1,4 +1,5 @@
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiFramework.Api.Assistant;
@@ -14,14 +15,68 @@ public sealed record AskAssistantRequest
     public required string Question { get; init; }
 }
 
+/// <summary>Which halves of the assistant are on: instant answers, and the AI.</summary>
 public sealed record AssistantStatusResponse
 {
-    public required bool Enabled { get; init; }
+    public required bool Quick { get; init; }
+
+    public required bool Ai { get; init; }
+}
+
+public sealed record AssistantFactResponse
+{
+    public required string Label { get; init; }
+
+    public required string Value { get; init; }
+}
+
+public sealed record AssistantTableResponse
+{
+    public required IReadOnlyList<string> Columns { get; init; }
+
+    public required IReadOnlyList<IReadOnlyList<string>> Rows { get; init; }
+}
+
+/// <summary>An in-app path. The page renders it as a link only if it matches its allow-list.</summary>
+public sealed record AssistantLinkResponse
+{
+    public required string Label { get; init; }
+
+    public required string To { get; init; }
+}
+
+/// <summary>An instant or help answer, already formatted. Rendered as a card, never as Markdown.</summary>
+public sealed record AssistantAnswerResponse
+{
+    public required QuickAnswerKind Kind { get; init; }
+
+    public string? Title { get; init; }
+
+    public required string Text { get; init; }
+
+    public string? AnsweredAs { get; init; }
+
+    public required IReadOnlyList<AssistantFactResponse> Facts { get; init; }
+
+    public AssistantTableResponse? Table { get; init; }
+
+    public AssistantLinkResponse? Link { get; init; }
+}
+
+/// <summary>What to offer when the router was not sure. AiAvailable says whether Ask the AI may be shown.</summary>
+public sealed record AssistantSuggestionsResponse
+{
+    public required string Text { get; init; }
+
+    public required IReadOnlyList<string> Options { get; init; }
+
+    public required bool AiAvailable { get; init; }
 }
 
 /// <summary>
 /// One server-sent event's data. <see cref="Type"/> is also the SSE event name: text (a piece of
-/// the answer), tool (a tool started), done (saved; carries the conversation id), error (carries a
+/// the answer), tool (a tool started), answer (an instant or help answer, whole),
+/// suggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a
 /// ProblemDetails; nothing from this question was saved).
 /// </summary>
 public sealed record AssistantEventResponse
@@ -37,6 +92,14 @@ public sealed record AssistantEventResponse
     public AssistantOutcome? Outcome { get; init; }
 
     public ProblemDetails? Problem { get; init; }
+
+    public AssistantAnswerResponse? Answer { get; init; }
+
+    public AssistantSuggestionsResponse? Suggestions { get; init; }
+
+    public static AssistantEventResponse Answered(AssistantAnswerResponse answer) => new() { Type = "answer", Answer = answer };
+
+    public static AssistantEventResponse Suggested(AssistantSuggestionsResponse suggestions) => new() { Type = "suggestions", Suggestions = suggestions };
 
     public static AssistantEventResponse Text(string delta) => new() { Type = "text", Delta = delta };
 
@@ -68,6 +131,12 @@ public sealed record AssistantMessageResponse
     public required string Text { get; init; }
 
     public required IReadOnlyList<string> Tools { get; init; }
+
+    /// <summary>A quick answer's card, when this message is one.</summary>
+    public AssistantAnswerResponse? Answer { get; init; }
+
+    /// <summary>The suggestions, when this message is a not-sure reply.</summary>
+    public AssistantSuggestionsResponse? Suggestions { get; init; }
 }
 
 public sealed record AssistantConversationResponse

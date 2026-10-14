@@ -31,4 +31,12 @@ public interface IProductRepository
         int limit,
         (DateTimeOffset CreatedAt, Guid Id)? after,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Products whose name appears in <paramref name="text"/> with at least
+    /// <paramref name="minimumSimilarity"/> (pg_trgm word similarity), or whose normalised sku is one
+    /// of <paramref name="skus"/> (score 1). Best first, no tracking.
+    /// </summary>
+    public Task<IReadOnlyList<ProductMatch>> FindAsync(
+        string text, IReadOnlyList<string> skus, double minimumSimilarity, int limit, CancellationToken cancellationToken);
 }

@@ -71,6 +71,18 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
           restore-keys: nuget-${{ runner.os }}-
 
+      # The assistant's embedding model (ADR 0036): the Api and Infrastructure.Tests projects copy
+      # it beside their binaries at build time, and the embedder and evaluation tests fail without it.
+      - name: Cache the assistant model
+        uses: actions/cache@v6
+        with:
+          path: models/assistant
+          key: assistant-model-${{ hashFiles('scripts/fetch-assistant-model.ps1') }}
+
+      - name: Fetch the assistant model
+        shell: pwsh
+        run: ./scripts/fetch-assistant-model.ps1
+
       # Built as its own step so a compile error fails here, named, rather than inside the
       # suite's setup. e2e/setup/prepare-database.ts builds the API, the worker and the PartnerSimulator again before Playwright
       # starts them with --no-build; after this step that is a no-op.

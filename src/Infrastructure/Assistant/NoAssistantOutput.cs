@@ -1,4 +1,5 @@
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
 
 namespace AiFramework.Infrastructure.Assistant;
 
@@ -12,4 +13,8 @@ public sealed class NoAssistantOutput : IAssistantOutput
     public Task TextAsync(string delta, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task ToolAsync(string toolName, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task AnswerAsync(QuickAnswer answer, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task SuggestionsAsync(QuickSuggestions suggestions, CancellationToken cancellationToken) => Task.CompletedTask;
 }

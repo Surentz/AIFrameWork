@@ -11,8 +11,17 @@ COPY src/Application/AiFramework.Application.csproj src/Application/
 COPY src/Infrastructure/AiFramework.Infrastructure.csproj src/Infrastructure/
 COPY src/Api/AiFramework.Api.csproj src/Api/
 COPY src/Worker/AiFramework.Worker.csproj src/Worker/
-RUN dotnet restore src/Api/AiFramework.Api.csproj
-RUN dotnet restore src/Worker/AiFramework.Worker.csproj
+# Restored and published for linux-x64 only: ONNX Runtime ships native libraries for every platform
+# (android, ios, osx, win, linux-arm64 ...), about 200 MB that no pod can load. The runtime stays
+# framework-dependent (--self-contained false): the chiseled aspnet image supplies it. ADR 0036.
+RUN dotnet restore src/Api/AiFramework.Api.csproj -r linux-x64
+RUN dotnet restore src/Worker/AiFramework.Worker.csproj -r linux-x64
+
+# The assistant's embedding model (ADR 0036), fetched and SHA-256-checked here, before the publish,
+# so the Api project's conditional item copies it beside the binaries as assistant-model/. Its own
+# layer, cached until the script (and with it the pinned hash) changes. The SDK image has pwsh.
+COPY scripts/fetch-assistant-model.ps1 scripts/
+RUN pwsh -NoProfile -File scripts/fetch-assistant-model.ps1
 
 COPY src/ src/
 # The commit this image was built from, for service.version on every span and log record
@@ -20,11 +29,13 @@ COPY src/ src/
 # deploy/deploy.ps1 passes it. Empty is valid and leaves the version as a bare "1.0.0".
 ARG SOURCE_REVISION=
 RUN dotnet publish src/Api/AiFramework.Api.csproj -c Release -o /app/publish --no-restore \
+      -r linux-x64 --self-contained false \
       -p:SourceRevisionId=$SOURCE_REVISION
 # The worker, from the same build stage. Release for the same reason the API is: it is what loads
 # the pre-generated Wolverine adapters committed under src/Worker/Internal/Generated, and a Debug
 # image would compile its own at startup and diverge from what CI validates. ADR 0016.
 RUN dotnet publish src/Worker/AiFramework.Worker.csproj -c Release -o /app/publish-worker --no-restore \
+      -r linux-x64 --self-contained false \
       -p:SourceRevisionId=$SOURCE_REVISION
 
 # A self-contained migration bundle, so the EF Design package never reaches a runtime image.

@@ -1,5 +1,7 @@
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Assistant;
+using AiFramework.Application.Assistant.Quick;
+using AiFramework.Infrastructure.Assistant.Quick;
 using AiFramework.Infrastructure.ExternalSystems;
 using AiFramework.Infrastructure.ExternalSystems.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +30,12 @@ public static class AssistantRegistration
                 ClaudeAssistantModel.SystemName,
                 TrafficKind.Outbound,
                 sp.GetService<ExternalSystemMetrics>()));
+
+        // The embedding model for instant answers (ADR 0036). A singleton that loads on first use:
+        // the worker registers it too (this method is shared) but never embeds, so never loads it.
+        // Options are bound by the API; an unbound host gets the default path.
+        services.AddOptions<QuickModelOptions>();
+        services.AddSingleton<ITextEmbedder, OnnxTextEmbedder>();
 
         return services;
     }

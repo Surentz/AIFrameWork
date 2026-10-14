@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { server } from '../../test/handlers';
 import { openSseResponse, sseEvent, sseResponse } from '../../test/sse';
 import { withQueryClient } from '../../test/withQueryClient';
@@ -15,9 +16,33 @@ const answer = (...events: Record<string, unknown>[]): void => {
   );
 };
 
-function Harness({ operator = false }: { readonly operator?: boolean }): React.JSX.Element {
+interface HarnessProps {
+  readonly operator?: boolean;
+  readonly quickEnabled?: boolean;
+  readonly aiEnabled?: boolean;
+}
+
+function Harness({ operator = false, quickEnabled, aiEnabled }: HarnessProps): React.JSX.Element {
   const [draft, setDraft] = useState('');
-  return <Chat onSaved={() => undefined} operator={operator} draft={draft} onDraftChange={setDraft} />;
+  return (
+    <Chat
+      onSaved={() => undefined}
+      operator={operator}
+      draft={draft}
+      onDraftChange={setDraft}
+      quickEnabled={quickEnabled}
+      aiEnabled={aiEnabled}
+    />
+  );
+}
+
+function renderWith(props: HarnessProps): void {
+  render(
+    <MemoryRouter>
+      <Harness {...props} />
+    </MemoryRouter>,
+    { wrapper: withQueryClient() },
+  );
 }
 
 function renderChat(operator = false): void {
@@ -212,17 +237,24 @@ describe('AssistantPage', () => {
     expect(screen.getByRole('heading', { name: 'How can I help you today?' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Where is my latest order?' }));
 
-    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my latest order?');
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue(
+      'Where is my latest order?',
+    );
   });
 
   it('suggests a monitoring question only to an operator', () => {
     renderChat(true);
 
-    expect(screen.getByRole('button', { name: 'Did any background job fail today?' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Did any background job fail today?' }),
+    ).toBeInTheDocument();
   });
 
   it('sends on Enter', async () => {
-    answer({ type: 'text', delta: 'Sent.' }, { type: 'done', conversationId: 'c-1', outcome: 'Answered' });
+    answer(
+      { type: 'text', delta: 'Sent.' },
+      { type: 'done', conversationId: 'c-1', outcome: 'Answered' },
+    );
     renderChat();
     const user = userEvent.setup();
 
@@ -251,7 +283,10 @@ describe('AssistantPage', () => {
   });
 
   it('renders an answer as Markdown', async () => {
-    answer({ type: 'text', delta: '- **one**\n- two' }, { type: 'done', conversationId: 'c-1', outcome: 'Answered' });
+    answer(
+      { type: 'text', delta: '- **one**\n- two' },
+      { type: 'done', conversationId: 'c-1', outcome: 'Answered' },
+    );
     renderChat();
 
     await ask('List?');
@@ -270,7 +305,9 @@ describe('AssistantPage', () => {
 
     await ask('Orders?');
 
-    expect(await screen.findByRole('list', { name: 'Tools used' })).toHaveTextContent('Checked your orders');
+    expect(await screen.findByRole('list', { name: 'Tools used' })).toHaveTextContent(
+      'Checked your orders',
+    );
   });
 
   it('shows the character count only near the limit', async () => {
@@ -281,5 +318,145 @@ describe('AssistantPage', () => {
     await userEvent.paste('x'.repeat(1801));
 
     expect(screen.getByText('1801 / 2000')).toBeInTheDocument();
+  });
+});
+
+describe('instant answers', () => {
+  it('asks the quick endpoint when instant answers are on, and shows the card', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        sseResponse(
+          sseEvent({
+            type: 'answer',
+            answer: {
+              kind: 'Instant',
+              text: 'You have no orders yet.',
+              facts: [],
+              link: { label: 'Place an order', to: '/orders/new' },
+            },
+          }),
+          sseEvent({ type: 'done', conversationId: 'c1', outcome: 'Answered' }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Has my last order shipped?');
+
+    expect(await screen.findByRole('article', { name: 'Instant answer' })).toHaveTextContent(
+      'You have no orders yet.',
+    );
+  });
+
+  it('asks a suggestion instantly, and the AI only when asked', async () => {
+    const quick: string[] = [];
+    const ai: string[] = [];
+    server.use(
+      http.post('/api/assistant/quick', async ({ request }) => {
+        quick.push(((await request.json()) as { question: string }).question);
+        return sseResponse(
+          sseEvent({
+            type: 'suggestions',
+            suggestions: {
+              text: "I'm not sure what you mean.",
+              options: ['Is my export ready?'],
+              aiAvailable: true,
+            },
+          }),
+          sseEvent({ type: 'done', conversationId: 'c1', outcome: 'Answered' }),
+        );
+      }),
+      http.post('/api/assistant/messages', async ({ request }) => {
+        ai.push(((await request.json()) as { question: string }).question);
+        return sseResponse(
+          sseEvent({ type: 'text', delta: 'A poem.' }),
+          sseEvent({ type: 'done', conversationId: 'c1', outcome: 'Answered' }),
+        );
+      }),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: true });
+
+    await ask('Write me a poem');
+    await userEvent.click(await screen.findByRole('button', { name: 'Is my export ready?' }));
+    const [askAi] = await screen.findAllByRole('button', { name: /Ask the AI/ });
+    if (askAi === undefined) {
+      throw new Error('Ask the AI was not offered');
+    }
+    await userEvent.click(askAi);
+
+    await waitFor(() => {
+      expect(ai).toEqual(['Write me a poem']);
+    });
+    expect(quick).toEqual(['Write me a poem', 'Is my export ready?']);
+  });
+
+  it('shows why an instant question could not be asked, and puts it back in the box', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        HttpResponse.json(
+          {
+            status: 503,
+            title: 'assistant.quick_unavailable',
+            detail: "Instant answers aren't available right now.",
+          },
+          { status: 503 },
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Has my last order shipped?');
+
+    expect(
+      await screen.findByText(/Instant answers aren't available right now/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue(
+      'Has my last order shipped?',
+    );
+  });
+
+  it('shows an error sent on the instant stream, and puts the question back in the box', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        sseResponse(
+          sseEvent({
+            type: 'error',
+            problem: {
+              status: 500,
+              title: 'assistant.failed',
+              detail: 'Something went wrong answering that.',
+            },
+          }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Show my recent orders');
+
+    expect(await screen.findByText(/Something went wrong answering that/)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue(
+      'Show my recent orders',
+    );
+  });
+
+  it('hides Ask the AI when the AI is off', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        sseResponse(
+          sseEvent({
+            type: 'suggestions',
+            suggestions: { text: "I'm not sure what you mean.", options: [], aiAvailable: false },
+          }),
+          sseEvent({ type: 'done', conversationId: 'c1', outcome: 'Answered' }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Write me a poem');
+
+    expect(await screen.findByText("I'm not sure what you mean.")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ask the AI/ })).not.toBeInTheDocument();
   });
 });

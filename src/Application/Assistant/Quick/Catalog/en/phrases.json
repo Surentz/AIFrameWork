@@ -1,0 +1,141 @@
+{
+  "intents": {
+    "order_status": [
+      "Has my last order shipped?",
+      "Has my order shipped yet?",
+      "Where is my latest order?",
+      "What is the status of my last order?",
+      "Is my order on its way?",
+      "Did my most recent order ship?",
+      "Track my last order",
+      "What happened to my order?",
+      "Was my order cancelled?",
+      "Is my latest order still pending?",
+      "Check the status of my order",
+      "Where's my order?",
+      "Has order shipped?",
+      "Status of order"
+    ],
+    "recent_orders": [
+      "Show my recent orders",
+      "List my orders",
+      "What have I ordered?",
+      "Show me my last few orders",
+      "My orders",
+      "Which orders have I placed?",
+      "Show my order history",
+      "What did I order recently?",
+      "Give me an overview of my orders",
+      "Show all my orders"
+    ],
+    "export_status": [
+      "Is my export ready?",
+      "Has my order export finished?",
+      "Can I download my export yet?",
+      "Where is my PDF export?",
+      "Is my orders PDF ready?",
+      "Status of my export",
+      "Did my export finish?",
+      "When will my export be ready?",
+      "Show my exports",
+      "Is the export of my orders done?"
+    ],
+    "product_info": [
+      "What does a product cost?",
+      "How much is the Widget?",
+      "What is the price of the Gadget?",
+      "How much does the Sprocket cost?",
+      "Price of Widget Pro",
+      "What does Widget cost?",
+      "Is the Gadget expensive?",
+      "Tell me about the Widget",
+      "Find the product Sprocket",
+      "Look up product SKU-1042",
+      "What is the price of SKU-1042?"
+    ],
+    "population": [
+      "What is the population of Denmark?",
+      "What is the population of Copenhagen?",
+      "How many people live in Aarhus?",
+      "Population of Odense",
+      "How many inhabitants does Copenhagen have?",
+      "How many people live in Denmark?",
+      "Show the population of Region Hovedstaden",
+      "What's the latest population figure for Aalborg?",
+      "Population figures for Frederiksberg",
+      "How big is the population of Esbjerg?"
+    ],
+    "job_health": [
+      "Did any background job fail today?",
+      "Any failed jobs today?",
+      "How are the background jobs doing?",
+      "Are the jobs healthy?",
+      "Job health in the last 24 hours",
+      "Did anything fail in the last hour?",
+      "How many jobs failed this week?",
+      "Are background jobs running fine?",
+      "Job status overview",
+      "Any job failures recently?"
+    ],
+    "failed_jobs": [
+      "Which jobs failed?",
+      "Show the failed job runs",
+      "List failed jobs",
+      "What were the last job failures?",
+      "Show me job runs that failed",
+      "Which background jobs have errors?",
+      "Recent failed runs",
+      "What failed in the job runner?",
+      "Show failing jobs",
+      "Give me the list of failed job runs"
+    ],
+    "dead_letters": [
+      "Is anything dead-lettered?",
+      "Show the dead letters",
+      "Are there any dead-lettered messages?",
+      "List the dead letter queue",
+      "Which messages ended up in dead letters?",
+      "Any messages that exhausted their retries?",
+      "Show messages that could not be delivered",
+      "How many dead letters are there?",
+      "Dead letter queue status",
+      "Are messages stuck in the dead letter queue?"
+    ],
+    "traffic": [
+      "How is the API doing?",
+      "What is the error rate?",
+      "How much traffic are we getting?",
+      "Show API traffic for the last hour",
+      "What is the latency right now?",
+      "Is the API slow?",
+      "Requests per minute",
+      "How many requests failed in the last hour?",
+      "API health and response times",
+      "What does the traffic look like today?"
+    ],
+    "integrations": [
+      "Are the partner systems up?",
+      "Are external systems healthy?",
+      "Is Statistics Denmark reachable?",
+      "Show the status of the integrations",
+      "Are any integrations down?",
+      "Which external systems are unhealthy?",
+      "Check partner connections",
+      "Integration health",
+      "Are our third-party systems working?",
+      "Is any external system failing?"
+    ],
+    "sign_ins": [
+      "Are any accounts locked out?",
+      "Any lockouts?",
+      "How many sign-ins failed today?",
+      "Show sign-in health",
+      "Are people having trouble signing in?",
+      "How many users signed in today?",
+      "Are there failed logins?",
+      "Sign-in statistics for the last 24 hours",
+      "How many users are online now?",
+      "Is someone trying to guess passwords?"
+    ]
+  }
+}

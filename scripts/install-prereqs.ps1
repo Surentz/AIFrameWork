@@ -193,6 +193,11 @@ else {
     }
 }
 
+# --- Assistant model ----------------------------------------------------------------------------
+Write-Host '==> Checking assistant model' -ForegroundColor Cyan
+& (Join-Path $PSScriptRoot 'fetch-assistant-model.ps1')
+Add-Result 'Assistant model' 'OK' 'models/assistant (bge-small-en-v1.5)'
+
 # --- npm platform override sanity check ------------------------------------------------------
 # Not a tool to install, but a specific, hard-to-diagnose trap this project already hit on this
 # machine: a global ~/.npmrc pinning `os=` (or `cpu=`) to something other than this machine's
