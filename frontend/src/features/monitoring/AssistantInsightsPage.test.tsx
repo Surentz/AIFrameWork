@@ -47,6 +47,7 @@ describe('AssistantInsightsPage', () => {
 
     const misses = await screen.findByRole('table', { name: 'Missed questions' });
     expect(within(misses).getByText('Write me a poem about the rain')).toBeInTheDocument();
+    expect(screen.getByText(/up to 50 missed questions, rated not helpful first/)).toBeInTheDocument();
   });
 
   it('asks for the chosen window', async () => {

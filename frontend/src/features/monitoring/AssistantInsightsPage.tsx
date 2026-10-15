@@ -101,8 +101,8 @@ export function AssistantInsightsPage(): React.JSX.Element {
                   <th scope="col">Answered by</th>
                   <th scope="col">Intent or article</th>
                   <th scope="col">Questions</th>
-                  <th scope="col">👍</th>
-                  <th scope="col">👎</th>
+                  <th scope="col"><span aria-hidden="true">👍</span> Helpful</th>
+                  <th scope="col"><span aria-hidden="true">👎</span> Not helpful</th>
                 </tr>
               </thead>
               <tbody>
@@ -117,6 +117,8 @@ export function AssistantInsightsPage(): React.JSX.Element {
                 ))}
               </tbody>
             </table>
+
+            <p>Shows up to 50 missed questions, rated not helpful first, then newest.</p>
 
             <table className="runs">
               <caption>Missed questions</caption>
