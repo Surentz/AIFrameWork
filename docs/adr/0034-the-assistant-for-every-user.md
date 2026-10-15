@@ -1,7 +1,7 @@
 # 0034. The assistant for every user
 
 **Date:** 2026-10-11
-**Status:** Accepted
+**Status:** Accepted; amended by 0036 and 0037
 
 ## Context
 

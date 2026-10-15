@@ -145,3 +145,22 @@ Most member questions are answered without Claude. The slice lives in
   worker must never load the model.
 - **Transcripts.** Quick replies are `QuickAnswerTurn` and `SuggestionsTurn`; their replay text is
   fixed at write time and sent to Claude verbatim. Never re-render one from a template.
+
+## Feedback and insights (ADR 0037)
+
+- **An answer's turn.** The quick reply's (or suggestions reply's) own turn; an AI answer's final
+  model turn, the one carrying the answer text (`AnswerTurns.Of`). It is on the SSE `answer`,
+  `suggestions` and `done` events and on saved messages (`turn`, `rating`).
+- **Rating.** `PUT /api/assistant/conversations/{id}/turns/{turn}/rating` (`Up`, `Down` or `null`
+  to clear). Owner only: another user's conversation is a 404, a turn that is not an answer is a 400
+  `assistant.not_an_answer`. It lives in `assistant_ratings`, never in the transcript.
+- **Outcomes.** One `assistant_outcomes` row per saved question, written by both handlers after
+  `Append` (`IAssistantOutcomeLog`): path, target, best score, margin, whether the correction won,
+  scope. No question text, no user id. A 503 `assistant.quick_unavailable` stores nothing, so it
+  logs nothing.
+- **Insights.** `GET /api/monitoring/assistant/insights?days=1..30` (`Monitoring.Read`), page at
+  `/monitoring/assistant-insights`. The missed questions' text is read live from `assistant_turns`
+  and passed through `OperationalText.Scrub`; it is never copied, and the list names no user or
+  conversation.
+- **Lifetime.** Ratings and outcomes cascade with the conversation: the owner's delete and the
+  30-day retention remove them, and the question leaves the misses list.
