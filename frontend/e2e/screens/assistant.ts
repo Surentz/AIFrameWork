@@ -45,3 +45,7 @@ export async function askAi(p: Page, text: string): Promise<void> {
   await ask(p, text);
   await askAiButton(p).click();
 }
+
+/** The 👎 on the newest answer. */
+export const notHelpful = (p: Page): Locator =>
+  conversation(p).getByRole('group', { name: 'Rate this answer' }).last().getByRole('button', { name: 'Not helpful' });
