@@ -200,6 +200,8 @@ public static class InfrastructureRegistration
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAssistantConversations, AssistantConversations>();
         services.AddScoped<IAssistantHistory, AssistantHistoryStore>();
+        services.AddScoped<IAssistantRatings, AssistantRatings>();
+        services.AddScoped<IAssistantOutcomeLog, AssistantOutcomeLog>();
         services.AddScoped<IAssistantConversationRetention, AssistantConversationRetention>();
         services.AddScoped<ISessionValidator, SessionValidator>();
     }

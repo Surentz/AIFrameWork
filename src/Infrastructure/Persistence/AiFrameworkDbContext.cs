@@ -43,6 +43,10 @@ public sealed class AiFrameworkDbContext(DbContextOptions<AiFrameworkDbContext> 
 
     public DbSet<AssistantTurnRow> AssistantTurns => Set<AssistantTurnRow>();
 
+    public DbSet<AssistantRatingRow> AssistantRatings => Set<AssistantRatingRow>();
+
+    public DbSet<AssistantOutcomeRow> AssistantOutcomes => Set<AssistantOutcomeRow>();
+
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
