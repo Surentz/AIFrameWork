@@ -159,3 +159,9 @@ public sealed record RenameAssistantConversationRequest
 {
     public required string Title { get; init; }
 }
+
+/// <summary>A rating for one answer: Up, Down, or null to clear it.</summary>
+public sealed record RateAnswerRequest
+{
+    public AnswerRating? Rating { get; init; }
+}

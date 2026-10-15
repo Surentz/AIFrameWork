@@ -2939,6 +2939,71 @@ export interface paths {
         };
         readonly trace?: never;
     };
+    readonly "/api/assistant/conversations/{id}/turns/{turn}/rating": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        /** The owner rates one answer (turn is the turn the answer's events and messages carry), or clears it with a null. */
+        readonly put: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                    readonly turn: number;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["RateAnswerRequest"];
+                    readonly "text/json": components["schemas"]["RateAnswerRequest"];
+                    readonly "application/*+json": components["schemas"]["RateAnswerRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2999,6 +3064,8 @@ export interface components {
              */
             readonly lastSeenAt?: null | string;
         };
+        /** @enum {unknown} */
+        readonly AnswerRating: "Up" | "Down" | null;
         /**
          * @description A question. No length annotation: the 2,000-character rule belongs to AskAssistantValidator,
          *     and duplicating it here would pre-empt that validator with a differently shaped 400.
@@ -3510,6 +3577,10 @@ export interface components {
         };
         /** @enum {unknown} */
         readonly QuickAnswerKind: "Instant" | "Help";
+        /** @description A rating for one answer: Up, Down, or null to clear it. */
+        readonly RateAnswerRequest: {
+            readonly rating?: null | components["schemas"]["AnswerRating"];
+        };
         /**
          * @description Business-rule validation (length, charset, password policy) is owned by the validators in
          *     `src/Application/Users`, not duplicated here as DataAnnotations. See `src/Api/CLAUDE.md`.

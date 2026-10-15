@@ -3887,6 +3887,100 @@
           }
         }
       }
+    },
+    "/api/assistant/conversations/{id}/turns/{turn}/rating": {
+      "put": {
+        "tags": [
+          "AssistantConversations"
+        ],
+        "summary": "The owner rates one answer (turn is the turn the answer's events and messages carry), or clears it with a null.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateAnswerRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateAnswerRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4057,6 +4151,13 @@
           }
         },
         "description": "One account on the user-management screen."
+      },
+      "AnswerRating": {
+        "enum": [
+          "Up",
+          "Down",
+          null
+        ]
       },
       "AskAssistantRequest": {
         "required": [
@@ -5622,6 +5723,22 @@
           "Instant",
           "Help"
         ]
+      },
+      "RateAnswerRequest": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AnswerRating"
+              }
+            ]
+          }
+        },
+        "description": "A rating for one answer: Up, Down, or null to clear it."
       },
       "RegisterRequest": {
         "required": [

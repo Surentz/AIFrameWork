@@ -130,6 +130,8 @@ public static class InfrastructureRegistration
         services.AddCommand<RenameAssistantConversation, bool, RenameAssistantConversationHandler>();
         services.AddScoped<IValidator<RenameAssistantConversation>, RenameAssistantConversationValidator>();
         services.AddCommand<DeleteAssistantConversation, bool, DeleteAssistantConversationHandler>();
+        services.AddCommand<RateAssistantAnswer, bool, RateAssistantAnswerHandler>();
+        services.AddScoped<IValidator<RateAssistantAnswer>, RateAssistantAnswerValidator>();
     }
 
     /// <summary>

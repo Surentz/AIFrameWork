@@ -82,6 +82,24 @@ public sealed class AssistantConversationsController(
         return result.IsSuccess ? NoContent() : result.Problem(HttpContext);
     }
 
+    /// <summary>The owner rates one answer (<paramref name="turn"/> is the turn the answer's events and messages carry), or clears it with a null.</summary>
+    [HttpPut("{id:guid}/turns/{turn:int}/rating")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Rate(Guid id, int turn, RateAnswerRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!availability.AnyEnabled)
+        {
+            return Disabled();
+        }
+
+        var result = await commands.SendAsync(new RateAssistantAnswer(id, turn, request.Rating), cancellationToken).ConfigureAwait(false);
+        return result.IsSuccess ? NoContent() : result.Problem(HttpContext);
+    }
+
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
