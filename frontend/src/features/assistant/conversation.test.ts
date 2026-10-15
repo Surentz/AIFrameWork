@@ -166,3 +166,43 @@ describe('quick replies', () => {
     expect(state.messages[1]?.source).toBe('quick');
   });
 });
+
+describe('turns and ratings', () => {
+  const quickAsked = conversationReducer(initialConversation, { type: 'asked', question: 'Q?', mode: 'quick' });
+
+  it('takes the turn from the answer event', () => {
+    const state = conversationReducer(quickAsked, {
+      type: 'event',
+      event: { type: 'answer', turn: 1, answer: { kind: 'Instant', text: 'A.', facts: [] } },
+    });
+
+    expect(state.messages.at(-1)?.turn).toBe(1);
+  });
+
+  it('takes the turn from done for an AI answer', () => {
+    const state = conversationReducer(quickAsked, { type: 'event', event: { type: 'done', conversationId: 'c1', turn: 3 } });
+
+    expect(state.messages.at(-1)?.turn).toBe(3);
+  });
+
+  it('records a rating on the message with that turn', () => {
+    const answered = conversationReducer(quickAsked, { type: 'event', event: { type: 'done', conversationId: 'c1', turn: 1 } });
+
+    const rated = conversationReducer(answered, { type: 'rated', turn: 1, rating: 'Down' });
+
+    expect(rated.messages.at(-1)?.rating).toBe('Down');
+  });
+
+  it('starts a saved conversation with its turns and ratings', () => {
+    const state = fromSaved({
+      id: 'c1',
+      title: 'T',
+      messages: [
+        { role: 'user', text: 'Q?', tools: [] },
+        { role: 'assistant', text: 'A.', tools: [], turn: 1, rating: 'Up' },
+      ],
+    });
+
+    expect(state.messages[1]).toMatchObject({ turn: 1, rating: 'Up' });
+  });
+});

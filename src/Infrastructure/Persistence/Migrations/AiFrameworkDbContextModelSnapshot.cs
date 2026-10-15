@@ -17,7 +17,7 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
@@ -320,6 +320,78 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_AssistantConversations_OwnerId_LastActiveAt");
 
                     b.ToTable("assistant_conversations", (string)null);
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantOutcomeRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AnswerTurn")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("BestScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Corrected")
+                        .HasColumnType("boolean");
+
+                    b.Property<double?>("Margin")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("QuestionTurn")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TargetId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At")
+                        .HasDatabaseName("IX_AssistantOutcomes_At");
+
+                    b.HasIndex("ConversationId");
+
+                    b.ToTable("assistant_outcomes", (string)null);
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantRatingRow", b =>
+                {
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Turn")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("RatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Rating")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("ConversationId", "Turn");
+
+                    b.ToTable("assistant_ratings", (string)null);
                 });
 
             modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantTurnRow", b =>
@@ -729,6 +801,24 @@ namespace AiFramework.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantOutcomeRow", b =>
+                {
+                    b.HasOne("AiFramework.Infrastructure.Assistant.AssistantConversationRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantRatingRow", b =>
+                {
+                    b.HasOne("AiFramework.Infrastructure.Assistant.AssistantConversationRow", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AiFramework.Infrastructure.Assistant.AssistantTurnRow", b =>

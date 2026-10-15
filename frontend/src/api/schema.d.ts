@@ -972,6 +972,67 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/monitoring/assistant/insights": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly days?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["AssistantInsightsResponse"];
+                        readonly "application/json": components["schemas"]["AssistantInsightsResponse"];
+                        readonly "text/json": components["schemas"]["AssistantInsightsResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/monitoring/access": {
         readonly parameters: {
             readonly query?: never;
@@ -2939,6 +3000,71 @@ export interface paths {
         };
         readonly trace?: never;
     };
+    readonly "/api/assistant/conversations/{id}/turns/{turn}/rating": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        /** The owner rates one answer (turn is the turn the answer's events and messages carry), or clears it with a null. */
+        readonly put: {
+            readonly parameters: {
+                readonly query?: never;
+                readonly header?: never;
+                readonly path: {
+                    readonly id: string;
+                    readonly turn: number;
+                };
+                readonly cookie?: never;
+            };
+            readonly requestBody: {
+                readonly content: {
+                    readonly "application/json": components["schemas"]["RateAnswerRequest"];
+                    readonly "text/json": components["schemas"]["RateAnswerRequest"];
+                    readonly "application/*+json": components["schemas"]["RateAnswerRequest"];
+                };
+            };
+            readonly responses: {
+                /** @description No Content */
+                readonly 204: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3000,6 +3126,13 @@ export interface components {
             readonly lastSeenAt?: null | string;
         };
         /**
+         * @description Which path answered a question: an instant answer, a help article, suggestions, or the AI.
+         * @enum {unknown}
+         */
+        readonly AnswerPath: "Instant" | "Help" | "Suggested" | "Ai";
+        /** @enum {unknown} */
+        readonly AnswerRating: "Up" | "Down" | null;
+        /**
          * @description A question. No length annotation: the 2,000-character rule belongs to AskAssistantValidator,
          *     and duplicating it here would pre-empt that validator with a differently shaped 400.
          */
@@ -3035,7 +3168,7 @@ export interface components {
          * @description One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of
          *     the answer), tool (a tool started), answer (an instant or help answer, whole),
          *     suggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a
-         *     ProblemDetails; nothing from this question was saved).
+         *     ProblemDetails; nothing from this question was saved). Answer, suggestions and done carry the answer's turn.
          */
         readonly AssistantEventResponse: {
             readonly type: string;
@@ -3047,10 +3180,55 @@ export interface components {
             readonly problem?: null | components["schemas"]["ProblemDetails"];
             readonly answer?: null | components["schemas"]["AssistantAnswerResponse"];
             readonly suggestions?: null | components["schemas"]["AssistantSuggestionsResponse"];
+            /**
+             * Format: int32
+             * @description The stored turn that carries this answer: what a rating names. On answer, suggestions and done.
+             */
+            readonly turn?: null | number | string;
         };
         readonly AssistantFactResponse: {
             readonly label: string;
             readonly value: string;
+        };
+        readonly AssistantInsightsDayResponse: {
+            /** Format: date */
+            readonly day: string;
+            /** Format: int32 */
+            readonly instant: number | string;
+            /** Format: int32 */
+            readonly help: number | string;
+            /** Format: int32 */
+            readonly suggested: number | string;
+            /** Format: int32 */
+            readonly ai: number | string;
+        };
+        /** @description A missed question, scrubbed. Names no user and no conversation. */
+        readonly AssistantInsightsMissResponse: {
+            /** Format: date-time */
+            readonly at: string;
+            readonly path: components["schemas"]["AnswerPath"];
+            readonly targetId?: null | string;
+            /** Format: double */
+            readonly bestScore?: null | number | string;
+            readonly rating?: null | components["schemas"]["AnswerRating"];
+            readonly question: string;
+        };
+        readonly AssistantInsightsResponse: {
+            /** Format: date-time */
+            readonly since: string;
+            readonly days: readonly components["schemas"]["AssistantInsightsDayResponse"][];
+            readonly targets: readonly components["schemas"]["AssistantInsightsTargetResponse"][];
+            readonly misses: readonly components["schemas"]["AssistantInsightsMissResponse"][];
+        };
+        readonly AssistantInsightsTargetResponse: {
+            readonly path: components["schemas"]["AnswerPath"];
+            readonly targetId: string;
+            /** Format: int32 */
+            readonly questions: number | string;
+            /** Format: int32 */
+            readonly up: number | string;
+            /** Format: int32 */
+            readonly down: number | string;
         };
         /** @description An in-app path. The page renders it as a link only if it matches its allow-list. */
         readonly AssistantLinkResponse: {
@@ -3064,6 +3242,12 @@ export interface components {
             readonly tools: readonly string[];
             readonly answer?: null | components["schemas"]["AssistantAnswerResponse"];
             readonly suggestions?: null | components["schemas"]["AssistantSuggestionsResponse"];
+            /**
+             * Format: int32
+             * @description The turn an answer is rated on; null on a question.
+             */
+            readonly turn?: null | number | string;
+            readonly rating?: null | components["schemas"]["AnswerRating"];
         };
         /** @enum {unknown} */
         readonly AssistantOutcome: "Answered" | "Capped" | "Truncated" | null;
@@ -3505,6 +3689,10 @@ export interface components {
         };
         /** @enum {unknown} */
         readonly QuickAnswerKind: "Instant" | "Help";
+        /** @description A rating for one answer: Up, Down, or null to clear it. */
+        readonly RateAnswerRequest: {
+            readonly rating?: null | components["schemas"]["AnswerRating"];
+        };
         /**
          * @description Business-rule validation (length, charset, password policy) is owned by the validators in
          *     `src/Application/Users`, not duplicated here as DataAnnotations. See `src/Api/CLAUDE.md`.

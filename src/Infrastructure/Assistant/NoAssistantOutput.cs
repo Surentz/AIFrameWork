@@ -14,7 +14,7 @@ public sealed class NoAssistantOutput : IAssistantOutput
 
     public Task ToolAsync(string toolName, CancellationToken cancellationToken) => Task.CompletedTask;
 
-    public Task AnswerAsync(QuickAnswer answer, CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task AnswerAsync(QuickAnswer answer, int turn, CancellationToken cancellationToken) => Task.CompletedTask;
 
-    public Task SuggestionsAsync(QuickSuggestions suggestions, CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task SuggestionsAsync(QuickSuggestions suggestions, int turn, CancellationToken cancellationToken) => Task.CompletedTask;
 }

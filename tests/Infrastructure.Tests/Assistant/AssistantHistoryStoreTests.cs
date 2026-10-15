@@ -56,8 +56,26 @@ public sealed class AssistantHistoryStoreTests(PostgresFixture fixture)
         var view = await new AssistantHistoryStore(context).ReadAsync(id, owner, CancellationToken.None);
 
         view!.Messages.Should().BeEquivalentTo(
-            [new AssistantDisplayMessage("user", "Did jobs fail?", []), new AssistantDisplayMessage("assistant", "Three failed.", ["job_health"])],
+            [new AssistantDisplayMessage("user", "Did jobs fail?", []), new AssistantDisplayMessage("assistant", "Three failed.", ["job_health"], Turn: 3)],
             o => o.WithStrictOrdering());
+    }
+
+    [Fact]
+    public async Task ReadAsync_ReportsTheOwnersRatingOnTheAnswer()
+    {
+        var owner = Guid.NewGuid();
+        var id = await SeedAsync(owner, "Did jobs fail?", Now, ToolRound);
+        await using (var context = fixture.CreateContext())
+        {
+            await new AssistantRatings(context).RateAsync(id, owner, 3, AnswerRating.Up, Now, CancellationToken.None);
+            await context.SaveChangesAsync();
+        }
+
+        await using var read = fixture.CreateContext();
+        var view = await new AssistantHistoryStore(read).ReadAsync(id, owner, CancellationToken.None);
+
+        view!.Messages[1].Turn.Should().Be(3);
+        view.Messages[1].Rating.Should().Be(AnswerRating.Up);
     }
 
     [Fact]

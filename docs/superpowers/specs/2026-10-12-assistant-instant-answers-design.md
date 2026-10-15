@@ -20,6 +20,13 @@ These replace what the sections below say wherever they differ.
 7. **The index is built at start-up** (a hosted service awaiting the build), not lazily.
 8. **"Signing out everywhere" replaces "cancelling an order"** as a help article: members have no
    cancel button.
+9. **`turn` is added to the SSE `answer`, `suggestions` and `done` events**, and to each saved message
+   in `GET /api/assistant/conversations/{id}`, so a reopened conversation can be rated.
+10. **An AI answer is rated on its final model turn** (the one carrying the answer text); a quick
+    answer or a suggestions reply on its single stored turn.
+11. **Only answered-and-saved questions get an outcome row.** A `503 assistant.quick_unavailable`
+    stores nothing, so it logs nothing.
+12. **ADR 0037** *Administrators read missed assistant questions* amends ADR 0034.
 
 Known gap: the evaluation set holds 88 questions, not about 150.
 

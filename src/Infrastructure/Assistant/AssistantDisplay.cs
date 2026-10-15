@@ -13,23 +13,26 @@ namespace AiFramework.Infrastructure.Assistant;
 /// </summary>
 internal static class AssistantDisplay
 {
-    public static IReadOnlyList<AssistantDisplayMessage> Build(IEnumerable<AssistantTurnRow> turns)
+    public static IReadOnlyList<AssistantDisplayMessage> Build(IEnumerable<AssistantTurnRow> turns, IReadOnlyDictionary<int, AnswerRating>? ratings = null)
     {
+        ratings ??= new Dictionary<int, AnswerRating>();
         var messages = new List<AssistantDisplayMessage>();
         StringBuilder? text = null;
         List<(string? Id, string Name)>? tools = null;
+        int? lastModel = null;
 
         foreach (var turn in turns)
         {
             switch (turn.Kind)
             {
                 case AssistantTurnCodec.Question:
-                    Flush(messages, ref text, ref tools);
+                    Flush(messages, ref text, ref tools, lastModel, ratings);
                     messages.Add(new AssistantDisplayMessage(
                         AssistantDisplayMessage.UserRole, ((UserQuestionTurn)AssistantTurnCodec.Decode(turn)).Text, []));
                     break;
 
                 case AssistantTurnCodec.Model:
+                    lastModel = turn.Seq;
                     text ??= new StringBuilder();
                     tools ??= [];
                     foreach (var block in ReadOrEmpty(turn.Payload))
@@ -54,8 +57,8 @@ internal static class AssistantDisplay
 
                 case AssistantTurnCodec.Quick:
                 case AssistantTurnCodec.Suggested:
-                    Flush(messages, ref text, ref tools);
-                    AddQuick(messages, turn);
+                    Flush(messages, ref text, ref tools, lastModel, ratings);
+                    AddQuick(messages, turn, ratings);
                     break;
 
                 default:
@@ -63,18 +66,23 @@ internal static class AssistantDisplay
             }
         }
 
-        Flush(messages, ref text, ref tools);
+        Flush(messages, ref text, ref tools, lastModel, ratings);
         return messages;
     }
 
-    private static void Flush(List<AssistantDisplayMessage> messages, ref StringBuilder? text, ref List<(string? Id, string Name)>? tools)
+    private static void Flush(List<AssistantDisplayMessage> messages, ref StringBuilder? text, ref List<(string? Id, string Name)>? tools, int? turn, IReadOnlyDictionary<int, AnswerRating> ratings)
     {
         if (text is null || tools is null)
         {
             return;
         }
 
-        messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, text.ToString(), [.. tools.Select(static t => t.Name)]));
+        messages.Add(new AssistantDisplayMessage(
+            AssistantDisplayMessage.AssistantRole,
+            text.ToString(),
+            [.. tools.Select(static t => t.Name)],
+            Turn: turn,
+            Rating: turn is { } seq && ratings.TryGetValue(seq, out var rating) ? rating : null));
         text = null;
         tools = null;
     }
@@ -91,16 +99,16 @@ internal static class AssistantDisplay
     }
 
     /// <summary>A quick turn whose stored payload cannot be read is shown as nothing, never rewritten.</summary>
-    private static void AddQuick(List<AssistantDisplayMessage> messages, AssistantTurnRow turn)
+    private static void AddQuick(List<AssistantDisplayMessage> messages, AssistantTurnRow turn, IReadOnlyDictionary<int, AnswerRating> ratings)
     {
         var decoded = TryDecode(turn);
         if (decoded is QuickAnswerTurn quick)
         {
-            messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, quick.Answer.Text, [], Answer: quick.Answer));
+            messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, quick.Answer.Text, [], Answer: quick.Answer, Turn: turn.Seq, Rating: ratings.TryGetValue(turn.Seq, out var rating) ? rating : null));
         }
         else if (decoded is SuggestionsTurn suggested)
         {
-            messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, suggested.Suggestions.Text, [], Suggestions: suggested.Suggestions));
+            messages.Add(new AssistantDisplayMessage(AssistantDisplayMessage.AssistantRole, suggested.Suggestions.Text, [], Suggestions: suggested.Suggestions, Turn: turn.Seq, Rating: ratings.TryGetValue(turn.Seq, out var rating) ? rating : null));
         }
     }
 

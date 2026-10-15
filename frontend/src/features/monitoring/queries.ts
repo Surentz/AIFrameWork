@@ -17,9 +17,11 @@ import {
   retryDeadLetter,
   signOutUser,
   triggerJob,
+  getAssistantInsights,
 } from '../../api/monitoring';
 import type {
   AdminActionPage,
+  AssistantInsights,
   AdministeredUserPage,
   DeadLetterPage,
   ExternalSystems,
@@ -38,6 +40,7 @@ import type {
 export const monitoringKeys = {
   all: ['monitoring'] as const,
   access: () => [...monitoringKeys.all, 'access'] as const,
+  assistantInsights: (days: number) => [...monitoringKeys.all, 'assistant-insights', days] as const,
   jobs: () => [...monitoringKeys.all, 'jobs'] as const,
   jobHealth: () => [...monitoringKeys.jobs(), 'health'] as const,
   jobRuns: (status: JobRunStatus | undefined, jobName: string, page: number) =>
@@ -261,5 +264,12 @@ export function useSignOutUser(): UseMutationResult<void, ApiError, string> {
   return useMutation({
     mutationFn: signOutUser,
     onSuccess: () => client.invalidateQueries({ queryKey: monitoringKeys.users() }),
+  });
+}
+
+export function useAssistantInsights(days: number): UseQueryResult<AssistantInsights, ApiError> {
+  return useQuery<AssistantInsights, ApiError>({
+    queryKey: monitoringKeys.assistantInsights(days),
+    queryFn: () => getAssistantInsights(days),
   });
 }

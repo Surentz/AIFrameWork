@@ -59,6 +59,8 @@ public sealed class AssistantConversationsController(
                     Tools = m.Tools,
                     Answer = m.Answer is { } answer ? AssistantCards.ToResponse(answer) : null,
                     Suggestions = m.Suggestions is { } suggestions ? AssistantCards.ToResponse(suggestions, availability.AiEnabled) : null,
+                    Turn = m.Turn,
+                    Rating = m.Rating,
                 })],
             })
             : result.Problem(HttpContext);
@@ -79,6 +81,24 @@ public sealed class AssistantConversationsController(
         }
 
         var result = await commands.SendAsync(new RenameAssistantConversation(id, request.Title), cancellationToken).ConfigureAwait(false);
+        return result.IsSuccess ? NoContent() : result.Problem(HttpContext);
+    }
+
+    /// <summary>The owner rates one answer (<paramref name="turn"/> is the turn the answer's events and messages carry), or clears it with a null.</summary>
+    [HttpPut("{id:guid}/turns/{turn:int}/rating")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Rate(Guid id, int turn, RateAnswerRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!availability.AnyEnabled)
+        {
+            return Disabled();
+        }
+
+        var result = await commands.SendAsync(new RateAssistantAnswer(id, turn, request.Rating), cancellationToken).ConfigureAwait(false);
         return result.IsSuccess ? NoContent() : result.Problem(HttpContext);
     }
 

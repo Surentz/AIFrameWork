@@ -163,6 +163,20 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('link', { name: 'Assistant' })).not.toBeInTheDocument();
   });
 
+  it('opens the assistant insights for an administrator', async () => {
+    server.use(
+      http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)),
+      http.get('/api/monitoring/assistant/insights', () =>
+        HttpResponse.json({ since: '2026-10-08T09:00:00Z', days: [], targets: [], misses: [] }),
+      ),
+    );
+    renderAt('/monitoring/assistant-insights');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Assistant insights' }),
+    ).toBeInTheDocument();
+  });
+
   it('sends the old monitoring address to the assistant', async () => {
     server.use(
       http.get('/api/auth/me', () => HttpResponse.json(anAdminSession)),

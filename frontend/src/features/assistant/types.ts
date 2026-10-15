@@ -23,3 +23,6 @@ export type AssistantSuggestions = components['schemas']['AssistantSuggestionsRe
 
 /** Which path answers: the local router (quick) or the AI. */
 export type AskMode = 'quick' | 'ai';
+
+/** An answer's rating. Sent as null to clear it. */
+export type AnswerRating = NonNullable<components['schemas']['AnswerRating']>;

@@ -32,7 +32,11 @@ public enum AssistantOutcome
     Truncated,
 }
 
-public sealed record AssistantAnswer(Guid ConversationId, AssistantOutcome Outcome);
+/// <summary>
+/// A saved answer: its conversation, how it ended, and the turn that carries it — the one a rating
+/// names (an AI answer's final model turn).
+/// </summary>
+public sealed record AssistantAnswer(Guid ConversationId, AssistantOutcome Outcome, int Turn);
 
 public sealed class AskAssistantValidator : AbstractValidator<AskAssistant>
 {
@@ -58,6 +62,7 @@ public sealed class AskAssistantHandler(
     IAssistantConversations conversations,
     IAssistantOutput output,
     AssistantToolbox toolbox,
+    IAssistantOutcomeLog outcomes,
     ICurrentUser currentUser,
     IClock clock) : ICommandHandler<AskAssistant, AssistantAnswer>
 {
@@ -88,7 +93,22 @@ public sealed class AskAssistantHandler(
         }
 
         conversations.Append(opened.Value.Id, added, now);
-        return Result.Success(new AssistantAnswer(opened.Value.Id, outcome.Value));
+
+        // Append numbers the turns from the stored count, so the last one added — the final model
+        // turn, which carries the answer — is at this position.
+        var answerTurn = opened.Value.Turns.Count + added.Count - 1;
+        outcomes.Record(new AnsweredQuestion(
+            opened.Value.Id,
+            QuestionTurn: opened.Value.Turns.Count,
+            AnswerTurn: answerTurn,
+            At: now,
+            Path: AnswerPath.Ai,
+            TargetId: null,
+            BestScore: null,
+            Margin: null,
+            Corrected: false,
+            Scope: command.Scope));
+        return Result.Success(new AssistantAnswer(opened.Value.Id, outcome.Value, answerTurn));
     }
 
     /// <summary>Null means "run the tools and go round again"; anything else ends the question.</summary>

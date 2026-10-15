@@ -38,7 +38,13 @@ internal sealed class AssistantHistoryStore(AiFrameworkDbContext context) : IAss
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return new AssistantConversationView(row.Id, row.Title, AssistantDisplay.Build(turns));
+        var ratings = await context.AssistantRatings
+            .AsNoTracking()
+            .Where(r => r.ConversationId == id)
+            .ToDictionaryAsync(r => r.Turn, r => r.Rating, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new AssistantConversationView(row.Id, row.Title, AssistantDisplay.Build(turns, ratings));
     }
 
     public async Task<bool> RenameAsync(Guid id, Guid ownerId, string title, CancellationToken cancellationToken)

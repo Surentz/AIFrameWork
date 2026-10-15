@@ -1,5 +1,6 @@
 import { ApiError } from '../../api/client';
 import type {
+  AnswerRating,
   AskMode,
   AssistantAnswer,
   AssistantEvent,
@@ -21,6 +22,9 @@ export interface AssistantMessage {
   readonly suggestions?: AssistantSuggestions | undefined;
   /** Which path wrote this answer. */
   readonly source?: AskMode | undefined;
+  /** The stored turn that carries this answer: what a rating names. Unknown until the answer's turn arrives. */
+  readonly turn?: number | undefined;
+  readonly rating?: AnswerRating | undefined;
 }
 
 export interface ConversationState {
@@ -34,6 +38,7 @@ export type ConversationAction =
   | { readonly type: 'asked'; readonly question: string; readonly mode: AskMode }
   | { readonly type: 'event'; readonly event: AssistantEvent }
   | { readonly type: 'failed'; readonly error: Error }
+  | { readonly type: 'rated'; readonly turn: number; readonly rating: AnswerRating | undefined }
   | { readonly type: 'stopped' }
   | { readonly type: 'reset' };
 
@@ -73,6 +78,11 @@ export function conversationReducer(
       return state.messages.length === 0
         ? state
         : { ...updateAnswer(state, (m) => ({ ...m, stopped: true })), streaming: false };
+    case 'rated':
+      return {
+        ...state,
+        messages: state.messages.map((m) => (m.role === 'assistant' && m.turn === action.turn ? { ...m, rating: action.rating } : m)),
+      };
     case 'reset':
       return initialConversation;
   }
@@ -86,16 +96,16 @@ function applyEvent(state: ConversationState, event: AssistantEvent): Conversati
       return updateAnswer(state, (m) => ({ ...m, tools: [...m.tools, event.tool ?? 'a tool'] }));
     case 'done':
       return {
-        ...updateAnswer(state, (m) => ({ ...m, outcome: event.outcome ?? undefined })),
+        ...updateAnswer(state, (m) => ({ ...m, outcome: event.outcome ?? undefined, turn: toTurn(event.turn) ?? m.turn })),
         conversationId: event.conversationId ?? state.conversationId,
         streaming: false,
       };
     case 'error':
       return { ...dropEmptyAnswer(state), streaming: false, error: toApiError(event.problem) };
     case 'answer':
-      return updateAnswer(state, (m) => ({ ...m, answer: event.answer ?? undefined }));
+      return updateAnswer(state, (m) => ({ ...m, answer: event.answer ?? undefined, turn: toTurn(event.turn) }));
     case 'suggestions':
-      return updateAnswer(state, (m) => ({ ...m, suggestions: event.suggestions ?? undefined }));
+      return updateAnswer(state, (m) => ({ ...m, suggestions: event.suggestions ?? undefined, turn: toTurn(event.turn) }));
     default:
       return state;
   }
@@ -119,6 +129,12 @@ function dropEmptyAnswer(state: ConversationState): ConversationState {
   return last?.role === 'assistant' && last.text === '' && last.tools.length === 0 && last.answer === undefined && last.suggestions === undefined
     ? { ...state, messages: state.messages.slice(0, -1) }
     : state;
+}
+
+/** The generated type allows a string (the API accepts numbers as text); the server only ever sends a number. */
+function toTurn(turn: number | string | null | undefined): number | undefined {
+  const value = turn === null || turn === undefined ? Number.NaN : Number(turn);
+  return Number.isInteger(value) ? value : undefined;
 }
 
 function toApiError(problem: AssistantEvent['problem']): ApiError {
@@ -147,6 +163,8 @@ export function fromSaved(saved: SavedConversation): ConversationState {
       answer: message.answer ?? undefined,
       suggestions: message.suggestions ?? undefined,
       source: message.answer || message.suggestions ? 'quick' : 'ai',
+      turn: toTurn(message.turn),
+      rating: message.rating ?? undefined,
     })),
   };
 }

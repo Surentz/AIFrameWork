@@ -1,5 +1,6 @@
 import { ApiError } from '../../api/client';
 import { ErrorPanel } from '../../components/ErrorPanel';
+import { AnswerRatingButtons } from './AnswerRatingButtons';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { Composer } from './Composer';
 import type { AssistantMessage, ConversationState } from './conversation';
@@ -95,6 +96,21 @@ export function Chat({ initial, onSaved, operator,
                       !message.suggestions
                     }
                     busy={conversation.streaming}
+                    footer={
+                      conversation.conversationId !== undefined &&
+                      message.role === 'assistant' &&
+                      message.turn !== undefined &&
+                      !(conversation.streaming && index === conversation.messages.length - 1) ? (
+                        <AnswerRatingButtons
+                          conversationId={conversation.conversationId}
+                          turn={message.turn}
+                          rating={message.rating}
+                          onRated={(rating) => {
+                            if (message.turn !== undefined) conversation.rated(message.turn, rating);
+                          }}
+                        />
+                      ) : null
+                    }
                     onPick={(question) => void conversation.ask(question, 'quick')}
                     onAskAi={
                       aiEnabled && message.suggestions?.aiAvailable && previous?.role === 'user'
@@ -131,9 +147,11 @@ interface MessageProps {
   readonly busy: boolean;
   readonly onPick: (question: string) => void;
   readonly onAskAi?: (() => void) | undefined;
+  /** Under an answer: its rating buttons, once the answer is saved. */
+  readonly footer?: React.ReactNode;
 }
 
-function Message({ message, thinking, busy, onPick, onAskAi }: MessageProps): React.JSX.Element {
+function Message({ message, thinking, busy, onPick, onAskAi, footer }: MessageProps): React.JSX.Element {
   if (message.role === 'user') {
     return (
       <li className="assistant-message assistant-message--user">
@@ -148,6 +166,7 @@ function Message({ message, thinking, busy, onPick, onAskAi }: MessageProps): Re
       <li className="assistant-message assistant-message--assistant">
         <span className="visually-hidden">Assistant: </span>
         <QuickAnswerCard answer={message.answer} />
+        {footer}
       </li>
     );
   }
@@ -157,6 +176,7 @@ function Message({ message, thinking, busy, onPick, onAskAi }: MessageProps): Re
       <li className="assistant-message assistant-message--assistant">
         <span className="visually-hidden">Assistant: </span>
         <SuggestionsReply suggestions={message.suggestions} onPick={onPick} onAskAi={onAskAi} busy={busy} />
+        {footer}
       </li>
     );
   }
@@ -185,6 +205,7 @@ function Message({ message, thinking, busy, onPick, onAskAi }: MessageProps): Re
         <p className="muted">The assistant reached its step limit and answered with what it had.</p>
       )}
       {message.outcome === 'Truncated' && <p className="muted">This answer was cut short.</p>}
+      {footer}
     </li>
   );
 }

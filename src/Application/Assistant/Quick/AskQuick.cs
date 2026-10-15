@@ -30,6 +30,7 @@ public sealed class AskQuickHandler(
     QuickAnswerComposer composer,
     IAssistantConversations conversations,
     IAssistantOutput output,
+    IAssistantOutcomeLog outcomes,
     ICurrentUser currentUser,
     IClock clock) : ICommandHandler<AskQuick, AssistantAnswer>
 {
@@ -58,17 +59,30 @@ public sealed class AskQuickHandler(
         }
 
         var reply = await ReplyAsync(routed.Value, question, cancellationToken).ConfigureAwait(false);
+        // The reply is stored on the turn after its question.
+        var answerTurn = opened.Value.Turns.Count + 1;
         if (reply is QuickAnswer answer)
         {
-            await output.AnswerAsync(answer, cancellationToken).ConfigureAwait(false);
+            await output.AnswerAsync(answer, answerTurn, cancellationToken).ConfigureAwait(false);
         }
         else if (reply is QuickSuggestions suggestions)
         {
-            await output.SuggestionsAsync(suggestions, cancellationToken).ConfigureAwait(false);
+            await output.SuggestionsAsync(suggestions, answerTurn, cancellationToken).ConfigureAwait(false);
         }
 
         conversations.Append(opened.Value.Id, [new UserQuestionTurn(question, now), QuickReplay.Turn(reply)], now);
-        return Result.Success(new AssistantAnswer(opened.Value.Id, AssistantOutcome.Answered));
+        outcomes.Record(new AnsweredQuestion(
+            opened.Value.Id,
+            QuestionTurn: opened.Value.Turns.Count,
+            AnswerTurn: answerTurn,
+            At: now,
+            Path: PathOf(reply),
+            TargetId: TargetOf(routed.Value),
+            BestScore: routed.Value.Evidence.BestScore,
+            Margin: routed.Value.Evidence.Margin,
+            Corrected: routed.Value.Evidence.Corrected,
+            Scope: command.Scope));
+        return Result.Success(new AssistantAnswer(opened.Value.Id, AssistantOutcome.Answered, answerTurn));
     }
 
     private async Task<QuickReply> ReplyAsync(RouteDecision routed, string question, CancellationToken cancellationToken) =>
@@ -78,5 +92,23 @@ public sealed class AskQuickHandler(
             RouteToHelp help => QuickAnswerComposer.Help(help.Section, help.AnsweredAs),
             RouteUnsure { Suggestions.Count: > 0 } unsure => new QuickSuggestions("I'm not sure what you mean. Did you mean one of these?", unsure.Suggestions),
             _ => new QuickSuggestions("I'm not sure what you mean.", []),
+        };
+
+    // What the user got decides the path: an intent whose composer asks "which product?" is a
+    // suggestion, whatever the router chose.
+    private static AnswerPath PathOf(QuickReply reply) =>
+        reply switch
+        {
+            QuickAnswer { Kind: QuickAnswerKind.Help } => AnswerPath.Help,
+            QuickAnswer => AnswerPath.Instant,
+            _ => AnswerPath.Suggested,
+        };
+
+    private static string? TargetOf(RouteDecision decision) =>
+        decision switch
+        {
+            RouteToIntent intent => intent.Intent.Id,
+            RouteToHelp help => help.Section.ArticleId,
+            _ => null,
         };
 }

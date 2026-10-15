@@ -1242,6 +1242,90 @@
         }
       }
     },
+    "/api/monitoring/assistant/insights": {
+      "get": {
+        "tags": [
+          "MonitoringAssistant"
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantInsightsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantInsightsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantInsightsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/monitoring/access": {
       "get": {
         "tags": [
@@ -3887,6 +3971,100 @@
           }
         }
       }
+    },
+    "/api/assistant/conversations/{id}/turns/{turn}/rating": {
+      "put": {
+        "tags": [
+          "AssistantConversations"
+        ],
+        "summary": "The owner rates one answer (turn is the turn the answer's events and messages carry), or clears it with a null.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateAnswerRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateAnswerRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4057,6 +4235,22 @@
           }
         },
         "description": "One account on the user-management screen."
+      },
+      "AnswerPath": {
+        "enum": [
+          "Instant",
+          "Help",
+          "Suggested",
+          "Ai"
+        ],
+        "description": "Which path answered a question: an instant answer, a help article, suggestions, or the AI."
+      },
+      "AnswerRating": {
+        "enum": [
+          "Up",
+          "Down",
+          null
+        ]
       },
       "AskAssistantRequest": {
         "required": [
@@ -4243,9 +4437,19 @@
                 "$ref": "#/components/schemas/AssistantSuggestionsResponse"
               }
             ]
+          },
+          "turn": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The stored turn that carries this answer: what a rating names. On answer, suggestions and done.",
+            "format": "int32"
           }
         },
-        "description": "One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of\nthe answer), tool (a tool started), answer (an instant or help answer, whole),\nsuggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a\nProblemDetails; nothing from this question was saved)."
+        "description": "One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of\nthe answer), tool (a tool started), answer (an instant or help answer, whole),\nsuggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a\nProblemDetails; nothing from this question was saved). Answer, suggestions and done carry the answer's turn."
       },
       "AssistantFactResponse": {
         "required": [
@@ -4259,6 +4463,175 @@
           },
           "value": {
             "type": "string"
+          }
+        }
+      },
+      "AssistantInsightsDayResponse": {
+        "required": [
+          "day",
+          "instant",
+          "help",
+          "suggested",
+          "ai"
+        ],
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "instant": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "help": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "suggested": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "ai": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "AssistantInsightsMissResponse": {
+        "required": [
+          "at",
+          "path",
+          "question"
+        ],
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "path": {
+            "$ref": "#/components/schemas/AnswerPath"
+          },
+          "targetId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bestScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "rating": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AnswerRating"
+              }
+            ]
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "description": "A missed question, scrubbed. Names no user and no conversation."
+      },
+      "AssistantInsightsResponse": {
+        "required": [
+          "since",
+          "days",
+          "targets",
+          "misses"
+        ],
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantInsightsDayResponse"
+            }
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantInsightsTargetResponse"
+            }
+          },
+          "misses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantInsightsMissResponse"
+            }
+          }
+        }
+      },
+      "AssistantInsightsTargetResponse": {
+        "required": [
+          "path",
+          "targetId",
+          "questions",
+          "up",
+          "down"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "$ref": "#/components/schemas/AnswerPath"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "questions": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "up": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "down": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -4317,6 +4690,27 @@
               {
                 "description": "The suggestions, when this message is a not-sure reply.",
                 "$ref": "#/components/schemas/AssistantSuggestionsResponse"
+              }
+            ]
+          },
+          "turn": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The turn an answer is rated on; null on a question.",
+            "format": "int32"
+          },
+          "rating": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "The owner's rating of this answer, if any.",
+                "$ref": "#/components/schemas/AnswerRating"
               }
             ]
           }
@@ -5613,6 +6007,22 @@
           "Help"
         ]
       },
+      "RateAnswerRequest": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AnswerRating"
+              }
+            ]
+          }
+        },
+        "description": "A rating for one answer: Up, Down, or null to clear it."
+      },
       "RegisterRequest": {
         "required": [
           "username",
@@ -6132,6 +6542,9 @@
     },
     {
       "name": "Notifications"
+    },
+    {
+      "name": "MonitoringAssistant"
     },
     {
       "name": "Monitoring"

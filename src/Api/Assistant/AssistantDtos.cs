@@ -77,7 +77,7 @@ public sealed record AssistantSuggestionsResponse
 /// One server-sent event's data. <see cref="Type"/> is also the SSE event name: text (a piece of
 /// the answer), tool (a tool started), answer (an instant or help answer, whole),
 /// suggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a
-/// ProblemDetails; nothing from this question was saved).
+/// ProblemDetails; nothing from this question was saved). Answer, suggestions and done carry the answer's turn.
 /// </summary>
 public sealed record AssistantEventResponse
 {
@@ -97,9 +97,12 @@ public sealed record AssistantEventResponse
 
     public AssistantSuggestionsResponse? Suggestions { get; init; }
 
-    public static AssistantEventResponse Answered(AssistantAnswerResponse answer) => new() { Type = "answer", Answer = answer };
+    /// <summary>The stored turn that carries this answer: what a rating names. On answer, suggestions and done.</summary>
+    public int? Turn { get; init; }
 
-    public static AssistantEventResponse Suggested(AssistantSuggestionsResponse suggestions) => new() { Type = "suggestions", Suggestions = suggestions };
+    public static AssistantEventResponse Answered(AssistantAnswerResponse answer, int turn) => new() { Type = "answer", Answer = answer, Turn = turn };
+
+    public static AssistantEventResponse Suggested(AssistantSuggestionsResponse suggestions, int turn) => new() { Type = "suggestions", Suggestions = suggestions, Turn = turn };
 
     public static AssistantEventResponse Text(string delta) => new() { Type = "text", Delta = delta };
 
@@ -108,7 +111,7 @@ public sealed record AssistantEventResponse
     public static AssistantEventResponse Done(AssistantAnswer answer)
     {
         ArgumentNullException.ThrowIfNull(answer);
-        return new() { Type = "done", ConversationId = answer.ConversationId, Outcome = answer.Outcome };
+        return new() { Type = "done", ConversationId = answer.ConversationId, Outcome = answer.Outcome, Turn = answer.Turn };
     }
 
     public static AssistantEventResponse Error(ProblemDetails problem) => new() { Type = "error", Problem = problem };
@@ -137,6 +140,12 @@ public sealed record AssistantMessageResponse
 
     /// <summary>The suggestions, when this message is a not-sure reply.</summary>
     public AssistantSuggestionsResponse? Suggestions { get; init; }
+
+    /// <summary>The turn an answer is rated on; null on a question.</summary>
+    public int? Turn { get; init; }
+
+    /// <summary>The owner's rating of this answer, if any.</summary>
+    public AnswerRating? Rating { get; init; }
 }
 
 public sealed record AssistantConversationResponse
@@ -155,4 +164,10 @@ public sealed record AssistantConversationResponse
 public sealed record RenameAssistantConversationRequest
 {
     public required string Title { get; init; }
+}
+
+/// <summary>A rating for one answer: Up, Down, or null to clear it.</summary>
+public sealed record RateAnswerRequest
+{
+    public AnswerRating? Rating { get; init; }
 }

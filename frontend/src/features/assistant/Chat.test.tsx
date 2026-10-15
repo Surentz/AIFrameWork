@@ -7,6 +7,7 @@ import { server } from '../../test/handlers';
 import { openSseResponse, sseEvent, sseResponse } from '../../test/sse';
 import { withQueryClient } from '../../test/withQueryClient';
 import { Chat } from './Chat';
+import type { ConversationState } from './conversation';
 
 const answer = (...events: Record<string, unknown>[]): void => {
   server.use(
@@ -20,9 +21,10 @@ interface HarnessProps {
   readonly operator?: boolean;
   readonly quickEnabled?: boolean;
   readonly aiEnabled?: boolean;
+  readonly initial?: ConversationState;
 }
 
-function Harness({ operator = false, quickEnabled, aiEnabled }: HarnessProps): React.JSX.Element {
+function Harness({ operator = false, quickEnabled, aiEnabled, initial }: HarnessProps): React.JSX.Element {
   const [draft, setDraft] = useState('');
   return (
     <Chat
@@ -32,6 +34,7 @@ function Harness({ operator = false, quickEnabled, aiEnabled }: HarnessProps): R
       onDraftChange={setDraft}
       quickEnabled={quickEnabled}
       aiEnabled={aiEnabled}
+      initial={initial}
     />
   );
 }
@@ -458,5 +461,73 @@ describe('instant answers', () => {
 
     expect(await screen.findByText("I'm not sure what you mean.")).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Ask the AI/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('rating answers', () => {
+  it('offers a rating once the answer is saved, not while it streams', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        openSseResponse(
+          sseEvent({ type: 'answer', turn: 1, answer: { kind: 'Instant', text: 'You have no orders yet.', facts: [] } }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Has my last order shipped?');
+
+    expect(await screen.findByRole('article', { name: 'Instant answer' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Rate this answer' })).not.toBeInTheDocument();
+  });
+
+  it('offers no rating on the new answer while it streams in a saved conversation', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        openSseResponse(
+          sseEvent({ type: 'answer', turn: 3, answer: { kind: 'Instant', text: 'Still arriving.', facts: [] } }),
+        ),
+      ),
+    );
+    render(
+      <MemoryRouter>
+        <Harness
+          quickEnabled
+          aiEnabled={false}
+          initial={{
+            conversationId: 'c1',
+            streaming: false,
+            error: undefined,
+            messages: [
+              { id: 1, role: 'user', text: 'Earlier question', tools: [] },
+              { id: 2, role: 'assistant', text: 'Earlier answer', tools: [], outcome: 'Answered', turn: 1 },
+            ],
+          }}
+        />
+      </MemoryRouter>,
+      { wrapper: withQueryClient() },
+    );
+    expect(screen.getAllByRole('group', { name: 'Rate this answer' })).toHaveLength(1);
+
+    await ask('Has my last order shipped?');
+
+    expect(await screen.findByRole('article', { name: 'Instant answer' })).toBeInTheDocument();
+    expect(screen.getAllByRole('group', { name: 'Rate this answer' })).toHaveLength(1);
+  });
+
+  it('shows the rating group after done', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        sseResponse(
+          sseEvent({ type: 'answer', turn: 1, answer: { kind: 'Instant', text: 'You have no orders yet.', facts: [] } }),
+          sseEvent({ type: 'done', conversationId: 'c1', turn: 1, outcome: 'Answered' }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Has my last order shipped?');
+
+    expect(await screen.findByRole('group', { name: 'Rate this answer' })).toBeInTheDocument();
   });
 });

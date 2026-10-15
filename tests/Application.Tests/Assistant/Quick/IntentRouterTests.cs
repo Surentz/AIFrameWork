@@ -59,6 +59,7 @@ public sealed class IntentRouterTests
         var routed = decision.Should().BeOfType<RouteToIntent>().Subject;
         routed.Intent.Id.Should().Be(QuickIntents.RecentOrders);
         routed.AnsweredAs.Should().Be("show my recent orders");
+        decision.Evidence.Corrected.Should().BeTrue();
     }
 
     [Fact]

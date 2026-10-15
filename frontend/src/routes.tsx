@@ -8,6 +8,7 @@ import { RequireAuth } from './features/auth/RequireAuth';
 import { RequireRole } from './features/auth/RequireRole';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { FulfilmentPage } from './features/fulfilment/FulfilmentPage';
+import { AssistantInsightsPage } from './features/monitoring/AssistantInsightsPage';
 import { IntegrationsPage } from './features/monitoring/IntegrationsPage';
 import { JobsPage } from './features/monitoring/JobsPage';
 import { LoginsPage } from './features/monitoring/LoginsPage';
@@ -69,6 +70,7 @@ export function AppRoutes(): React.JSX.Element {
             <Route path="/monitoring/jobs" element={<JobsPage />} />
             <Route path="/monitoring/logins" element={<LoginsPage />} />
             <Route path="/monitoring/traffic" element={<TrafficPage />} />
+            <Route path="/monitoring/assistant-insights" element={<AssistantInsightsPage />} />
             <Route path="/monitoring/users" element={<UsersPage />} />
             <Route path="/monitoring/assistant" element={<Navigate to="/assistant" replace />} />
             <Route path="/fulfilment" element={<FulfilmentPage />} />

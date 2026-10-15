@@ -221,7 +221,7 @@ every later question in that conversation fail. A tool returns its own projectio
 `Assistant/ToolResults/`, never a monitoring view, and no tool dispatches a command. Tool results
 leave for Anthropic: free text goes through `OperationalText.Scrub`. A member tool reads only the
 caller's own rows, through a query scoped to `ICurrentUser`; the scope comes from the API per
-question, never from Application. Instant answers (ADR 0036) are built from caller-scoped queries only and stored with their replay text fixed at write time; an in-scope evaluation question never repeats a phrase, or the precision gate tests the catalog against itself (the only deliberate repeats are operator phrases asked as a member, which must not answer); only the API builds the index.
+question, never from Application. Instant answers (ADR 0036) are built from caller-scoped queries only and stored with their replay text fixed at write time; an in-scope evaluation question never repeats a phrase, or the precision gate tests the catalog against itself (the only deliberate repeats are operator phrases asked as a member, which must not answer); only the API builds the index. Ratings and outcome rows (ADR 0037) never hold question text or a user id; the insights page reads question text live from the transcript through OperationalText.Scrub, so it disappears with the conversation.
 
 **External systems** (`external-systems`, ADR 0031) — Every partner client goes through
 `ExternalSystemsBuilder.AddClient<TApi>`; a hand-wired `AddHttpClient` silently skips traffic,

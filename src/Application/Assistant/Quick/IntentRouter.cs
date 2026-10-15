@@ -14,9 +14,19 @@ public sealed record QuickRouting(double Threshold, double Margin, double Sugges
     public static QuickRouting Default { get; } = new(Threshold: 0.80, Margin: 0.04, SuggestionFloor: 0.55);
 }
 
-#pragma warning disable S2094 // A closed hierarchy's base, as AssistantTurn
-public abstract record RouteDecision;
-#pragma warning restore S2094
+/// <summary>
+/// How the router reached a decision, for the outcome log (PR 2): the best match's similarity,
+/// its lead over the runner-up, and whether the spelling correction won. Never the question.
+/// </summary>
+public sealed record RouteEvidence(double BestScore, double Margin, bool Corrected)
+{
+    public static RouteEvidence None { get; } = new(0, 0, false);
+}
+
+public abstract record RouteDecision
+{
+    public RouteEvidence Evidence { get; init; } = RouteEvidence.None;
+}
 
 public sealed record RouteToIntent(QuickIntent Intent, double Score, string? AnsweredAs) : RouteDecision;
 
@@ -70,17 +80,18 @@ public sealed class IntentRouter(QuickIndexState state, ITextEmbedder embedder, 
     {
         if (matches.Count == 0)
         {
-            return (new RouteUnsure([]), 0);
+            return (new RouteUnsure([]) { Evidence = RouteEvidence.None with { Corrected = answeredAs is not null } }, 0);
         }
 
         var top = matches[0];
         var runnerUp = matches.Count > 1 ? matches[1].Score : 0;
+        var evidence = new RouteEvidence(top.Score, top.Score - runnerUp, answeredAs is not null);
         if (top.Score >= routing.Threshold && top.Score - runnerUp >= routing.Margin)
         {
             RouteDecision decision = top.Target.Kind == QuickTargetKind.Intent
                 ? new RouteToIntent(QuickIntents.Find(top.Target.Id) ?? throw new InvalidOperationException(top.Target.Id), top.Score, answeredAs)
                 : new RouteToHelp(top.Section ?? throw new InvalidOperationException(top.Target.Id), top.Score, answeredAs);
-            return (decision, top.Score);
+            return (decision with { Evidence = evidence }, top.Score);
         }
 
         var suggestions = matches
@@ -92,6 +103,6 @@ public sealed class IntentRouter(QuickIndexState state, ITextEmbedder embedder, 
             .OfType<string>()
             .ToList();
 
-        return (new RouteUnsure(suggestions), top.Score);
+        return (new RouteUnsure(suggestions) { Evidence = evidence }, top.Score);
     }
 }

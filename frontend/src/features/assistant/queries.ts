@@ -5,10 +5,11 @@ import {
   getAssistantStatus,
   getConversation,
   listConversations,
+  rateAnswer,
   renameConversation,
 } from '../../api/assistant';
 import type { ApiError } from '../../api/client';
-import type { AssistantStatus, ConversationSummary, SavedConversation } from './types';
+import type { AnswerRating, AssistantStatus, ConversationSummary, SavedConversation } from './types';
 
 export const assistantKeys = {
   all: ['assistant'] as const,
@@ -69,5 +70,18 @@ export function useDeleteConversation(): UseMutationResult<void, ApiError, strin
     mutationFn: deleteConversation,
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: assistantKeys.conversations(), exact: true }),
+  });
+}
+
+interface RateInput {
+  readonly conversationId: string;
+  readonly turn: number;
+  readonly rating: AnswerRating | null;
+}
+
+/** A rating changes nothing the sidebar lists, so nothing is invalidated: the chat records it itself. */
+export function useRateAnswer(): UseMutationResult<void, ApiError, RateInput> {
+  return useMutation({
+    mutationFn: ({ conversationId, turn, rating }: RateInput) => rateAnswer(conversationId, turn, rating),
   });
 }

@@ -18,6 +18,7 @@ public sealed class AskAssistantHandlerTests
     private readonly IAssistantModel _model = Substitute.For<IAssistantModel>();
     private readonly IAssistantConversations _conversations = Substitute.For<IAssistantConversations>();
     private readonly IAssistantOutput _output = Substitute.For<IAssistantOutput>();
+    private readonly IAssistantOutcomeLog _outcomes = Substitute.For<IAssistantOutcomeLog>();
     private readonly IQueryDispatcher _queries = Substitute.For<IQueryDispatcher>();
     private readonly ICurrentUser _user = Substitute.For<ICurrentUser>();
     private readonly IClock _clock = Substitute.For<IClock>();
@@ -31,7 +32,7 @@ public sealed class AskAssistantHandlerTests
             .Returns(Result.Success(new JobHealthView(0, 1, 0, 0, Now)));
     }
 
-    private AskAssistantHandler Handler => new(_model, _conversations, _output, new AssistantToolbox(_queries), _user, _clock);
+    private AskAssistantHandler Handler => new(_model, _conversations, _output, new AssistantToolbox(_queries), _outcomes, _user, _clock);
 
     private static Result<AssistantModelTurn> Answer(string blocks = "answer") =>
         Result.Success(new AssistantModelTurn(new ModelTurn(blocks), [], AssistantStopReason.EndTurn, Usage));
@@ -66,6 +67,30 @@ public sealed class AskAssistantHandlerTests
                 && t[0] == new UserQuestionTurn("Why?", Now)
                 && t[1] == new ModelTurn("answer")),
             Now);
+    }
+
+    [Fact]
+    public async Task HandleAsync_AnAnswerAfterAToolRound_IsOnItsFinalModelTurn()
+    {
+        ModelReturns(ToolUse(), Answer());
+
+        var result = await AskAsync();
+
+        // question 0, tool_use model 1, tool results 2, final model 3
+        result.Value.Turn.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task HandleAsync_InAnExistingConversation_CountsTheStoredTurnsFirst()
+    {
+        ModelReturns(Answer());
+        var id = Guid.NewGuid();
+        _conversations.FindAsync(id, Arg.Any<CancellationToken>()).Returns(new AssistantConversation(
+            id, Caller, 1, [new UserQuestionTurn("earlier", Now), new ModelTurn("earlier answer")]));
+
+        var result = await AskAsync(id);
+
+        result.Value.Turn.Should().Be(3);
     }
 
     [Fact]
@@ -264,5 +289,33 @@ public sealed class AskAssistantHandlerTests
         await _output.DidNotReceiveWithAnyArgs().ToolAsync(default!, default);
         var toolResults = (ToolResultsTurn)_requests[1].Transcript[^1];
         toolResults.Results.Should().ContainSingle().Which.IsError.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HandleAsync_LogsTheAnswerAsAnAiAnswer()
+    {
+        ModelReturns(ToolUse(), Answer());
+
+        var result = await AskAsync(scope: ToolScope.Member);
+
+        _outcomes.Received(1).Record(Arg.Is<AnsweredQuestion>(o =>
+            o.ConversationId == result.Value.ConversationId
+            && o.QuestionTurn == 0
+            && o.AnswerTurn == 3
+            && o.Path == AnswerPath.Ai
+            && o.TargetId == null
+            && o.BestScore == null
+            && o.Scope == ToolScope.Member));
+    }
+
+    [Fact]
+    public async Task HandleAsync_AFailedQuestion_LogsNothing()
+    {
+        _model.NextTurnAsync(Arg.Any<AssistantRequest>(), _output, Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AssistantModelTurn>(new Error(ErrorKind.Unavailable, "assistant.unavailable", "Down.")));
+
+        await AskAsync();
+
+        _outcomes.DidNotReceiveWithAnyArgs().Record(default!);
     }
 }
