@@ -3136,6 +3136,12 @@ export interface components {
             readonly tools: readonly string[];
             readonly answer?: null | components["schemas"]["AssistantAnswerResponse"];
             readonly suggestions?: null | components["schemas"]["AssistantSuggestionsResponse"];
+            /**
+             * Format: int32
+             * @description The turn an answer is rated on; null on a question.
+             */
+            readonly turn?: null | number | string;
+            readonly rating?: null | components["schemas"]["AnswerRating"];
         };
         /** @enum {unknown} */
         readonly AssistantOutcome: "Answered" | "Capped" | "Truncated" | null;

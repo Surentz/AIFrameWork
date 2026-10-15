@@ -59,6 +59,8 @@ public sealed class AssistantConversationsController(
                     Tools = m.Tools,
                     Answer = m.Answer is { } answer ? AssistantCards.ToResponse(answer) : null,
                     Suggestions = m.Suggestions is { } suggestions ? AssistantCards.ToResponse(suggestions, availability.AiEnabled) : null,
+                    Turn = m.Turn,
+                    Rating = m.Rating,
                 })],
             })
             : result.Problem(HttpContext);

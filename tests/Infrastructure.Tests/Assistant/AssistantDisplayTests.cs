@@ -58,6 +58,42 @@ public sealed class AssistantDisplayTests
         messages.Select(m => m.Text).Should().Equal("Has it shipped?", "Fine.");
     }
 
+    [Fact]
+    public void Build_AnAiAnswerAfterAToolRound_CarriesItsFinalModelTurnAndRating()
+    {
+        var id = Guid.NewGuid();
+        var rows = new[]
+        {
+            AssistantTurnCodec.Encode(id, 0, new UserQuestionTurn("Did jobs fail?", Now), Now),
+            AssistantTurnCodec.Encode(id, 1, new ModelTurn("""[{"type":"tool_use","id":"toolu_1","name":"job_health","input":{}}]"""), Now),
+            AssistantTurnCodec.Encode(id, 2, new ToolResultsTurn([new AssistantToolResult("toolu_1", "{}", false)]), Now),
+            AssistantTurnCodec.Encode(id, 3, new ModelTurn("""[{"type":"text","text":"Three failed."}]"""), Now),
+        };
+
+        var messages = AssistantDisplay.Build(rows, new Dictionary<int, AnswerRating> { [3] = AnswerRating.Down });
+
+        messages[0].Turn.Should().BeNull();
+        messages[1].Turn.Should().Be(3);
+        messages[1].Rating.Should().Be(AnswerRating.Down);
+    }
+
+    [Fact]
+    public void Build_AQuickAnswer_CarriesItsOwnTurn_AndNoRatingWhenUnrated()
+    {
+        var id = Guid.NewGuid();
+        var answer = new QuickAnswer(QuickAnswerKind.Instant, null, "Shipped.", [], null, null, null);
+        var rows = new[]
+        {
+            AssistantTurnCodec.Encode(id, 0, new UserQuestionTurn("Has it shipped?", Now), Now),
+            AssistantTurnCodec.Encode(id, 1, new QuickAnswerTurn(answer, "Shipped."), Now),
+        };
+
+        var messages = AssistantDisplay.Build(rows);
+
+        messages[1].Turn.Should().Be(1);
+        messages[1].Rating.Should().BeNull();
+    }
+
     private static AssistantTurnRow Row(Guid conversation, int seq, string kind, string payload) => new()
     {
         Id = Guid.NewGuid(),

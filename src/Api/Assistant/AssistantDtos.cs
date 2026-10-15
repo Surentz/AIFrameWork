@@ -140,6 +140,12 @@ public sealed record AssistantMessageResponse
 
     /// <summary>The suggestions, when this message is a not-sure reply.</summary>
     public AssistantSuggestionsResponse? Suggestions { get; init; }
+
+    /// <summary>The turn an answer is rated on; null on a question.</summary>
+    public int? Turn { get; init; }
+
+    /// <summary>The owner's rating of this answer, if any.</summary>
+    public AnswerRating? Rating { get; init; }
 }
 
 public sealed record AssistantConversationResponse

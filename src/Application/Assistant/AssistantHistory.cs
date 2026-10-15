@@ -9,14 +9,17 @@ public sealed record AssistantConversationSummary(Guid Id, string Title, DateTim
 /// <summary>
 /// One message as the page shows it: a question, or everything the model wrote for it with the
 /// tools it used, or a quick reply with its card or suggestions. Built from the stored turns for
-/// display only; it never goes back to the model.
+/// display only; it never goes back to the model. An answer carries the turn a rating names and
+/// the owner's rating, if any.
 /// </summary>
 public sealed record AssistantDisplayMessage(
     string Role,
     string Text,
     IReadOnlyList<string> Tools,
     QuickAnswer? Answer = null,
-    QuickSuggestions? Suggestions = null)
+    QuickSuggestions? Suggestions = null,
+    int? Turn = null,
+    AnswerRating? Rating = null)
 {
     public const string UserRole = "user";
 

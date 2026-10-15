@@ -4430,6 +4430,27 @@
                 "$ref": "#/components/schemas/AssistantSuggestionsResponse"
               }
             ]
+          },
+          "turn": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The turn an answer is rated on; null on a question.",
+            "format": "int32"
+          },
+          "rating": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "The owner's rating of this answer, if any.",
+                "$ref": "#/components/schemas/AnswerRating"
+              }
+            ]
           }
         },
         "description": "One message as the page shows it. Role is user or assistant; Tools are the tool names the answer used."
