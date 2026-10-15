@@ -131,6 +131,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IValidator<RenameAssistantConversation>, RenameAssistantConversationValidator>();
         services.AddCommand<DeleteAssistantConversation, bool, DeleteAssistantConversationHandler>();
         services.AddCommand<RateAssistantAnswer, bool, RateAssistantAnswerHandler>();
+        services.AddQuery<GetAssistantInsights, AssistantInsightsView, GetAssistantInsightsHandler>();
         services.AddScoped<IValidator<RateAssistantAnswer>, RateAssistantAnswerValidator>();
     }
 
@@ -204,6 +205,7 @@ public static class InfrastructureRegistration
         services.AddScoped<IAssistantHistory, AssistantHistoryStore>();
         services.AddScoped<IAssistantRatings, AssistantRatings>();
         services.AddScoped<IAssistantOutcomeLog, AssistantOutcomeLog>();
+        services.AddScoped<IAssistantInsightsReader, AssistantInsightsReader>();
         services.AddScoped<IAssistantConversationRetention, AssistantConversationRetention>();
         services.AddScoped<ISessionValidator, SessionValidator>();
     }

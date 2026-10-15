@@ -972,6 +972,67 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/monitoring/assistant/insights": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: {
+            readonly parameters: {
+                readonly query?: {
+                    readonly days?: number | string;
+                };
+                readonly header?: never;
+                readonly path?: never;
+                readonly cookie?: never;
+            };
+            readonly requestBody?: never;
+            readonly responses: {
+                /** @description OK */
+                readonly 200: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["AssistantInsightsResponse"];
+                        readonly "application/json": components["schemas"]["AssistantInsightsResponse"];
+                        readonly "text/json": components["schemas"]["AssistantInsightsResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                readonly 403: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/monitoring/access": {
         readonly parameters: {
             readonly query?: never;
@@ -3064,6 +3125,11 @@ export interface components {
              */
             readonly lastSeenAt?: null | string;
         };
+        /**
+         * @description Which path answered a question: an instant answer, a help article, suggestions, or the AI.
+         * @enum {unknown}
+         */
+        readonly AnswerPath: "Instant" | "Help" | "Suggested" | "Ai";
         /** @enum {unknown} */
         readonly AnswerRating: "Up" | "Down" | null;
         /**
@@ -3123,6 +3189,46 @@ export interface components {
         readonly AssistantFactResponse: {
             readonly label: string;
             readonly value: string;
+        };
+        readonly AssistantInsightsDayResponse: {
+            /** Format: date */
+            readonly day: string;
+            /** Format: int32 */
+            readonly instant: number | string;
+            /** Format: int32 */
+            readonly help: number | string;
+            /** Format: int32 */
+            readonly suggested: number | string;
+            /** Format: int32 */
+            readonly ai: number | string;
+        };
+        /** @description A missed question, scrubbed. Names no user and no conversation. */
+        readonly AssistantInsightsMissResponse: {
+            /** Format: date-time */
+            readonly at: string;
+            readonly path: components["schemas"]["AnswerPath"];
+            readonly targetId?: null | string;
+            /** Format: double */
+            readonly bestScore?: null | number | string;
+            readonly rating?: null | components["schemas"]["AnswerRating"];
+            readonly question: string;
+        };
+        readonly AssistantInsightsResponse: {
+            /** Format: date-time */
+            readonly since: string;
+            readonly days: readonly components["schemas"]["AssistantInsightsDayResponse"][];
+            readonly targets: readonly components["schemas"]["AssistantInsightsTargetResponse"][];
+            readonly misses: readonly components["schemas"]["AssistantInsightsMissResponse"][];
+        };
+        readonly AssistantInsightsTargetResponse: {
+            readonly path: components["schemas"]["AnswerPath"];
+            readonly targetId: string;
+            /** Format: int32 */
+            readonly questions: number | string;
+            /** Format: int32 */
+            readonly up: number | string;
+            /** Format: int32 */
+            readonly down: number | string;
         };
         /** @description An in-app path. The page renders it as a link only if it matches its allow-list. */
         readonly AssistantLinkResponse: {

@@ -1,3 +1,4 @@
+using AiFramework.Application.Assistant;
 using AiFramework.Application.Abstractions;
 using AiFramework.Application.Monitoring;
 using AiFramework.Application.Users;
@@ -364,4 +365,57 @@ public sealed record ExternalSystemRowResponse
     public required long Attempts { get; init; }
 
     public double? P95Ms { get; init; }
+}
+
+public sealed record AssistantInsightsDayResponse
+{
+    public required DateOnly Day { get; init; }
+
+    public required int Instant { get; init; }
+
+    public required int Help { get; init; }
+
+    public required int Suggested { get; init; }
+
+    public required int Ai { get; init; }
+}
+
+public sealed record AssistantInsightsTargetResponse
+{
+    public required AnswerPath Path { get; init; }
+
+    public required string TargetId { get; init; }
+
+    public required int Questions { get; init; }
+
+    public required int Up { get; init; }
+
+    public required int Down { get; init; }
+}
+
+/// <summary>A missed question, scrubbed. Names no user and no conversation.</summary>
+public sealed record AssistantInsightsMissResponse
+{
+    public required DateTimeOffset At { get; init; }
+
+    public required AnswerPath Path { get; init; }
+
+    public string? TargetId { get; init; }
+
+    public double? BestScore { get; init; }
+
+    public AnswerRating? Rating { get; init; }
+
+    public required string Question { get; init; }
+}
+
+public sealed record AssistantInsightsResponse
+{
+    public required DateTimeOffset Since { get; init; }
+
+    public required IReadOnlyList<AssistantInsightsDayResponse> Days { get; init; }
+
+    public required IReadOnlyList<AssistantInsightsTargetResponse> Targets { get; init; }
+
+    public required IReadOnlyList<AssistantInsightsMissResponse> Misses { get; init; }
 }
