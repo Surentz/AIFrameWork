@@ -3,7 +3,7 @@ import * as assistant from '../../screens/assistant.ts';
 import * as insights from '../../screens/assistantInsights.ts';
 import * as shell from '../../screens/shell.ts';
 
-// @local-only: needs instant answers and the fake Messages API, which only the managed stack runs.
+// @local-only: needs instant answers, which only the managed stack configures.
 test.describe('assistant insights', { tag: '@local-only' }, () => {
   test("a member's missed question, rated down, reaches an administrator's insights", async ({ signedInPage, adminPage }) => {
     await test.step('a member asks something the assistant cannot answer at once, and rates the reply down', async () => {
@@ -16,7 +16,7 @@ test.describe('assistant insights', { tag: '@local-only' }, () => {
     await test.step('an administrator sees it among the missed questions', async () => {
       await adminPage.goto('/');
       await shell.goTo(adminPage, 'Operations', 'Assistant insights');
-      await expect(insights.missedQuestions(adminPage)).toContainText('Write me a poem about the rain');
+      await expect(insights.missedQuestion(adminPage, 'Write me a poem about the rain').filter({ hasText: '👎' })).toBeVisible();
     });
   });
 });
