@@ -32,7 +32,8 @@ Amends ADR 0034.
   `assistant.quick_unavailable`) logs nothing.
 - **Administrators see what was missed.** `GET /api/monitoring/assistant/insights?days=1..30`
   (`Monitoring.Read`) returns daily rates, the most-asked targets and up to 50 missed questions: those
-  that ended in suggestions or the AI, or were rated 👎.
+  that ended in suggestions or the AI, or were rated 👎. The list is ordered rated 👎 first, then newest,
+  so volume of AI and suggestion misses never pushes a 👎 out of the 50.
 - **The question text is read live from the transcript and scrubbed** with `OperationalText.Scrub`,
   never copied. The list names no user and no conversation.
 - **Ratings and outcomes cascade with the conversation**, so the owner's delete and the 30-day
@@ -48,9 +49,15 @@ Costs:
 - A new, narrow access path to members' words: scrubbed, read-only, administrators only.
 - The insights page covers at most 30 days, the life of the transcript.
 - A missed question cannot link to its conversation, because administrators cannot open another
-  user's conversation. Scrubbing removes emails and addresses but cannot remove every personal detail
+  user's conversation. Scrubbing removes email and IP addresses but cannot remove every personal detail
   a member types into free text.
 - The turn number becomes part of the API (events and saved messages).
+- Choosing "Ask the AI" after suggestions re-asks the question, so one question logs a Suggested and an Ai
+  outcome: it appears twice in the misses and in the daily counts.
+- A quick reply that reports a source "couldn't be loaded" is still an Instant answer, so an outage can
+  raise the answered-at-once rate.
+- A miss carries its exact time. An administrator who can also read request logs or the sign-in audit
+  could match it to a user, so "names no user" means the page itself names none.
 
 Rules out: storing question text in the outcome or rating tables, and tying a miss to a user.
 
