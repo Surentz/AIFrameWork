@@ -15,6 +15,7 @@ public sealed class AskQuickHandlerTests
 
     private readonly IAssistantConversations _conversations = Substitute.For<IAssistantConversations>();
     private readonly IAssistantOutput _output = Substitute.For<IAssistantOutput>();
+    private readonly IAssistantOutcomeLog _outcomes = Substitute.For<IAssistantOutcomeLog>();
     private readonly IQueryDispatcher _queries = Substitute.For<IQueryDispatcher>();
     private readonly ICurrentUser _user = Substitute.For<ICurrentUser>();
     private readonly IClock _clock = Substitute.For<IClock>();
@@ -37,7 +38,7 @@ public sealed class AskQuickHandlerTests
     private AskQuickHandler Handler => new(
         new IntentRouter(_state, _embedder, Routing),
         new QuickAnswerComposer(_queries, new ParameterResolver(_queries)),
-        _conversations, _output, _user, _clock);
+        _conversations, _output, _outcomes, _user, _clock);
 
     private Task<Result<AssistantAnswer>> AskAsync(string question, Guid? conversation = null) =>
         Handler.HandleAsync(new AskQuick(conversation, question, ToolScope.Member), CancellationToken.None);
@@ -97,7 +98,7 @@ public sealed class AskQuickHandlerTests
         var handler = new AskQuickHandler(
             new IntentRouter(new QuickIndexState(), _embedder, Routing),
             new QuickAnswerComposer(_queries, new ParameterResolver(_queries)),
-            _conversations, _output, _user, _clock);
+            _conversations, _output, _outcomes, _user, _clock);
 
         var result = await handler.HandleAsync(new AskQuick(null, "anything", ToolScope.Member), CancellationToken.None);
 
@@ -106,6 +107,7 @@ public sealed class AskQuickHandlerTests
         result.Error.Code.Should().Be("assistant.quick_unavailable");
         _output.ReceivedCalls().Should().BeEmpty();
         _conversations.ReceivedCalls().Should().BeEmpty();
+        _outcomes.DidNotReceiveWithAnyArgs().Record(default!);
     }
 
     [Fact]
@@ -143,5 +145,35 @@ public sealed class AskQuickHandlerTests
         ];
 
         AssistantLimits.AiQuestions(turns).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task AnInstantAnswer_IsLoggedWithItsIntentAndScore_AndNoQuestionText()
+    {
+        _embedder.Add("show my orders", 1, 0.05f);
+
+        var result = await AskAsync("show my orders");
+
+        _outcomes.Received(1).Record(Arg.Is<AnsweredQuestion>(o =>
+            o.ConversationId == result.Value.ConversationId
+            && o.QuestionTurn == 0
+            && o.AnswerTurn == 1
+            && o.At == Now
+            && o.Path == AnswerPath.Instant
+            && o.TargetId == QuickIntents.RecentOrders
+            && o.BestScore > 0.99
+            && o.Margin > 0.9
+            && !o.Corrected
+            && o.Scope == ToolScope.Member));
+    }
+
+    [Fact]
+    public async Task Suggestions_AreLoggedAsSuggested()
+    {
+        _embedder.Add("orders or export", 1, 1);
+
+        await AskAsync("orders or export");
+
+        _outcomes.Received(1).Record(Arg.Is<AnsweredQuestion>(o => o.Path == AnswerPath.Suggested && o.TargetId == null));
     }
 }
