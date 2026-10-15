@@ -22,7 +22,10 @@ public interface IAssistantInsightsReader
 
     public Task<IReadOnlyList<InsightsTarget>> TargetsAsync(DateTimeOffset since, int limit, CancellationToken cancellationToken);
 
-    /// <summary>The question text is returned as stored; the caller scrubs it.</summary>
+    /// <summary>
+    /// At most <paramref name="limit"/> misses: rated down first, then newest, so volume of AI and suggestion
+    /// misses never pushes a thumbs-down out. The question text is returned as stored; the caller scrubs it.
+    /// </summary>
     public Task<IReadOnlyList<InsightsMiss>> MissesAsync(DateTimeOffset since, int limit, CancellationToken cancellationToken);
 }
 

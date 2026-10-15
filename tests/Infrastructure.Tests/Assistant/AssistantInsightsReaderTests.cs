@@ -65,6 +65,21 @@ public sealed class AssistantInsightsReaderTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task MissesAsync_ARatedDownRow_SurvivesTheLimit_AheadOfNewerAiMisses()
+    {
+        var at = new DateTimeOffset(2035, 11, 12, 10, 0, 0, TimeSpan.Zero);
+        await SeedAsync(at, "old but wrong", AnswerPath.Instant, "order_status", AnswerRating.Down);
+        await SeedAsync(at.AddMinutes(1), "ai one", AnswerPath.Ai, null);
+        await SeedAsync(at.AddMinutes(2), "ai two", AnswerPath.Ai, null);
+        await SeedAsync(at.AddMinutes(3), "ai three", AnswerPath.Ai, null);
+
+        await using var context = fixture.CreateContext();
+        var misses = await new AssistantInsightsReader(context).MissesAsync(at.AddMinutes(-1), 2, CancellationToken.None);
+
+        misses.Select(m => m.Question).Should().Equal("old but wrong", "ai three");
+    }
+
+    [Fact]
     public async Task MissesAsync_ADeletedConversation_IsGone()
     {
         var at = new DateTimeOffset(2033, 7, 8, 10, 0, 0, TimeSpan.Zero);

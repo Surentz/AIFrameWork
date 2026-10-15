@@ -58,7 +58,7 @@ internal sealed class AssistantInsightsReader(AiFrameworkDbContext context) : IA
                 from r in rated.DefaultIfEmpty()
                 where o.At >= since
                     && (o.Path == AnswerPath.Suggested || o.Path == AnswerPath.Ai || (r != null && r.Rating == AnswerRating.Down))
-                orderby o.At descending
+                orderby (r != null && r.Rating == AnswerRating.Down) descending, o.At descending, o.Id
                 select new { o.ConversationId, o.QuestionTurn, o.At, o.Path, o.TargetId, o.BestScore, Rating = r == null ? (AnswerRating?)null : r.Rating })
             .Take(limit)
             .ToListAsync(cancellationToken)
