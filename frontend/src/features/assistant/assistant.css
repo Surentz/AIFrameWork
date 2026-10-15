@@ -413,3 +413,23 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+.assistant-rating {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.assistant-rating button {
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  background: none;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.assistant-rating button[aria-pressed='true'],
+.assistant-rating button:hover {
+  border-color: var(--color-border);
+  opacity: 1;
+}

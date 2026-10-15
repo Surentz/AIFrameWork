@@ -460,3 +460,37 @@ describe('instant answers', () => {
     expect(screen.queryByRole('button', { name: /Ask the AI/ })).not.toBeInTheDocument();
   });
 });
+
+describe('rating answers', () => {
+  it('offers a rating once the answer is saved, not while it streams', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        openSseResponse(
+          sseEvent({ type: 'answer', turn: 1, answer: { kind: 'Instant', text: 'You have no orders yet.', facts: [] } }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Has my last order shipped?');
+
+    expect(await screen.findByRole('article', { name: 'Instant answer' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Rate this answer' })).not.toBeInTheDocument();
+  });
+
+  it('shows the rating group after done', async () => {
+    server.use(
+      http.post('/api/assistant/quick', () =>
+        sseResponse(
+          sseEvent({ type: 'answer', turn: 1, answer: { kind: 'Instant', text: 'You have no orders yet.', facts: [] } }),
+          sseEvent({ type: 'done', conversationId: 'c1', turn: 1, outcome: 'Answered' }),
+        ),
+      ),
+    );
+    renderWith({ quickEnabled: true, aiEnabled: false });
+
+    await ask('Has my last order shipped?');
+
+    expect(await screen.findByRole('group', { name: 'Rate this answer' })).toBeInTheDocument();
+  });
+});

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { askAssistant, askQuick } from '../../api/assistant';
 import { conversationReducer, initialConversation } from './conversation';
 import type { ConversationState } from './conversation';
-import type { AskMode } from './types';
+import type { AnswerRating, AskMode } from './types';
 
 /** How one question ended. Only `answered` was saved on the server. */
 export type AskOutcome = 'answered' | 'failed' | 'stopped';
@@ -17,6 +17,7 @@ export interface ConversationOptions {
 export interface AssistantConversation extends ConversationState {
   readonly ask: (question: string, mode?: AskMode) => Promise<AskOutcome>;
   readonly stop: () => void;
+  readonly rated: (turn: number, rating: AnswerRating | undefined) => void;
 }
 
 /**
@@ -73,6 +74,10 @@ export function useAssistantConversation(options: ConversationOptions = {}): Ass
     inFlight.current?.abort();
   }, []);
 
+  const rated = useCallback((turn: number, rating: AnswerRating | undefined) => {
+    dispatch({ type: 'rated', turn, rating });
+  }, []);
+
   // Not a fetch: the cleanup that aborts an answer still streaming when the page goes away.
   useEffect(
     () => () => {
@@ -81,5 +86,5 @@ export function useAssistantConversation(options: ConversationOptions = {}): Ass
     [],
   );
 
-  return { ...state, ask, stop };
+  return { ...state, ask, stop, rated };
 }

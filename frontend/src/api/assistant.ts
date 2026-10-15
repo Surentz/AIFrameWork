@@ -1,5 +1,6 @@
 import { SseParser } from '../features/assistant/sse';
 import type {
+  AnswerRating,
   AskAssistantRequest,
   AssistantEvent,
   AssistantStatus,
@@ -77,4 +78,11 @@ export function renameConversation(id: string, title: string): Promise<void> {
 
 export function deleteConversation(id: string): Promise<void> {
   return requestVoid(conversationPath(id), { method: 'DELETE' });
+}
+
+export function rateAnswer(conversationId: string, turn: number, rating: AnswerRating | null): Promise<void> {
+  return requestVoid(
+    `/api/assistant/conversations/${encodeURIComponent(conversationId)}/turns/${String(turn)}/rating`,
+    { method: 'PUT', body: JSON.stringify({ rating }) },
+  );
 }
