@@ -1,5 +1,6 @@
 import type {
   AdminActionPage,
+  AssistantInsights,
   AdministeredUserPage,
   DeadLetterPage,
   ExternalSystems,
@@ -119,4 +120,8 @@ export function signOutUser(userId: string): Promise<void> {
 
 export function listUserActions(userId: string): Promise<AdminActionPage> {
   return request<AdminActionPage>(`/api/monitoring/users/${userId}/actions`);
+}
+
+export function getAssistantInsights(days: number): Promise<AssistantInsights> {
+  return request<AssistantInsights>(`/api/monitoring/assistant/insights?days=${String(days)}`);
 }

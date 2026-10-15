@@ -83,6 +83,11 @@ export const navGroups: readonly NavGroup[] = [
         to: '/monitoring',
         description: 'Jobs, sign-ins, traffic and integrations',
       },
+      {
+        label: 'Assistant insights',
+        to: '/monitoring/assistant-insights',
+        description: 'What the assistant answered, and what it missed',
+      },
     ],
   },
   {

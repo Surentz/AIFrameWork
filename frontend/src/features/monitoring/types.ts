@@ -46,3 +46,5 @@ export type AdminActionPage = components['schemas']['AdminActionPageResponse'];
 export type AdminActionKind = components['schemas']['AdminActionKind'];
 
 export type UserRole = components['schemas']['UserRole'];
+
+export type AssistantInsights = components['schemas']['AssistantInsightsResponse'];
