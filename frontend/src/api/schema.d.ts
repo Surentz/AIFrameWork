@@ -3035,7 +3035,7 @@ export interface components {
          * @description One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of
          *     the answer), tool (a tool started), answer (an instant or help answer, whole),
          *     suggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a
-         *     ProblemDetails; nothing from this question was saved).
+         *     ProblemDetails; nothing from this question was saved). Answer, suggestions and done carry the answer's turn.
          */
         readonly AssistantEventResponse: {
             readonly type: string;
@@ -3047,6 +3047,11 @@ export interface components {
             readonly problem?: null | components["schemas"]["ProblemDetails"];
             readonly answer?: null | components["schemas"]["AssistantAnswerResponse"];
             readonly suggestions?: null | components["schemas"]["AssistantSuggestionsResponse"];
+            /**
+             * Format: int32
+             * @description The stored turn that carries this answer: what a rating names. On answer, suggestions and done.
+             */
+            readonly turn?: null | number | string;
         };
         readonly AssistantFactResponse: {
             readonly label: string;

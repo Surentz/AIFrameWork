@@ -4243,9 +4243,19 @@
                 "$ref": "#/components/schemas/AssistantSuggestionsResponse"
               }
             ]
+          },
+          "turn": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The stored turn that carries this answer: what a rating names. On answer, suggestions and done.",
+            "format": "int32"
           }
         },
-        "description": "One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of\nthe answer), tool (a tool started), answer (an instant or help answer, whole),\nsuggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a\nProblemDetails; nothing from this question was saved)."
+        "description": "One server-sent event's data. string AssistantEventResponse.Type is also the SSE event name: text (a piece of\nthe answer), tool (a tool started), answer (an instant or help answer, whole),\nsuggestions (what to offer when the router was not sure), done (saved; carries the conversation id), error (carries a\nProblemDetails; nothing from this question was saved). Answer, suggestions and done carry the answer's turn."
       },
       "AssistantFactResponse": {
         "required": [

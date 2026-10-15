@@ -24,10 +24,10 @@ public interface IAssistantOutput
 
     public Task ToolAsync(string toolName, CancellationToken cancellationToken);
 
-    /// <summary>A quick answer, all at once: nothing to stream.</summary>
-    public Task AnswerAsync(QuickAnswer answer, CancellationToken cancellationToken);
+    /// <summary>A quick answer, all at once: nothing to stream. <paramref name="turn"/> is the turn it is stored on.</summary>
+    public Task AnswerAsync(QuickAnswer answer, int turn, CancellationToken cancellationToken);
 
-    public Task SuggestionsAsync(QuickSuggestions suggestions, CancellationToken cancellationToken);
+    public Task SuggestionsAsync(QuickSuggestions suggestions, int turn, CancellationToken cancellationToken);
 }
 
 public sealed record AssistantConversation(

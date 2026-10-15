@@ -69,6 +69,30 @@ public sealed class AskAssistantHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_AnAnswerAfterAToolRound_IsOnItsFinalModelTurn()
+    {
+        ModelReturns(ToolUse(), Answer());
+
+        var result = await AskAsync();
+
+        // question 0, tool_use model 1, tool results 2, final model 3
+        result.Value.Turn.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task HandleAsync_InAnExistingConversation_CountsTheStoredTurnsFirst()
+    {
+        ModelReturns(Answer());
+        var id = Guid.NewGuid();
+        _conversations.FindAsync(id, Arg.Any<CancellationToken>()).Returns(new AssistantConversation(
+            id, Caller, 1, [new UserQuestionTurn("earlier", Now), new ModelTurn("earlier answer")]));
+
+        var result = await AskAsync(id);
+
+        result.Value.Turn.Should().Be(3);
+    }
+
+    [Fact]
     public async Task HandleAsync_ToolUse_RunsTheToolReportsItAndSendsItsResultBack()
     {
         ModelReturns(ToolUse(), Answer());

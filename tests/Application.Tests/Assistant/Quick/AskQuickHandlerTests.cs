@@ -52,12 +52,27 @@ public sealed class AskQuickHandlerTests
         var result = await AskAsync("show my orders");
 
         result.IsSuccess.Should().BeTrue();
-        await _output.Received(1).AnswerAsync(Arg.Is<QuickAnswer>(a => a.Text == "You haven't placed any orders yet."), Arg.Any<CancellationToken>());
+        await _output.Received(1).AnswerAsync(Arg.Is<QuickAnswer>(a => a.Text == "You haven't placed any orders yet."), 1, Arg.Any<CancellationToken>());
+        result.Value.Turn.Should().Be(1);
         _conversations.Received(1).Start(result.Value.ConversationId, Caller, "show my orders", Now);
         _conversations.Received(1).Append(
             result.Value.ConversationId,
             Arg.Is<IReadOnlyList<AssistantTurn>>(turns => turns.Count == 2 && turns[0] is UserQuestionTurn && turns[1] is QuickAnswerTurn),
             Now);
+    }
+
+    [Fact]
+    public async Task AQuestionInAnExistingConversation_IsAnsweredOnTheTurnAfterItsQuestion()
+    {
+        _embedder.Add("show my orders", 1, 0.05f);
+        var id = Guid.NewGuid();
+        _conversations.FindAsync(id, Arg.Any<CancellationToken>()).Returns(new AssistantConversation(
+            id, Caller, 1, [new UserQuestionTurn("earlier", Now), new QuickAnswerTurn(new QuickAnswer(QuickAnswerKind.Instant, null, "Earlier.", [], null, null, null), "Earlier.")]));
+
+        var result = await AskAsync("show my orders", id);
+
+        result.Value.Turn.Should().Be(3);
+        await _output.Received(1).AnswerAsync(Arg.Any<QuickAnswer>(), 3, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -69,6 +84,7 @@ public sealed class AskQuickHandlerTests
 
         await _output.Received(1).SuggestionsAsync(
             Arg.Is<QuickSuggestions>(s => s.Options.Count == 2 && s.Text == "I'm not sure what you mean. Did you mean one of these?"),
+            1,
             Arg.Any<CancellationToken>());
         _conversations.Received(1).Append(Arg.Any<Guid>(), Arg.Is<IReadOnlyList<AssistantTurn>>(t => t[1] is SuggestionsTurn), Now);
     }
@@ -102,7 +118,7 @@ public sealed class AskQuickHandlerTests
         var result = await AskAsync("Show my recent orders", id);
 
         result.Error.Code.Should().Be("assistant.conversation_full");
-        await _output.DidNotReceiveWithAnyArgs().AnswerAsync(default!, default);
+        await _output.DidNotReceiveWithAnyArgs().AnswerAsync(default!, default, default);
     }
 
     [Fact]

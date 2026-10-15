@@ -58,17 +58,19 @@ public sealed class AskQuickHandler(
         }
 
         var reply = await ReplyAsync(routed.Value, question, cancellationToken).ConfigureAwait(false);
+        // The reply is stored on the turn after its question.
+        var answerTurn = opened.Value.Turns.Count + 1;
         if (reply is QuickAnswer answer)
         {
-            await output.AnswerAsync(answer, cancellationToken).ConfigureAwait(false);
+            await output.AnswerAsync(answer, answerTurn, cancellationToken).ConfigureAwait(false);
         }
         else if (reply is QuickSuggestions suggestions)
         {
-            await output.SuggestionsAsync(suggestions, cancellationToken).ConfigureAwait(false);
+            await output.SuggestionsAsync(suggestions, answerTurn, cancellationToken).ConfigureAwait(false);
         }
 
         conversations.Append(opened.Value.Id, [new UserQuestionTurn(question, now), QuickReplay.Turn(reply)], now);
-        return Result.Success(new AssistantAnswer(opened.Value.Id, AssistantOutcome.Answered));
+        return Result.Success(new AssistantAnswer(opened.Value.Id, AssistantOutcome.Answered, answerTurn));
     }
 
     private async Task<QuickReply> ReplyAsync(RouteDecision routed, string question, CancellationToken cancellationToken) =>

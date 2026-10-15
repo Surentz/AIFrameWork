@@ -25,11 +25,11 @@ public sealed class SseAssistantOutput(IHttpContextAccessor accessor, IOptions<M
     public Task ToolAsync(string toolName, CancellationToken cancellationToken) =>
         WriteAsync(AssistantEventResponse.ToolStarted(toolName), cancellationToken);
 
-    public Task AnswerAsync(QuickAnswer answer, CancellationToken cancellationToken) =>
-        WriteAsync(AssistantEventResponse.Answered(AssistantCards.ToResponse(answer)), cancellationToken);
+    public Task AnswerAsync(QuickAnswer answer, int turn, CancellationToken cancellationToken) =>
+        WriteAsync(AssistantEventResponse.Answered(AssistantCards.ToResponse(answer), turn), cancellationToken);
 
-    public Task SuggestionsAsync(QuickSuggestions suggestions, CancellationToken cancellationToken) =>
-        WriteAsync(AssistantEventResponse.Suggested(AssistantCards.ToResponse(suggestions, availability.AiEnabled)), cancellationToken);
+    public Task SuggestionsAsync(QuickSuggestions suggestions, int turn, CancellationToken cancellationToken) =>
+        WriteAsync(AssistantEventResponse.Suggested(AssistantCards.ToResponse(suggestions, availability.AiEnabled), turn), cancellationToken);
 
     public Task WriteAsync(AssistantEventResponse streamEvent, CancellationToken cancellationToken)
     {

@@ -90,6 +90,19 @@ public sealed class AssistantQuickEndpointTests(ApiFactory factory) : IAsyncLife
     });
 
     [Fact]
+    public async Task Quick_PutsTheAnswersTurnOnItsEventsAndOnDone()
+    {
+        var client = await MemberAsync();
+
+        var events = await EventsAsync(await client.PostAsJsonAsync("/api/assistant/quick", new { Question = "Has my last order shipped?" }));
+
+        events.Should().HaveCount(2);
+        events[0].GetProperty("turn").GetInt32().Should().Be(1);
+        events[1].GetProperty("type").GetString().Should().Be("done");
+        events[1].GetProperty("turn").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
     public async Task Quick_AnswersAMembersOrderQuestionInstantly_AndSavesIt()
     {
         var client = await MemberAsync();
