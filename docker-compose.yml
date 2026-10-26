@@ -25,7 +25,7 @@ services:
   # messages from them (ADR 0026). In the DEFAULT profile, unlike Seq and Redis: the API and the
   # worker refuse to start without it, so it must come up with a bare `docker compose up`.
   rabbitmq:
-    image: rabbitmq:4.3-management-alpine
+    image: rabbitmq:4.4-management-alpine
     # Load-bearing. RabbitMQ keys its data directory on the node name (rabbit@<hostname>), and
     # compose's default hostname is the container id - a new one on every recreate, which would
     # orphan every message in the named volume below.
@@ -64,7 +64,7 @@ services:
   # `docker compose --profile observability down`, which scripts/stop-dev.ps1 always passes
   # (harmless when Seq was never started — there is then nothing in that profile to stop).
   seq:
-    image: datalust/seq:2026.1.17182
+    image: datalust/seq:2026.1.17473
     profiles: ['observability']
     environment:
       ACCEPT_EULA: 'Y'
