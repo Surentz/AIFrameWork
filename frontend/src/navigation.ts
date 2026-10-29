@@ -48,6 +48,7 @@ export const navGroups: readonly NavGroup[] = [
         description: 'Order something from the catalogue',
       },
       { label: 'Exports', to: '/orders/exports', description: 'Download your orders as a PDF' },
+      { label: 'Map', to: '/map', description: 'Pan and zoom a street map' },
     ],
   },
   {

@@ -8,6 +8,7 @@ import { RequireAuth } from './features/auth/RequireAuth';
 import { RequireRole } from './features/auth/RequireRole';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { FulfilmentPage } from './features/fulfilment/FulfilmentPage';
+import { MapPage } from './features/map/MapPage';
 import { AssistantInsightsPage } from './features/monitoring/AssistantInsightsPage';
 import { IntegrationsPage } from './features/monitoring/IntegrationsPage';
 import { JobsPage } from './features/monitoring/JobsPage';
@@ -44,6 +45,7 @@ export function AppRoutes(): React.JSX.Element {
           {/* Before /orders/:id, for the reason /products/new is: otherwise "exports" is an id. */}
           <Route path="/orders/exports" element={<OrderExportsPage />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
+          <Route path="/map" element={<MapPage />} />
           {/* /products/new is declared before /products/:id so "new" is matched as the literal
               route, not captured as an id. */}
           <Route path="/products" element={<ProductList />} />

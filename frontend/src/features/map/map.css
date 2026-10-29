@@ -1,0 +1,15 @@
+.map__frame {
+  margin-block-start: 1rem;
+}
+
+/* Leaflet draws nothing into a container with no height. */
+.map__canvas {
+  height: 70vh;
+  min-height: 20rem;
+  border-radius: 0.5rem;
+}
+
+.map__note {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}

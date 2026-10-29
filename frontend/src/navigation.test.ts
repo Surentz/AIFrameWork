@@ -32,6 +32,7 @@ describe('navigation', () => {
     ['/orders/new', 'sales'],
     ['/orders/exports', 'sales'],
     ['/orders/42', 'sales'],
+    ['/map', 'sales'],
     ['/products', 'catalogue'],
     ['/products/new', 'catalogue'],
     ['/products/7/edit', 'catalogue'],
