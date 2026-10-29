@@ -16,7 +16,6 @@ public sealed class MonitoringJobRunsController(IQueryDispatcher queries) : Cont
     [HttpGet]
     [ProducesResponseType<JobRunPageResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> List(
         [FromQuery] JobRunStatus? status = null,
         [FromQuery] string? jobName = null,
@@ -42,7 +41,6 @@ public sealed class MonitoringJobRunsController(IQueryDispatcher queries) : Cont
     [HttpGet("{envelopeId:guid}/{attempt:int}")]
     [ProducesResponseType<JobRunResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Get(
         Guid envelopeId, int attempt, CancellationToken cancellationToken)
     {

@@ -36,7 +36,6 @@ public sealed class FulfilmentController(
     [HttpGet]
     [ProducesResponseType<FulfilmentOrderPageResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> List(
         [FromQuery] OrderStatus status = OrderStatus.Placed,
         [FromQuery] int limit = 20,
@@ -72,7 +71,6 @@ public sealed class FulfilmentController(
     /// </summary>
     [HttpPost("{id:guid}/ship")]
     [ProducesResponseType<OrderStatusResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Ship(Guid id, CancellationToken cancellationToken)

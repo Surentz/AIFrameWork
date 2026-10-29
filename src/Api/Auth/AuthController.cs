@@ -87,7 +87,6 @@ public sealed class AuthController(
     /// <summary>Returns the signed-in user.</summary>
     [HttpGet("me")]
     [ProducesResponseType<SessionResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> Me(CancellationToken cancellationToken)
     {
         if (currentUser.Id is not { } userId)
@@ -105,7 +104,6 @@ public sealed class AuthController(
     [HttpPost("change-password")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> ChangeOwnPassword(
         ChangePasswordRequest request, CancellationToken cancellationToken)
     {
@@ -149,7 +147,6 @@ public sealed class AuthController(
     /// <summary>Invalidates every session for the signed-in user, including this one.</summary>
     [HttpPost("sign-out-everywhere")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> SignOutEverywhere(CancellationToken cancellationToken)
     {
         if (currentUser.Id is not { } userId)

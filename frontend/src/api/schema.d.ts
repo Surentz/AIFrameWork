@@ -78,6 +78,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Not Found */
                 readonly 404: {
                     headers: {
@@ -138,6 +149,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["PopulationAreasResponse"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Service Unavailable */
                 readonly 503: {
                     headers: {
@@ -196,6 +218,28 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                readonly 404: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -268,6 +312,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         readonly put?: never;
@@ -300,6 +355,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -369,6 +435,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProductResponse"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Not Found */
                 readonly 404: {
                     headers: {
@@ -409,6 +486,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -477,6 +565,17 @@ export interface paths {
                         readonly "text/json": readonly components["schemas"]["OrderExportResponse"][];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         readonly put?: never;
@@ -503,6 +602,17 @@ export interface paths {
                         readonly "text/plain": components["schemas"]["OrderExportResponse"];
                         readonly "application/json": components["schemas"]["OrderExportResponse"];
                         readonly "text/json": components["schemas"]["OrderExportResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
             };
@@ -542,6 +652,17 @@ export interface paths {
                     };
                     content: {
                         readonly "application/pdf": components["schemas"]["Stream"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Not Found */
@@ -607,6 +728,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         readonly put?: never;
@@ -639,6 +771,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -708,6 +851,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Not Found */
                 readonly 404: {
                     headers: {
@@ -766,6 +920,17 @@ export interface paths {
                         readonly "text/plain": components["schemas"]["OrderResponse"];
                         readonly "application/json": components["schemas"]["OrderResponse"];
                         readonly "text/json": components["schemas"]["OrderResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Not Found */
@@ -832,6 +997,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         readonly put?: never;
@@ -868,6 +1044,17 @@ export interface paths {
                         readonly "text/plain": components["schemas"]["UnreadCountResponse"];
                         readonly "application/json": components["schemas"]["UnreadCountResponse"];
                         readonly "text/json": components["schemas"]["UnreadCountResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
             };
@@ -913,6 +1100,17 @@ export interface paths {
                         readonly "text/plain": components["schemas"]["NotificationReadResponse"];
                         readonly "application/json": components["schemas"]["NotificationReadResponse"];
                         readonly "text/json": components["schemas"]["NotificationReadResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Not Found */
@@ -964,6 +1162,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["NotificationReadResponse"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         readonly delete?: never;
@@ -1003,6 +1212,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -1135,6 +1355,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Forbidden */
                 readonly 403: {
                     headers: {
@@ -1188,6 +1419,17 @@ export interface paths {
                         readonly [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
                 /** @description Forbidden */
                 readonly 403: {
@@ -1244,6 +1486,17 @@ export interface paths {
                         readonly "text/plain": components["schemas"]["ExternalSystemsResponse"];
                         readonly "application/json": components["schemas"]["ExternalSystemsResponse"];
                         readonly "text/json": components["schemas"]["ExternalSystemsResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Forbidden */
@@ -1311,6 +1564,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Forbidden */
                 readonly 403: {
                     headers: {
@@ -1361,6 +1625,17 @@ export interface paths {
                         readonly "text/plain": components["schemas"]["JobRunResponse"];
                         readonly "application/json": components["schemas"]["JobRunResponse"];
                         readonly "text/json": components["schemas"]["JobRunResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Forbidden */
@@ -1436,6 +1711,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Forbidden */
                 readonly 403: {
                     headers: {
@@ -1491,6 +1777,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -1572,6 +1869,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Forbidden */
                 readonly 403: {
                     headers: {
@@ -1628,6 +1936,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -1699,6 +2018,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Forbidden */
                 readonly 403: {
                     headers: {
@@ -1752,6 +2082,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -1816,6 +2157,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -1896,6 +2248,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Forbidden */
                 readonly 403: {
                     headers: {
@@ -1964,6 +2327,17 @@ export interface paths {
                         readonly [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
                 /** @description Forbidden */
                 readonly 403: {
@@ -2050,6 +2424,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Forbidden */
                 readonly 403: {
                     headers: {
@@ -2114,6 +2499,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Forbidden */
                 readonly 403: {
                     headers: {
@@ -2168,6 +2564,17 @@ export interface paths {
                         readonly "text/plain": components["schemas"]["OrderStatusResponse"];
                         readonly "application/json": components["schemas"]["OrderStatusResponse"];
                         readonly "text/json": components["schemas"]["OrderStatusResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Forbidden */
@@ -2590,6 +2997,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["AssistantStatusResponse"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         readonly put?: never;
@@ -2641,6 +3059,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -2751,6 +3180,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Not Found */
                 readonly 404: {
                     headers: {
@@ -2830,6 +3270,17 @@ export interface paths {
                         readonly "text/json": readonly components["schemas"]["AssistantConversationSummaryResponse"][];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Not Found */
                 readonly 404: {
                     headers: {
@@ -2880,6 +3331,17 @@ export interface paths {
                         readonly "text/json": components["schemas"]["AssistantConversationResponse"];
                     };
                 };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
                 /** @description Not Found */
                 readonly 404: {
                     headers: {
@@ -2912,6 +3374,17 @@ export interface paths {
                         readonly [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Unauthorized */
+                readonly 401: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
                 /** @description Not Found */
                 readonly 404: {
@@ -2965,6 +3438,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };
@@ -3036,6 +3520,17 @@ export interface paths {
                 };
                 /** @description Bad Request */
                 readonly 400: {
+                    headers: {
+                        readonly [name: string]: unknown;
+                    };
+                    content: {
+                        readonly "text/plain": components["schemas"]["ProblemDetails"];
+                        readonly "application/json": components["schemas"]["ProblemDetails"];
+                        readonly "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                readonly 401: {
                     headers: {
                         readonly [name: string]: unknown;
                     };

@@ -4,7 +4,12 @@ namespace AiFramework.Application.Products;
 
 public interface IProductRepository
 {
-    public Task AddAsync(Product product, CancellationToken cancellationToken);
+    /// <summary>
+    /// Writes the product now, rather than at the command's commit, so a sku taken by a concurrent
+    /// create comes back as <see langword="false"/> - a 409 - instead of a unique violation at
+    /// commit, which is a 500. <see cref="Users.IUserRepository.TryAddAsync"/> does the same.
+    /// </summary>
+    public Task<bool> TryAddAsync(Product product, CancellationToken cancellationToken);
 
     /// <summary>
     /// No-tracking, for reads. Unlike <see cref="Orders.IOrderRepository.GetAsync"/> there is no

@@ -23,7 +23,6 @@ public sealed class MonitoringTrafficController(IQueryDispatcher queries) : Cont
     [HttpGet]
     [ProducesResponseType<TrafficSummaryResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Summary(
         [FromQuery] int windowMinutes = 60, CancellationToken cancellationToken = default)
     {
@@ -47,7 +46,6 @@ public sealed class MonitoringTrafficController(IQueryDispatcher queries) : Cont
     [HttpGet("series")]
     [ProducesResponseType<TrafficSeriesResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Series(
         [FromQuery] int windowMinutes = 60, CancellationToken cancellationToken = default)
     {

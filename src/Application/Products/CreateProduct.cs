@@ -40,19 +40,16 @@ public sealed class CreateProductHandler(IProductRepository products, IClock clo
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        // Check-then-insert, so a taken sku is a friendly 409 rather than a 500. The unique
-        // index on Sku is still the real guard: two simultaneous creates of the same sku both
-        // pass this check, and the second one fails at SaveChanges.
+        // Check-then-insert, so a taken sku is a friendly 409 without attempting a write. The
+        // unique index on Sku is still the real guard: two simultaneous creates of the same sku
+        // both pass this check, and TryAddAsync below is where the second finds out.
         var taken = await products
             .GetBySkuAsync(Product.NormalizeSku(command.Sku), cancellationToken)
             .ConfigureAwait(false);
 
         if (taken is not null)
         {
-            return Result.Failure<Guid>(new Error(
-                ErrorKind.Conflict,
-                "product.sku_taken",
-                $"The sku '{Product.NormalizeSku(command.Sku)}' is already in the catalogue."));
+            return SkuTaken(command.Sku);
         }
 
         var product = Product.Create(
@@ -63,8 +60,19 @@ public sealed class CreateProductHandler(IProductRepository products, IClock clo
             command.Price,
             clock.UtcNow);
 
-        await products.AddAsync(product, cancellationToken).ConfigureAwait(false);
+        // The race: someone created this sku between the pre-check and here. The same 409, so a
+        // caller cannot tell which of the two caught it.
+        if (!await products.TryAddAsync(product, cancellationToken).ConfigureAwait(false))
+        {
+            return SkuTaken(command.Sku);
+        }
 
         return Result.Success(product.Id);
     }
+
+    private static Result<Guid> SkuTaken(string sku) =>
+        Result.Failure<Guid>(new Error(
+            ErrorKind.Conflict,
+            "product.sku_taken",
+            $"The sku '{Product.NormalizeSku(sku)}' is already in the catalogue."));
 }

@@ -25,6 +25,7 @@ public sealed class RatesController(IQueryDispatcher queries) : ControllerBase
     [HttpGet]
     [ProducesResponseType<ExchangeRateResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult> Get(
         [FromQuery] string from, [FromQuery] string to, CancellationToken cancellationToken)

@@ -28,7 +28,6 @@ public sealed class ProductsController(
     [Authorize(Policy = AuthorizationPolicies.Catalogue.Manage)]
     [ProducesResponseType<Guid>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> Create(
         CreateProductRequest request, CancellationToken cancellationToken)
@@ -100,7 +99,6 @@ public sealed class ProductsController(
     [Authorize(Policy = AuthorizationPolicies.Catalogue.Manage)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Update(
         Guid id, UpdateProductRequest request, CancellationToken cancellationToken)

@@ -29,13 +29,12 @@ public sealed class ProductRepositoryTests(PostgresFixture fixture)
     private async Task<Guid> PersistAsync(Product product)
     {
         await using var context = fixture.CreateContext();
-        await new ProductRepository(context).AddAsync(product, CancellationToken.None);
-        await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
+        await new ProductRepository(context).TryAddAsync(product, CancellationToken.None);
         return product.Id;
     }
 
     [Fact]
-    public async Task AddAsync_ThenSaveChanges_PersistsEveryColumn()
+    public async Task TryAddAsync_WithAFreeSku_PersistsEveryColumn()
     {
         var sku = NewSku();
         var id = await PersistAsync(NewProduct(sku, "Widget", 19.95m));
@@ -53,18 +52,34 @@ public sealed class ProductRepositoryTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task AddAsync_WithoutSaveChanges_PersistsNothing()
+    public async Task TryAddAsync_WithATakenSku_ReturnsFalse()
     {
-        var product = NewProduct(NewSku());
-        await using (var context = fixture.CreateContext())
-        {
-            await new ProductRepository(context).AddAsync(product, CancellationToken.None);
-        }
+        var sku = NewSku();
+        await PersistAsync(NewProduct(sku, "The first widget"));
+        await using var second = fixture.CreateContext();
 
-        await using var verify = fixture.CreateContext();
-        var found = await new ProductRepository(verify).GetAsync(product.Id, CancellationToken.None);
+        // The database is the real guard, not the check in CreateProductHandler: two simultaneous
+        // creates of the same sku both pass that check, and this is what stops the second - as a
+        // false the handler turns into a 409, not an exception that becomes a 500.
+        var added = await new ProductRepository(second)
+            .TryAddAsync(NewProduct(sku, "The second widget"), CancellationToken.None);
 
-        found.Should().BeNull();
+        added.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TryAddAsync_WithATakenSku_LeavesNothingForTheCommitToRetry()
+    {
+        var sku = NewSku();
+        await PersistAsync(NewProduct(sku));
+        await using var second = fixture.CreateContext();
+        await new ProductRepository(second).TryAddAsync(NewProduct(sku), CancellationToken.None);
+
+        var act = () => new UnitOfWork(second).SaveChangesAsync(CancellationToken.None);
+
+        await act.Should().NotThrowAsync(
+            "the command pipeline commits after the handler, and a refused product left Added would "
+            + "be written again and fail as a 500");
     }
 
     [Fact]
@@ -89,20 +104,6 @@ public sealed class ProductRepositoryTests(PostgresFixture fixture)
 
         found.Should().NotBeNull();
         found.Id.Should().Be(id);
-    }
-
-    [Fact]
-    public async Task SavingTwoProductsWithOneSku_IsRefusedByTheUniqueIndex()
-    {
-        // The real guard behind CreateProductHandler's check-then-insert, which two concurrent
-        // creates both pass. Without this index the second write would simply succeed and the
-        // catalogue would hold two products under one sku.
-        var sku = NewSku();
-        await PersistAsync(NewProduct(sku));
-
-        var act = async () => await PersistAsync(NewProduct(sku, "Duplicate"));
-
-        await act.Should().ThrowAsync<DbUpdateException>();
     }
 
     [Fact]

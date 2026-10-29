@@ -16,7 +16,11 @@ Use-case handlers, `ICommand<T>` / `IQuery<T>` requests and their handlers, **po
   breaks every caller. A test enforces this.
 - **Command and query handlers never call `SaveChangesAsync`.** The unit-of-work behavior
   commits exactly once after a successful command. A handler that commits turns one command into
-  two transactions. Domain event handlers are the opposite — see below.
+  two transactions. Domain event handlers are the opposite — see below. The sanctioned exception
+  is a `TryAdd*` port (`IUserRepository.TryAddAsync`, `IProductRepository.TryAddAsync`): the
+  repository saves the insert itself so a unique-index race comes back as `false` (a 409) rather
+  than failing at the commit as a 500. It saves anything else pending in the context too, so call
+  it as the command's only write.
 - Never inject a `DbContext`; depend on the port.
 - `Result.Success(value)` infers `T` from the argument. `Result.Failure<T>(error)` needs
   the explicit type argument — an `Error` carries no type information to infer from.

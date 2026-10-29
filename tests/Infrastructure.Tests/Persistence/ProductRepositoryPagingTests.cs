@@ -54,10 +54,9 @@ public sealed class ProductRepositoryPagingTests(PostgresFixture fixture)
     private async Task<Guid> SeedAsync(DateTimeOffset createdAt, Guid id)
     {
         await using var context = fixture.CreateContext();
-        await new ProductRepository(context).AddAsync(
+        await new ProductRepository(context).TryAddAsync(
             Product.Create(id, NewSku(), "Widget", null, 1m, createdAt),
             CancellationToken.None);
-        await new UnitOfWork(context).SaveChangesAsync(CancellationToken.None);
         return id;
     }
 

@@ -13,7 +13,11 @@ public sealed class CreateProductHandlerTests
     private readonly IProductRepository _repository = Substitute.For<IProductRepository>();
     private readonly IClock _clock = Substitute.For<IClock>();
 
-    public CreateProductHandlerTests() => _clock.UtcNow.Returns(Now);
+    public CreateProductHandlerTests()
+    {
+        _clock.UtcNow.Returns(Now);
+        _repository.TryAddAsync(Arg.Any<Product>(), Arg.Any<CancellationToken>()).Returns(true);
+    }
 
     private CreateProductHandler Handler() => new(_repository, _clock);
 
@@ -24,7 +28,7 @@ public sealed class CreateProductHandlerTests
             new CreateProduct("SKU-1", "Widget", "A widget.", 9.99m), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _repository.Received(1).AddAsync(
+        await _repository.Received(1).TryAddAsync(
             Arg.Is<Product>(p => p.Sku == "SKU-1"
                 && p.Name == "Widget"
                 && p.Description == "A widget."
@@ -66,8 +70,21 @@ public sealed class CreateProductHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Kind.Should().Be(ErrorKind.Conflict);
         result.Error.Code.Should().Be("product.sku_taken");
-        await _repository.DidNotReceive().AddAsync(
+        await _repository.DidNotReceive().TryAddAsync(
             Arg.Any<Product>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenAConcurrentCreateTookTheSku_ReturnsTheSameConflict()
+    {
+        _repository.TryAddAsync(Arg.Any<Product>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await Handler().HandleAsync(
+            new CreateProduct("sku-1", "Widget", null, 9.99m), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Kind.Should().Be(ErrorKind.Conflict);
+        result.Error.Code.Should().Be("product.sku_taken");
     }
 
     [Fact]
