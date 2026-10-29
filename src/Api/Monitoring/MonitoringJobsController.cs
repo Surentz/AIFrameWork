@@ -34,7 +34,6 @@ public sealed class MonitoringJobsController(
     [HttpGet("health")]
     [ProducesResponseType<JobHealthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Health(
         [FromQuery] int windowHours = 24, CancellationToken cancellationToken = default)
     {
@@ -61,7 +60,6 @@ public sealed class MonitoringJobsController(
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Trigger(
         TriggerJobRequest request, CancellationToken cancellationToken)
     {

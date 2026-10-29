@@ -73,6 +73,17 @@ maps `Result.Error.Kind` to a status code:
 `Unavailable` is a dependency that stayed down after its own retry budget (ADR 0014) — an
 anticipated failure, so never a 500.
 
+A third path covers the errors **no controller writes**: the cookie handler's 401/403 and
+routing's 404/405. `UseStatusCodePages(StatusCodeProblems.WriteAsync)` gives each an empty-bodied
+error the same ProblemDetails shape — a code as `title` (`auth.unauthenticated`, `auth.forbidden`,
+`route.not_found`, `route.method_not_allowed`) and the `traceId`. A response that already has a
+body is left alone. `StatusCodeProblemTests` pins all four.
+
+**Do not declare 401 or 403 on an action.** `AuthorizationResponsesConvention` adds them to the
+contract from the `[Authorize]` attribute: 401 wherever a session is required, 403 wherever a
+capability policy is. The one exception is an `[AllowAnonymous]` action that answers 401 itself —
+sign-in, for bad credentials — which the convention skips, so it declares its own.
+
 ## Tests
 
 `tests/Api.IntegrationTests`, via `WebApplicationFactory<Program>`. Assert status

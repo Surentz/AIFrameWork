@@ -17,7 +17,6 @@ public sealed class MonitoringExternalSystemsController(IQueryDispatcher queries
 {
     [HttpGet]
     [ProducesResponseType<ExternalSystemsResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> List(CancellationToken cancellationToken)
     {
         var result = await queries.SendAsync(new GetExternalSystemStatus(), cancellationToken).ConfigureAwait(false);

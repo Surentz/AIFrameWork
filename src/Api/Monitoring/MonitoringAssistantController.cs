@@ -18,7 +18,6 @@ public sealed class MonitoringAssistantController(IQueryDispatcher queries) : Co
     [HttpGet("insights")]
     [ProducesResponseType<AssistantInsightsResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Insights([FromQuery] int days = 7, CancellationToken cancellationToken = default)
     {
         var result = await queries.SendAsync(new GetAssistantInsights(days), cancellationToken).ConfigureAwait(false);

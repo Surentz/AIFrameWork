@@ -31,8 +31,6 @@ public sealed class MonitoringController(
     /// <summary>Confirms monitoring access and identifies the operator.</summary>
     [HttpGet("access")]
     [ProducesResponseType<MonitoringAccessResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Access(CancellationToken cancellationToken)
     {
         if (currentUser.Id is not { } userId)

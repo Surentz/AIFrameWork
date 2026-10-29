@@ -23,7 +23,6 @@ public sealed class MonitoringSignInsController(IQueryDispatcher queries) : Cont
     [HttpGet("health")]
     [ProducesResponseType<SignInHealthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Health(
         [FromQuery] int windowHours = 24,
         [FromQuery] int activeWindowMinutes = 15,
@@ -63,7 +62,6 @@ public sealed class MonitoringSignInsController(IQueryDispatcher queries) : Cont
     [HttpGet]
     [ProducesResponseType<SignInEventPageResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> List(
         [FromQuery] SignInOutcome? outcome = null,
         [FromQuery] string? username = null,

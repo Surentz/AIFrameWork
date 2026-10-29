@@ -38,7 +38,6 @@ public sealed class MonitoringUsersController(
     [HttpGet]
     [ProducesResponseType<AdministeredUserPageResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> List(
         [FromQuery] string? search = null,
         [FromQuery] int page = 1,
@@ -68,7 +67,6 @@ public sealed class MonitoringUsersController(
     [HttpPost("{id:guid}/role")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> ChangeRole(
@@ -92,7 +90,6 @@ public sealed class MonitoringUsersController(
     /// <summary>Revokes every session the account holds, by rotating its security stamp.</summary>
     [HttpPost("{id:guid}/sign-out")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> SignOut(
@@ -109,7 +106,6 @@ public sealed class MonitoringUsersController(
     [HttpGet("{id:guid}/actions")]
     [ProducesResponseType<AdminActionPageResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Actions(
         Guid id,
         [FromQuery] int page = 1,

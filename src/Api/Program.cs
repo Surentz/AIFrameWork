@@ -57,7 +57,8 @@ if (string.IsNullOrWhiteSpace(connectionString))
 // See docs/superpowers/plans/2026-09-13-centralized-logging.md and ADR 0014.
 builder.AddObservability();
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+        options.Conventions.Add(new AuthorizationResponsesConvention()))
     // Enums cross the wire as their NAMES. Without this, System.Text.Json writes the underlying
     // integer, the OpenAPI document describes the property as a bare int, and
     // frontend/src/api/schema.d.ts types it as `number` - so adding a member, or reordering the
@@ -307,9 +308,9 @@ builder.Services.AddRateLimiter(options =>
                 ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
         }
 
-        // The limiter short-circuits the pipeline, so nothing else gives this response a body:
-        // AddProblemDetails() only fills one in for an exception, and there is no
-        // UseStatusCodePages here. Without this the 429 goes out empty while the committed
+        // The limiter short-circuits the pipeline, so the body is written here, with the 429's own
+        // detail and Retry-After; UseStatusCodePages then leaves it alone because it already has a
+        // body. Without this the 429 would go out generic while the committed
         // contract - openapi/AiFramework.Api.json and the schema.d.ts generated from it - says it
         // returns ProblemDetails, and frontend/src/api/client.ts falls back to its own
         // "Request failed with status 429." Shaped exactly like ResultExtensions.Problem's
@@ -482,6 +483,9 @@ if (realtimeWarning is not null)
 // flag off, ForwardedHeadersOptions keeps its defaults, which forward nothing.
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+// After the exception handler, so it wraps everything that can answer with an empty error status:
+// authentication's 401/403 and routing's 404/405. StatusCodeProblems gives each a ProblemDetails.
+app.UseStatusCodePages(StatusCodeProblems.WriteAsync);
 // Wraps authentication, authorization and the endpoints, so a request REFUSED by any of them is
 // still counted — a spike of 401s or 403s is exactly the sort of thing this page exists to show.
 // The middleware reads the matched route template after the inner pipeline has run, so it does

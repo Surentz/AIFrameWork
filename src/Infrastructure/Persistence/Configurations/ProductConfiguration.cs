@@ -6,6 +6,13 @@ namespace AiFramework.Infrastructure.Persistence.Configurations;
 
 internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
 {
+    /// <summary>
+    /// Named once because <c>ProductRepository.TryAddAsync</c> recognises a taken sku by this
+    /// constraint in the database's error, and a rename here must not silently turn that 409 back
+    /// into a 500.
+    /// </summary>
+    internal const string SkuIndex = "IX_Products_Sku";
+
     public void Configure(EntityTypeBuilder<Product> builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -35,7 +42,7 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         // of one sku both pass that check, and this index is what stops the second being written.
         // Unique on the stored value directly, because Product.Create normalizes before
         // constructing - there is no separate "as typed" column here, unlike User.
-        builder.HasIndex(p => p.Sku).IsUnique().HasDatabaseName("IX_Products_Sku");
+        builder.HasIndex(p => p.Sku).IsUnique().HasDatabaseName(SkuIndex);
 
         // The list endpoint orders by (CreatedAt DESC, Id DESC) with no equality predicate in
         // front of it, because the catalogue is global - so unlike IX_Orders_UserId_PlacedAt_Id_Desc

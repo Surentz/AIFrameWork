@@ -24,7 +24,6 @@ public sealed class MonitoringDeadLettersController(
     [HttpGet]
     [ProducesResponseType<DeadLetterPageResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> List(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
@@ -65,7 +64,6 @@ public sealed class MonitoringDeadLettersController(
     [Authorize(Policy = AuthorizationPolicies.Monitoring.Operate)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult> Retry(Guid messageId, CancellationToken cancellationToken)
     {
         var result = await commands

@@ -1,13 +1,37 @@
 using AiFramework.Application.Products;
 using AiFramework.Domain.Products;
+using AiFramework.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AiFramework.Infrastructure.Persistence;
 
 public sealed class ProductRepository(AiFrameworkDbContext context) : IProductRepository
 {
-    public async Task AddAsync(Product product, CancellationToken cancellationToken) =>
+    public async Task<bool> TryAddAsync(Product product, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(product);
+
         await context.Products.AddAsync(product, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        // Only the sku index, by name, as UserRepository.TryAddAsync does for usernames. Any other
+        // failure is not "that sku is taken" and must stay a 500.
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: ProductConfiguration.SkuIndex,
+        })
+        {
+            // Left Added, the unit of work's commit would write it again and fail the same way.
+            context.Entry(product).State = EntityState.Detached;
+            return false;
+        }
+    }
 
     /// <summary>No-tracking: GetProduct only reads.</summary>
     public Task<Product?> GetAsync(Guid id, CancellationToken cancellationToken) =>
